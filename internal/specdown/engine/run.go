@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"specdown/internal/specdown/alloy"
@@ -11,6 +13,12 @@ import (
 	"specdown/internal/specdown/config"
 	"specdown/internal/specdown/core"
 )
+
+type RunOptions struct {
+	Filter string
+	Jobs   int
+	DryRun bool
+}
 
 type describedAdapter struct {
 	Config       config.AdapterConfig
@@ -28,12 +36,35 @@ type scopedBinding struct {
 	Order       int
 }
 
-func Run(baseDir string, cfg config.Config) (core.Report, error) {
+func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
 	host := adapterhost.Host{BaseDir: baseDir}
-	return runWithDependencies(baseDir, cfg, host, alloy.Runner{BaseDir: baseDir})
+	return runWithDependencies(baseDir, cfg, host, alloy.Runner{BaseDir: baseDir}, opts)
 }
 
-func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Host, alloyRunner alloy.DocumentRunner) (core.Report, error) {
+func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
+	docs, err := core.Discover(baseDir, cfg.Include)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := core.CompileDocuments(docs)
+	if err != nil {
+		return nil, err
+	}
+
+	runner := alloy.Runner{BaseDir: baseDir}
+	var paths []string
+	for _, docPlan := range plan.Documents {
+		dumped, err := runner.DumpModels(docPlan)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, dumped...)
+	}
+	return paths, nil
+}
+
+func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Host, alloyRunner alloy.DocumentRunner, opts RunOptions) (core.Report, error) {
 	docs, err := core.Discover(baseDir, cfg.Include)
 	if err != nil {
 		return core.Report{}, err
@@ -46,19 +77,59 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 	if err != nil {
 		return core.Report{}, err
 	}
+
+	if opts.Filter != "" {
+		plan = filterPlan(plan, opts.Filter)
+	}
+
+	if opts.DryRun {
+		return dryRunReport(plan), nil
+	}
+
 	registry, err := describeAdapters(host, cfg.Adapters)
 	if err != nil {
 		return core.Report{}, err
 	}
 
-	results := make([]core.DocumentResult, 0, len(plan.Documents))
-	summary := core.Summary{SpecsTotal: len(plan.Documents)}
-	for _, docPlan := range plan.Documents {
-		result, err := runDocument(docPlan, registry, host, alloyRunner)
-		if err != nil {
-			return core.Report{}, err
+	jobs := opts.Jobs
+	if jobs < 1 {
+		jobs = 1
+	}
+
+	results := make([]core.DocumentResult, len(plan.Documents))
+	if jobs == 1 {
+		for i, docPlan := range plan.Documents {
+			result, err := runDocument(docPlan, registry, host, alloyRunner)
+			if err != nil {
+				return core.Report{}, err
+			}
+			results[i] = result
 		}
-		results = append(results, result)
+	} else {
+		errs := make([]error, len(plan.Documents))
+		sem := make(chan struct{}, jobs)
+		var wg sync.WaitGroup
+		for i, docPlan := range plan.Documents {
+			wg.Add(1)
+			go func(i int, dp core.DocumentPlan) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				result, err := runDocument(dp, registry, host, alloyRunner)
+				results[i] = result
+				errs[i] = err
+			}(i, docPlan)
+		}
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				return core.Report{}, err
+			}
+		}
+	}
+
+	summary := core.Summary{SpecsTotal: len(plan.Documents)}
+	for _, result := range results {
 		accumulateSummary(&summary, result)
 	}
 
@@ -67,6 +138,84 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 		Results:     results,
 		Summary:     summary,
 	}, nil
+}
+
+func filterPlan(plan core.Plan, filter string) core.Plan {
+	var filtered []core.DocumentPlan
+	for _, doc := range plan.Documents {
+		var cases []core.CaseSpec
+		for _, c := range doc.Cases {
+			path := strings.Join(c.ID.HeadingPath, " > ")
+			if strings.Contains(path, filter) {
+				cases = append(cases, c)
+			}
+		}
+		var checks []core.AlloyCheckSpec
+		for _, c := range doc.AlloyChecks {
+			path := strings.Join(c.ID.HeadingPath, " > ")
+			if strings.Contains(path, filter) {
+				checks = append(checks, c)
+			}
+		}
+		if len(cases) > 0 || len(checks) > 0 {
+			filtered = append(filtered, core.DocumentPlan{
+				Document:    doc.Document,
+				Cases:       cases,
+				AlloyModels: doc.AlloyModels,
+				AlloyChecks: checks,
+			})
+		}
+	}
+	return core.Plan{Documents: filtered}
+}
+
+func dryRunReport(plan core.Plan) core.Report {
+	results := make([]core.DocumentResult, 0, len(plan.Documents))
+	summary := core.Summary{SpecsTotal: len(plan.Documents)}
+
+	for _, doc := range plan.Documents {
+		cases := make([]core.CaseResult, 0, len(doc.Cases))
+		for _, c := range doc.Cases {
+			cases = append(cases, core.CaseResult{
+				ID:      c.ID,
+				Kind:    c.Kind,
+				Block:   c.Block.Descriptor(),
+				Fixture: c.Fixture,
+				Label:   dryRunLabel(c),
+				Columns: append([]string(nil), c.Columns...),
+				RowNumber: c.RowNumber,
+			})
+		}
+		alloyChecks := make([]core.AlloyCheckResult, 0, len(doc.AlloyChecks))
+		for _, c := range doc.AlloyChecks {
+			alloyChecks = append(alloyChecks, core.AlloyCheckResult{
+				ID:        c.ID,
+				Model:     c.Model,
+				Assertion: c.Assertion,
+				Scope:     c.Scope,
+			})
+		}
+		results = append(results, core.DocumentResult{
+			Document:    doc.Document,
+			Cases:       cases,
+			AlloyChecks: alloyChecks,
+		})
+		summary.CasesTotal += len(doc.Cases)
+		summary.AlloyChecksTotal += len(doc.AlloyChecks)
+	}
+
+	return core.Report{
+		GeneratedAt: time.Now(),
+		Results:     results,
+		Summary:     summary,
+	}
+}
+
+func dryRunLabel(c core.CaseSpec) string {
+	if len(c.ID.HeadingPath) == 0 {
+		return c.DisplayKind()
+	}
+	return c.DisplayKind() + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
 }
 
 func describeAdapters(host adapterhost.Host, adapters []config.AdapterConfig) (adapterRegistry, error) {
@@ -129,9 +278,14 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	sessions := make(map[string]*adapterhost.Session)
 	defer closeSessions(sessions)
 
+	// Send setup to all sessions needed
+	setupSessions := make(map[string]bool)
+
 	bindings := make([]scopedBinding, 0)
 	cases := make([]core.CaseResult, 0, len(plan.Cases))
 	status := core.StatusPassed
+	timeoutMs := plan.Document.Frontmatter.Timeout
+
 	for _, specCase := range plan.Cases {
 		adapter, err := registry.adapterFor(specCase)
 		if err != nil {
@@ -152,7 +306,14 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 			return core.DocumentResult{}, err
 		}
 
-		result, err := session.RunCase(specCase, prepared, visible)
+		if !setupSessions[adapter.Config.Name] {
+			setupSessions[adapter.Config.Name] = true
+			if err := session.Setup(); err != nil {
+				return core.DocumentResult{}, err
+			}
+		}
+
+		result, err := session.RunCase(specCase, prepared, visible, timeoutMs)
 		if err != nil {
 			return core.DocumentResult{}, err
 		}
@@ -169,6 +330,11 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 				Order:       len(bindings),
 			})
 		}
+	}
+
+	// Send teardown before closing
+	for _, session := range sessions {
+		session.Teardown()
 	}
 
 	if err := closeSessions(sessions); err != nil {

@@ -41,6 +41,7 @@ type CaseResult struct {
 	Message        string    `json:"message,omitempty"`
 	Expected       string    `json:"expected,omitempty"`
 	Actual         string    `json:"actual,omitempty"`
+	Stderr         string    `json:"stderr,omitempty"`
 	Bindings       []Binding `json:"bindings,omitempty"`
 	Events         []Event   `json:"events,omitempty"`
 }

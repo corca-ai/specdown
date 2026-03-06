@@ -81,3 +81,12 @@ func (c Config) HTMLReportOutFile() string {
 	}
 	return ""
 }
+
+func (c Config) JSONReportOutFile() string {
+	for _, reporter := range c.Reporters {
+		if reporter.Builtin == "json" && reporter.OutFile != "" {
+			return reporter.OutFile
+		}
+	}
+	return ""
+}

@@ -41,6 +41,7 @@ type Response struct {
 	Expected   string    `json:"expected,omitempty"`
 	Actual     string    `json:"actual,omitempty"`
 	Details    string    `json:"details,omitempty"`
+	Stderr     string    `json:"stderr,omitempty"`
 	DurationMs int64     `json:"durationMs,omitempty"`
 	Bindings   []Binding `json:"bindings,omitempty"`
 }

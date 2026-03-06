@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -18,8 +19,42 @@ func readDocument(baseDir string, relativePath string) (Document, error) {
 	return ParseDocument(relativePath, string(body))
 }
 
+func parseFrontmatter(markdown string) (Frontmatter, string) {
+	if !strings.HasPrefix(markdown, "---\n") {
+		return Frontmatter{}, markdown
+	}
+	end := strings.Index(markdown[4:], "\n---\n")
+	if end == -1 {
+		return Frontmatter{}, markdown
+	}
+	body := markdown[4 : 4+end]
+	rest := markdown[4+end+5:]
+
+	var fm Frontmatter
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "timeout":
+			if n, err := strconv.Atoi(value); err == nil {
+				fm.Timeout = n
+			}
+		}
+	}
+	return fm, rest
+}
+
 func ParseDocument(relativePath string, markdown string) (Document, error) {
-	lines := splitLines(markdown)
+	fm, content := parseFrontmatter(markdown)
+	lines := splitLines(content)
 
 	var (
 		nodes       []Node
@@ -193,10 +228,11 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 	}
 
 	return Document{
-		RelativeTo: relativePath,
-		Title:      title,
-		Markdown:   markdown,
-		Nodes:      nodes,
+		RelativeTo:  relativePath,
+		Title:       title,
+		Markdown:    markdown,
+		Nodes:       nodes,
+		Frontmatter: fm,
 	}, nil
 }
 

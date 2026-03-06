@@ -3,12 +3,14 @@ package adapterhost
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"specdown/internal/specdown/adapterprotocol"
 	"specdown/internal/specdown/config"
@@ -34,6 +36,7 @@ type Session struct {
 	waited      bool
 	closed      bool
 	stdinClosed bool
+	setupDone   bool
 }
 
 func (h Host) Describe(adapter config.AdapterConfig) (Capabilities, error) {
@@ -89,7 +92,38 @@ func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
 	}, nil
 }
 
-func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibleBindings []core.Binding) (core.CaseResult, error) {
+func (s *Session) Setup() error {
+	if s.setupDone {
+		return nil
+	}
+	s.setupDone = true
+
+	request := adapterprotocol.Request{
+		Type:     "setup",
+		Protocol: adapterprotocol.Version,
+	}
+	if err := s.encoder.Encode(request); err != nil {
+		return fmt.Errorf("write setup to adapter %q: %w", s.adapter.Name, err)
+	}
+
+	// Read optional setupDone response; adapter may ignore setup
+	// We don't block — the adapter will respond inline with runCase
+	return nil
+}
+
+func (s *Session) Teardown() error {
+	request := adapterprotocol.Request{
+		Type:     "teardown",
+		Protocol: adapterprotocol.Version,
+	}
+	if err := s.encoder.Encode(request); err != nil {
+		// Adapter may have already exited, that's fine
+		return nil
+	}
+	return nil
+}
+
+func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibleBindings []core.Binding, timeoutMs int) (core.CaseResult, error) {
 	result := core.CaseResult{
 		ID:        original.ID,
 		Kind:      original.Kind,
@@ -126,18 +160,46 @@ func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibl
 		return core.CaseResult{}, fmt.Errorf("write request to adapter %q: %w", s.adapter.Name, err)
 	}
 
-	for {
-		response, err := s.readResponse()
-		if err != nil {
-			return core.CaseResult{}, err
+	readResult := make(chan readResultMsg, 1)
+
+	go func() {
+		for {
+			response, err := s.readResponse()
+			if err != nil {
+				readResult <- readResultMsg{err: err}
+				return
+			}
+			if err := applyResponse(&result, response); err != nil {
+				readResult <- readResultMsg{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
+				return
+			}
+			if result.Status == core.StatusPassed || result.Status == core.StatusFailed {
+				readResult <- readResultMsg{result: result}
+				return
+			}
 		}
-		if err := applyResponse(&result, response); err != nil {
-			return core.CaseResult{}, fmt.Errorf("adapter %q: %w", s.adapter.Name, err)
-		}
-		if result.Status == core.StatusPassed || result.Status == core.StatusFailed {
+	}()
+
+	if timeoutMs > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+		defer cancel()
+		select {
+		case msg := <-readResult:
+			return msg.result, msg.err
+		case <-ctx.Done():
+			result.Status = core.StatusFailed
+			result.Message = fmt.Sprintf("timeout after %dms", timeoutMs)
 			return result, nil
 		}
 	}
+
+	msg := <-readResult
+	return msg.result, msg.err
+}
+
+type readResultMsg struct {
+	result core.CaseResult
+	err    error
 }
 
 func (s *Session) Close() error {
@@ -269,6 +331,7 @@ func applyResponse(result *core.CaseResult, response adapterprotocol.Response) e
 		}
 		result.Status = core.StatusPassed
 		result.Bindings = coreBindings(response.Bindings)
+		result.Stderr = response.Stderr
 		result.Events = append(result.Events, core.Event{
 			Type:     core.EventCasePassed,
 			ID:       result.ID,
@@ -287,6 +350,7 @@ func applyResponse(result *core.CaseResult, response adapterprotocol.Response) e
 		result.Message = response.Message
 		result.Expected = response.Expected
 		result.Actual = response.Actual
+		result.Stderr = response.Stderr
 		result.Events = append(result.Events, core.Event{
 			Type:     core.EventCaseFailed,
 			ID:       result.ID,

@@ -128,11 +128,16 @@ func (n TableNode) Markdown() string {
 	return n.Raw
 }
 
+type Frontmatter struct {
+	Timeout int `json:"timeout,omitempty"` // milliseconds, 0 = no limit
+}
+
 type Document struct {
-	RelativeTo string `json:"relativeTo"`
-	Title      string `json:"title"`
-	Markdown   string `json:"markdown"`
-	Nodes      []Node `json:"nodes"`
+	RelativeTo  string      `json:"relativeTo"`
+	Title       string      `json:"title"`
+	Markdown    string      `json:"markdown"`
+	Nodes       []Node      `json:"nodes"`
+	Frontmatter Frontmatter `json:"frontmatter,omitempty"`
 }
 
 func slug(input string) string {

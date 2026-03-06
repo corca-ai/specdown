@@ -72,6 +72,21 @@ type receiptSolution struct {
 	Instances []json.RawMessage `json:"instances"`
 }
 
+func (r Runner) DumpModels(plan core.DocumentPlan) ([]string, error) {
+	if len(plan.AlloyModels) == 0 {
+		return nil, nil
+	}
+	var paths []string
+	for _, model := range plan.AlloyModels {
+		bundle, err := r.writeBundle(plan.Document.RelativeTo, model, nil)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, bundle.AbsolutePath)
+	}
+	return paths, nil
+}
+
 func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, error) {
 	if len(plan.AlloyModels) == 0 || len(plan.AlloyChecks) == 0 {
 		return nil, nil
@@ -79,7 +94,7 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, er
 
 	javaPath, err := exec.LookPath("java")
 	if err != nil {
-		return nil, fmt.Errorf("find java: %w", err)
+		return failedChecksAll(plan.AlloyChecks, "java not found in PATH; install a JRE to run Alloy checks"), nil
 	}
 
 	jarPath, err := r.ensureAlloyJar()
@@ -289,7 +304,25 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 	return results, nil
 }
 
+func failedChecksAll(checks []core.AlloyCheckSpec, message string) []core.AlloyCheckResult {
+	results := make([]core.AlloyCheckResult, 0, len(checks))
+	for _, check := range checks {
+		results = append(results, core.AlloyCheckResult{
+			ID:        check.ID,
+			Model:     check.Model,
+			Assertion: check.Assertion,
+			Scope:     check.Scope,
+			Label:     defaultLabel(check),
+			Status:    core.StatusFailed,
+			Message:   message,
+			Actual:    message,
+		})
+	}
+	return results
+}
+
 func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.AlloyCheckResult {
+	actual := classifyAlloyError(message)
 	results := make([]core.AlloyCheckResult, 0, len(checks))
 	for _, check := range checks {
 		result := core.AlloyCheckResult{
@@ -301,7 +334,7 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath
 			Status:     core.StatusFailed,
 			Message:    message,
 			Expected:   "Alloy check " + strconvQuote(checkCommandSource(check)) + " succeeds",
-			Actual:     "Alloy execution error",
+			Actual:     actual,
 			BundlePath: bundlePath,
 			SourceMapPath: sourceMapPath,
 		}
@@ -312,6 +345,27 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath
 		results = append(results, result)
 	}
 	return results
+}
+
+func classifyAlloyError(message string) string {
+	lower := strings.ToLower(message)
+	if strings.Contains(lower, "syntax error") || strings.Contains(lower, "parse error") || strings.Contains(lower, "unexpected token") {
+		return "syntax error in Alloy model"
+	}
+	if strings.Contains(lower, "type error") || strings.Contains(lower, "cannot be resolved") {
+		return "type error in Alloy model"
+	}
+	if strings.Contains(lower, "java") && (strings.Contains(lower, "not found") || strings.Contains(lower, "no such file")) {
+		return "java not found in PATH"
+	}
+	return "Alloy execution error: " + firstLine(message)
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 func writeCounterexample(baseDir string, check core.AlloyCheckSpec, command receiptCommand) (string, error) {

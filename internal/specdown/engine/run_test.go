@@ -80,7 +80,7 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	report, err := Run(root, helperAdapterConfig())
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	report, err := Run(root, helperAdapterConfig())
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	report, err := Run(root, helperNoBindingConfig())
+	report, err := Run(root, helperNoBindingConfig(), RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	_, err := Run(root, helperAdapterConfig())
+	_, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -276,7 +276,7 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 				Status:    core.StatusPassed,
 			},
 		},
-	})
+	}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -357,6 +357,8 @@ func TestHelperAdapterProcess(t *testing.T) {
 				Blocks:   []string{"run:board", "verify:board"},
 				Fixtures: []string{"board-exists", "card-exists", "card-column"},
 			})
+		case "setup", "teardown":
+			// lifecycle hooks — no-op for helper adapter
 		case "runCase":
 			if request.Case == nil {
 				os.Exit(3)
