@@ -315,6 +315,52 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	}
 }
 
+func TestCollectHeadingStatusesPropagatesFailureToParent(t *testing.T) {
+	result := core.DocumentResult{
+		Document: core.Document{
+			RelativeTo: "test.spec.md",
+			Nodes: []core.Node{
+				core.HeadingNode{Level: 1, Text: "Root", HeadingPath: []string{"Root"}},
+				core.HeadingNode{Level: 2, Text: "Parent", HeadingPath: []string{"Root", "Parent"}},
+				core.HeadingNode{Level: 3, Text: "Child", HeadingPath: []string{"Root", "Parent", "Child"}},
+			},
+		},
+		Cases: []core.CaseResult{
+			{
+				ID:     core.SpecID{HeadingPath: []string{"Root", "Parent", "Child"}},
+				Status: core.StatusFailed,
+			},
+		},
+	}
+	statuses := collectHeadingStatuses(result)
+
+	// Child heading should be failed
+	if statuses[headingPathKey([]string{"Root", "Parent", "Child"})] != core.StatusFailed {
+		t.Fatal("child heading should be failed")
+	}
+	// Parent should also be failed (propagated)
+	if statuses[headingPathKey([]string{"Root", "Parent"})] != core.StatusFailed {
+		t.Fatal("parent heading should be failed via propagation")
+	}
+	// Root should also be failed
+	if statuses[headingPathKey([]string{"Root"})] != core.StatusFailed {
+		t.Fatal("root heading should be failed via propagation")
+	}
+}
+
+func TestCollectHeadingStatusesPassedDoesNotOverwriteFailed(t *testing.T) {
+	result := core.DocumentResult{
+		Cases: []core.CaseResult{
+			{ID: core.SpecID{HeadingPath: []string{"A", "B"}}, Status: core.StatusFailed},
+			{ID: core.SpecID{HeadingPath: []string{"A", "C"}}, Status: core.StatusPassed},
+		},
+	}
+	statuses := collectHeadingStatuses(result)
+	if statuses[headingPathKey([]string{"A"})] != core.StatusFailed {
+		t.Fatal("parent should stay failed even after a passed sibling")
+	}
+}
+
 func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T) {
 	outDir := t.TempDir()
 	outPath := filepath.Join(outDir, "report.html")

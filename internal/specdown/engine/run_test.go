@@ -289,6 +289,188 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	}
 }
 
+func TestFilterPlanKeepsMatchingCases(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"Board", "생성"}}},
+					{ID: core.SpecID{HeadingPath: []string{"Board", "삭제"}}},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "생성")
+	if len(filtered.Documents) != 1 {
+		t.Fatalf("expected 1 document, got %d", len(filtered.Documents))
+	}
+	if len(filtered.Documents[0].Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(filtered.Documents[0].Cases))
+	}
+	if filtered.Documents[0].Cases[0].ID.HeadingPath[1] != "생성" {
+		t.Fatalf("unexpected case %v", filtered.Documents[0].Cases[0].ID.HeadingPath)
+	}
+}
+
+func TestFilterPlanDropsDocumentsWithNoCases(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases:    []core.CaseSpec{{ID: core.SpecID{HeadingPath: []string{"X"}}}},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "없는패턴")
+	if len(filtered.Documents) != 0 {
+		t.Fatalf("expected 0 documents, got %d", len(filtered.Documents))
+	}
+}
+
+func TestDryRunReportHasZeroStatuses(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Raw: "run:shell", Kind: core.BlockKindRun, Target: "shell"}},
+				},
+				AlloyChecks: []core.AlloyCheckSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Model: "m", Assertion: "a", Scope: "5"},
+				},
+			},
+		},
+	}
+	report := dryRunReport(plan)
+	if report.Summary.CasesTotal != 1 || report.Summary.AlloyChecksTotal != 1 {
+		t.Fatalf("unexpected totals %+v", report.Summary)
+	}
+	if report.Summary.CasesPassed != 0 || report.Summary.CasesFailed != 0 {
+		t.Fatalf("dry-run should have zero pass/fail %+v", report.Summary)
+	}
+	if report.Results[0].Cases[0].Status != "" {
+		t.Fatalf("dry-run case should have empty status, got %q", report.Results[0].Cases[0].Status)
+	}
+}
+
+func TestRenderTemplateEscapesBackslashDollar(t *testing.T) {
+	bindings := []core.Binding{{Name: "x", Value: "42"}}
+	got, err := renderTemplate(`\${x} and ${x}`, bindings)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if got != "${x} and 42" {
+		t.Fatalf("expected '${x} and 42', got %q", got)
+	}
+}
+
+func TestRenderTemplateReturnsErrorForUnresolved(t *testing.T) {
+	_, err := renderTemplate("${missing}", nil)
+	if err == nil {
+		t.Fatal("expected error for unresolved variable")
+	}
+}
+
+func TestBindingReachableAncestorAndSibling(t *testing.T) {
+	// Ancestor: binding at ["A"] visible from ["A", "B"]
+	if !bindingReachable([]string{"A"}, []string{"A", "B"}) {
+		t.Fatal("ancestor should be reachable")
+	}
+	// Sibling: binding at ["A"] visible from ["B"] (same depth, same parent = root)
+	if !bindingReachable([]string{"A"}, []string{"B"}) {
+		t.Fatal("sibling should be reachable")
+	}
+	// Child binding NOT visible from parent
+	if bindingReachable([]string{"A", "B"}, []string{"A"}) {
+		t.Fatal("child should not be reachable from parent")
+	}
+	// Unrelated deeper path
+	if bindingReachable([]string{"A", "B"}, []string{"C", "D"}) {
+		t.Fatal("unrelated deep path should not be reachable")
+	}
+}
+
+func TestRunWithFrontmatterTimeout(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "timeout.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Frontmatter with 100ms timeout — the helper adapter is fast enough
+	source := "---\ntimeout: 100\n---\n\n# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesPassed != 1 {
+		t.Fatalf("expected 1 passed case, got %+v", report.Summary)
+	}
+}
+
+func TestRunDryRunSkipsExecution(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "dry.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := "# Dry\n\n## Test\n\n```run:board -> $b\ncreate-board\n```\n"
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// DryRun should not launch any adapter — even with no adapter config
+	report, err := Run(root, config.Config{Include: []string{"specs/**/*.spec.md"}}, RunOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesTotal != 1 {
+		t.Fatalf("expected 1 case total, got %d", report.Summary.CasesTotal)
+	}
+	if report.Summary.CasesPassed != 0 {
+		t.Fatalf("dry-run should not mark cases as passed")
+	}
+}
+
+func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "filter.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := strings.Join([]string{
+		"# Filter",
+		"",
+		"## Alpha",
+		"",
+		"```run:board -> $a",
+		"create-board",
+		"```",
+		"",
+		"## Beta",
+		"",
+		"```run:board -> $b",
+		"create-board",
+		"```",
+		"",
+	}, "\n")
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	report, err := Run(root, helperAdapterConfig(), RunOptions{Filter: "Alpha"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesTotal != 1 {
+		t.Fatalf("expected 1 case, got %d", report.Summary.CasesTotal)
+	}
+	if report.Summary.CasesPassed != 1 {
+		t.Fatalf("expected 1 passed, got %+v", report.Summary)
+	}
+}
+
 func helperAdapterConfig() config.Config {
 	executable, err := os.Executable()
 	if err != nil {

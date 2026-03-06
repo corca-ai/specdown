@@ -80,6 +80,44 @@ func TestLoadConfigAllowsAlloyOnlyProjectWithoutAdapters(t *testing.T) {
 	}
 }
 
+func TestJSONReportOutFile(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "specdown.json")
+	body := `{
+  "include": ["specs/**/*.spec.md"],
+  "reporters": [
+    {"builtin": "html", "outFile": "report.html"},
+    {"builtin": "json", "outFile": "result.json"}
+  ]
+}`
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, _, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := cfg.JSONReportOutFile(); got != "result.json" {
+		t.Fatalf("expected 'result.json', got %q", got)
+	}
+}
+
+func TestJSONReportOutFileReturnsEmptyWhenNotConfigured(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "specdown.json")
+	body := `{"include": ["specs/**/*.spec.md"], "reporters": [{"builtin": "html", "outFile": "r.html"}]}`
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, _, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := cfg.JSONReportOutFile(); got != "" {
+		t.Fatalf("expected empty, got %q", got)
+	}
+}
+
 func TestLoadConfigRejectsUnknownModelBuiltin(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")

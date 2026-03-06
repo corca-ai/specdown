@@ -160,6 +160,29 @@ func TestParseDocumentSupportsAlloyModelBlocksAndReferences(t *testing.T) {
 	}
 }
 
+func TestParseDocumentExtractsFrontmatterTimeout(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", "---\ntimeout: 3000\n---\n\n# Title\n\nBody.\n")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if doc.Frontmatter.Timeout != 3000 {
+		t.Fatalf("expected timeout 3000, got %d", doc.Frontmatter.Timeout)
+	}
+	if doc.Title != "Title" {
+		t.Fatalf("expected title 'Title', got %q", doc.Title)
+	}
+}
+
+func TestParseDocumentDefaultsFrontmatterWhenAbsent(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", "# Title\n\nBody.\n")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if doc.Frontmatter.Timeout != 0 {
+		t.Fatalf("expected timeout 0, got %d", doc.Frontmatter.Timeout)
+	}
+}
+
 func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
