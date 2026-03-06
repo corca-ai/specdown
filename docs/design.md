@@ -298,10 +298,10 @@ ${channelId} matches /^ch-/
 
 규칙:
 
-- 변수 스코프는 같은 heading subtree 안으로 제한한다
 - 상위 섹션 변수는 하위 섹션에서 읽을 수 있다
-- 형제 섹션 간 공유는 허용하지 않는다
+- 같은 깊이의 형제 섹션끼리도 공유 가능하다 (문서 순서 기준, 앞에서 캡처한 값만)
 - unresolved variable은 compile-time error다
+- `\${...}`로 이스케이프하면 리터럴 `${...}`로 전달된다
 
 ### Setup / Teardown
 
@@ -453,6 +453,8 @@ specdown run
 - `run`: Markdown parse, adapter 실행, embedded Alloy 검사, model bundle 생성, report artifact 생성을 한 번에 수행한다
 
 v1에서는 `specdown run`이 compile + execute + report를 한 번에 수행하는 기본 경로다.
+
+실패 시 각 실패 항목의 heading path, 블록/fixture 이름, 오류 메시지를 stderr에 출력한 뒤 요약을 표시한다.
 
 
 ## 구현 단계

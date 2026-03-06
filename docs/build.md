@@ -35,6 +35,6 @@ go test ./...
 `v*` 태그를 push하면 GitHub Actions가 Windows, macOS, Linux 바이너리를 빌드해서 Release에 첨부한다.
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```

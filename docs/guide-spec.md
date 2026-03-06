@@ -45,10 +45,21 @@ GET /users/${userId}
 ````
 
 규칙:
-- 스코프는 같은 heading subtree 안으로 제한
 - 상위 섹션 변수는 하위에서 읽을 수 있음
-- 형제 섹션 간 공유 불가
+- 같은 깊이의 형제 섹션끼리도 공유 가능 (문서 순서 기준, 앞에서 캡처한 값만)
 - 미해결 변수는 오류
+
+### 이스케이프
+
+리터럴 `${...}`을 출력하려면 백슬래시로 이스케이프한다.
+
+````markdown
+```verify:api
+header should contain \${literal}
+```
+````
+
+`\${literal}`은 변수 치환 없이 그대로 `${literal}`로 전달된다.
 
 ## Fixture Table
 

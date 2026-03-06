@@ -37,9 +37,12 @@
 
 ```sh
 specdown run
+specdown run -out report.html     # 리포트 경로 직접 지정
+specdown run -config other.json   # 다른 설정 파일 사용
 ```
 
 모든 spec 파일을 파싱하고, adapter를 실행하고, 리포트를 생성한다.
+실패 시 각 실패 항목의 상세 내용을 stderr에 출력한다.
 
 ## 산출물
 
