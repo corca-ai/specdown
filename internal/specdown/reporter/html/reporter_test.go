@@ -179,6 +179,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, ".spec-body h1") {
 		t.Fatalf("expected heading typography rules, got %q", html)
 	}
+	if !strings.Contains(html, "align-items: baseline;") {
+		t.Fatalf("expected baseline-aligned failure diff, got %q", html)
+	}
 	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board\"") {
 		t.Fatalf("expected heading link in toc, got %q", html)
 	}

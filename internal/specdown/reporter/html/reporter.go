@@ -881,6 +881,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.35rem 0.75rem;
+      align-items: baseline;
     }
 
     .failure-diff.compact {
@@ -892,14 +893,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       margin: 0;
       color: var(--muted);
       font-size: 0.82rem;
+      line-height: 1.45;
       text-transform: uppercase;
       letter-spacing: 0.03em;
+      align-self: baseline;
     }
 
     .failure-diff dd {
       margin: 0;
       font-family: "SFMono-Regular", Menlo, monospace;
+      line-height: 1.45;
       word-break: break-word;
+      align-self: baseline;
     }
 
     .exec-header {
