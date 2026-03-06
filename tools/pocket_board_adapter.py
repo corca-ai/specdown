@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import shlex
 import sys
 
 
@@ -74,6 +75,13 @@ def boards_snapshot(state):
     return "[" + ", ".join(json.dumps(item) for item in sorted(state["boards"])) + "]"
 
 
+def board_cards_snapshot(state, board_name):
+    board = state["boards"].get(board_name)
+    if not board:
+        return "[]"
+    return "[" + ", ".join(json.dumps(item) for item in sorted(board["cards"])) + "]"
+
+
 def board_exists_failure(board_name, should_exist, state):
     actual = boards_snapshot(state)
     if should_exist:
@@ -87,6 +95,43 @@ def board_exists_failure(board_name, should_exist, state):
         expected=f'board {board_name!r} absent',
         actual=f'boards: {actual}',
     )
+
+
+def card_exists_failure(board_name, card_name, should_exist, state):
+    actual = board_cards_snapshot(state, board_name)
+    if should_exist:
+        return SpecFailure(
+            f'expected card {card_name!r} to exist in board {board_name!r}; actual cards: {actual}',
+            expected=f'card {card_name!r} in board {board_name!r} exists',
+            actual=f'cards: {actual}',
+        )
+    return SpecFailure(
+        f'expected card {card_name!r} not to exist in board {board_name!r}; actual cards: {actual}',
+        expected=f'card {card_name!r} in board {board_name!r} absent',
+        actual=f'cards: {actual}',
+    )
+
+
+def card_column_failure(board_name, card_name, column, actual_column):
+    return SpecFailure(
+        f'expected card {card_name!r} in board {board_name!r} to be in column {column!r}; actual column: {actual_column!r}',
+        expected=f'card {card_name!r} in board {board_name!r} at column {column!r}',
+        actual=f'column: {actual_column!r}',
+    )
+
+
+def parse_command(line):
+    try:
+        return shlex.split(line)
+    except ValueError as err:
+        raise SpecFailure(f'invalid command {line!r}: {err}')
+
+
+def ensure_board(state, board_name):
+    board = state["boards"].get(board_name)
+    if board is None:
+        raise board_exists_failure(board_name, True, state)
+    return board
 
 
 def run_case(state, case):
@@ -105,26 +150,69 @@ def run_case(state, case):
         line = render_arg(raw_line.strip(), bindings)
         if not line:
             continue
+        parts = parse_command(line)
+        if not parts:
+            continue
+        command = parts[0]
 
         if info == "run:board":
-            if line == "create-board":
-                if not capture_names:
-                    raise SpecFailure("missing board name")
-                name = f"board-{state['next_board_id']}"
-                state["next_board_id"] += 1
-            else:
-                if not line.startswith("create-board"):
+            if command == "create-board":
+                if len(parts) == 1:
+                    if not capture_names:
+                        raise SpecFailure("missing board name")
+                    name = f"board-{state['next_board_id']}"
+                    state["next_board_id"] += 1
+                elif len(parts) == 2:
+                    name = parts[1]
+                else:
                     raise SpecFailure(f'unsupported board command {line!r}')
-                name = parse_single_arg(line[len("create-board"):])
-            if name in state["boards"]:
-                raise SpecFailure(f'board {name!r} already exists')
-            state["boards"].add(name)
-            for capture_name in capture_names:
-                produced_bindings.append({
-                    "name": capture_name,
-                    "value": name,
-                })
-            continue
+                if name in state["boards"]:
+                    raise SpecFailure(f'board {name!r} already exists')
+                state["boards"][name] = {"cards": {}}
+                for capture_name in capture_names:
+                    produced_bindings.append({
+                        "name": capture_name,
+                        "value": name,
+                    })
+                continue
+
+            if command == "create-card":
+                if len(parts) != 3:
+                    raise SpecFailure(f'unsupported board command {line!r}')
+                board_name = parts[1]
+                title = parts[2]
+                if not title:
+                    raise SpecFailure("card title must not be empty")
+                board = ensure_board(state, board_name)
+                card_id = f"card-{state['next_card_id']}"
+                state["next_card_id"] += 1
+                board["cards"][card_id] = {
+                    "title": title,
+                    "column": "todo",
+                }
+                for capture_name in capture_names:
+                    produced_bindings.append({
+                        "name": capture_name,
+                        "value": card_id,
+                    })
+                continue
+
+            if command == "move-card":
+                if len(parts) != 4:
+                    raise SpecFailure(f'unsupported board command {line!r}')
+                board_name = parts[1]
+                card_id = parts[2]
+                column = parts[3]
+                if column not in ("todo", "doing", "done"):
+                    raise SpecFailure(f'unsupported column {column!r}')
+                board = ensure_board(state, board_name)
+                card = board["cards"].get(card_id)
+                if card is None:
+                    raise card_exists_failure(board_name, card_id, True, state)
+                card["column"] = column
+                continue
+
+            raise SpecFailure(f'unsupported board command {line!r}')
 
         if info == "verify:board":
             name, should_exist = parse_assertion(line)
@@ -150,7 +238,7 @@ def parse_exists_value(raw):
 
 
 def run_table_row(state, fixture, columns, cells):
-    if fixture != "board-exists":
+    if fixture not in ("board-exists", "card-exists", "card-column"):
         raise SpecFailure(f'unsupported fixture {fixture!r}')
     if len(columns) != len(cells):
         raise SpecFailure("fixture row shape does not match header")
@@ -159,24 +247,52 @@ def run_table_row(state, fixture, columns, cells):
     for index, column in enumerate(columns):
         row[column] = cells[index]
 
-    if "board" not in row or "exists" not in row:
-        raise SpecFailure('fixture "board-exists" requires columns "board" and "exists"')
+    if fixture == "board-exists":
+        if "board" not in row or "exists" not in row:
+            raise SpecFailure('fixture "board-exists" requires columns "board" and "exists"')
+        board_name = row["board"]
+        should_exist = parse_exists_value(row["exists"])
+        exists = board_name in state["boards"]
+        if should_exist and exists:
+            return []
+        if not should_exist and not exists:
+            return []
+        raise board_exists_failure(board_name, should_exist, state)
 
+    if fixture == "card-exists":
+        if "board" not in row or "card" not in row or "exists" not in row:
+            raise SpecFailure('fixture "card-exists" requires columns "board", "card", and "exists"')
+        board_name = row["board"]
+        board = ensure_board(state, board_name)
+        card_name = row["card"]
+        should_exist = parse_exists_value(row["exists"])
+        exists = card_name in board["cards"]
+        if should_exist and exists:
+            return []
+        if not should_exist and not exists:
+            return []
+        raise card_exists_failure(board_name, card_name, should_exist, state)
+
+    if "board" not in row or "card" not in row or "column" not in row:
+        raise SpecFailure('fixture "card-column" requires columns "board", "card", and "column"')
     board_name = row["board"]
-    should_exist = parse_exists_value(row["exists"])
-    exists = board_name in state["boards"]
-    if should_exist and exists:
+    board = ensure_board(state, board_name)
+    card_name = row["card"]
+    expected_column = row["column"]
+    card = board["cards"].get(card_name)
+    if card is None:
+        raise card_exists_failure(board_name, card_name, True, state)
+    actual_column = card["column"]
+    if actual_column == expected_column:
         return []
-    if not should_exist and not exists:
-        return []
-    raise board_exists_failure(board_name, should_exist, state)
+    raise card_column_failure(board_name, card_name, expected_column, actual_column)
 
 
 def handle_describe():
     emit({
         "type": "capabilities",
         "blocks": ["run:board", "verify:board"],
-        "fixtures": ["board-exists"],
+        "fixtures": ["board-exists", "card-exists", "card-column"],
     })
 
 
@@ -211,8 +327,9 @@ def handle_run_case(state, case):
 
 def main():
     state = {
-        "boards": set(),
+        "boards": {},
         "next_board_id": 1,
+        "next_card_id": 1,
     }
 
     for raw in sys.stdin:
