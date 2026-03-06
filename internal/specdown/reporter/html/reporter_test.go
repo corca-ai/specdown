@@ -182,6 +182,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if strings.Contains(html, "class=\"toc-link toc-level-1 failed\"") {
 		t.Fatalf("expected no propagated status on parent heading, got %q", html)
 	}
+	if strings.Contains(html, "class=\"toc-link toc-level-1 passed\"") || strings.Contains(html, "class=\"toc-link toc-level-2 passed\"") {
+		t.Fatalf("expected no success marker in toc, got %q", html)
+	}
 	if !strings.Contains(html, "pass 3") {
 		t.Fatalf("expected pass summary, got %q", html)
 	}

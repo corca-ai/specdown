@@ -121,10 +121,17 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 			Text:   heading.Text,
 			Anchor: core.HeadingAnchor(result.Document.RelativeTo, heading.HeadingPath),
 			Level:  heading.Level,
-			Status: string(statuses[headingPathKey(heading.HeadingPath)]),
+			Status: tocStatusClass(statuses[headingPathKey(heading.HeadingPath)]),
 		})
 	}
 	return items
+}
+
+func tocStatusClass(status core.Status) string {
+	if status == core.StatusFailed {
+		return string(status)
+	}
+	return ""
 }
 
 func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
@@ -653,7 +660,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       display: block;
       text-decoration: none;
       color: var(--muted);
-      padding-left: 0.95rem;
       position: relative;
     }
 
@@ -661,7 +667,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       color: var(--ink);
     }
 
-    .toc-link::before {
+    .toc-link.failed {
+      padding-left: 0.95rem;
+    }
+
+    .toc-link.failed::before {
       content: "";
       position: absolute;
       left: 0;
@@ -669,14 +679,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       width: 0.42rem;
       height: 0.42rem;
       border-radius: 999px;
-      background: #c9c0ab;
-    }
-
-    .toc-link.passed::before {
-      background: var(--pass-mark);
-    }
-
-    .toc-link.failed::before {
       background: var(--fail-mark);
     }
 
