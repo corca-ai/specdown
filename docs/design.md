@@ -148,6 +148,8 @@ adapter 경계는 in-process language API가 아니라 process protocol이어야
 - stdin/stdout으로 NDJSON 메시지를 주고받는다
 - stdout에는 protocol message만 쓴다
 - 하나의 adapter process는 한 spec run 동안 여러 `runCase` 요청을 순서대로 처리할 수 있다
+- `specdown-cli`는 첫 `runCase` 전에 `setup`을, 마지막 `runCase` 후에 `teardown`을 보낸다
+- adapter는 `setup`/`teardown`을 무시해도 된다 (응답 불필요)
 - non-zero exit는 case failure가 아니라 adapter crash 또는 infrastructure failure로 본다
 
 전송되는 payload는 JSON-serializable shape여야 한다.
@@ -182,6 +184,8 @@ export type Binding = {
 
 export type AdapterRequest =
   | { type: "describe"; protocol: "specdown-adapter/v1" }
+  | { type: "setup"; protocol: "specdown-adapter/v1" }
+  | { type: "teardown"; protocol: "specdown-adapter/v1" }
   | {
       type: "runCase";
       protocol: "specdown-adapter/v1";
@@ -201,8 +205,8 @@ export type AdapterRequest =
 export type AdapterResponse =
   | { type: "capabilities"; blocks: string[]; fixtures: string[] }
   | { type: "caseStarted"; id: SpecId; label: string }
-  | { type: "casePassed"; id: SpecId; durationMs?: number; bindings?: Binding[] }
-  | { type: "caseFailed"; id: SpecId; message: string; expected?: string; actual?: string; details?: string }
+  | { type: "casePassed"; id: SpecId; durationMs?: number; bindings?: Binding[]; stderr?: string }
+  | { type: "caseFailed"; id: SpecId; message: string; expected?: string; actual?: string; details?: string; stderr?: string }
   | { type: "modelCheckPassed"; model: string; assertion: string }
   | { type: "modelCheckFailed"; model: string; assertion: string; counterexamplePath?: string };
 ```
@@ -445,12 +449,18 @@ HTML 리포트는 v1의 핵심 deliverable이다.
 독립 팀이 구현할 CLI 표면은 다음 정도면 충분하다.
 
 ```bash
-specdown run
+specdown run                          # 기본 실행
+specdown run -filter "보드" -jobs 4   # 필터링 + 병렬 실행
+specdown run -dry-run                 # 파싱·검증만 수행
+specdown version                      # 버전 출력
+specdown alloy dump                   # Alloy 모델 .als 파일만 생성
 ```
 
 의미:
 
 - `run`: Markdown parse, adapter 실행, embedded Alloy 검사, model bundle 생성, report artifact 생성을 한 번에 수행한다
+- `version`: 빌드 시 주입된 버전 문자열을 출력한다
+- `alloy dump`: adapter 실행 없이 Alloy 모델 파일만 생성한다
 
 v1에서는 `specdown run`이 compile + execute + report를 한 번에 수행하는 기본 경로다.
 

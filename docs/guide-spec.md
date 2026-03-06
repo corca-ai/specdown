@@ -3,6 +3,24 @@
 Spec 파일은 `*.spec.md` Markdown 문서다.
 산문은 그대로 보존되고, 특정 블록과 표만 실행된다.
 
+## Frontmatter
+
+spec 파일 상단에 YAML 형식의 frontmatter를 추가할 수 있다.
+
+```markdown
+---
+timeout: 5000
+---
+
+# 제품 이름
+```
+
+| 키 | 설명 |
+|----|------|
+| `timeout` | adapter 케이스별 실행 제한 시간 (밀리초). 0이면 무제한 |
+
+frontmatter는 선택 사항이다. 없으면 기본값(무제한)이 적용된다.
+
 ## Heading 구조
 
 Heading hierarchy가 테스트 suite 계층이 된다.
