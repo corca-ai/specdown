@@ -522,7 +522,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .layout {
       display: grid;
-      grid-template-columns: 16rem minmax(0, 48rem);
+      grid-template-columns: 16rem minmax(0, 54rem);
       gap: 2.5rem;
       align-items: start;
     }
