@@ -474,11 +474,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --ink: #1f1f1b;
       --muted: #66665f;
       --rule: #d6d6cf;
-      --pass-ink: #0f7a37;
-      --pass-mark: #19a34a;
+      --pass-ink: #0a8f3b;
+      --pass-mark: #10b34a;
       --fail-ink: #a1261a;
       --fail-mark: #d63b2d;
-      --accent: #4d4d46;
+      --accent: #2f64b3;
       --code-bg: #efefea;
       --note-bg: #f5f5f1;
     }
