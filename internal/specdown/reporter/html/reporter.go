@@ -237,8 +237,36 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		return markdownToHTML(node.Markdown())
 	}
 
+	type renderedRow struct {
+		node   core.TableRowNode
+		result core.CaseResult
+	}
+
+	rows := make([]renderedRow, 0, len(node.Rows))
+	tableStatus := ""
+	for _, row := range node.Rows {
+		if row.ID == nil {
+			continue
+		}
+		result, ok := caseResults[row.ID.Key()]
+		if !ok {
+			return markdownToHTML(node.Markdown())
+		}
+		rows = append(rows, renderedRow{node: row, result: result})
+		if result.Status == core.StatusFailed {
+			tableStatus = string(core.StatusFailed)
+		} else if tableStatus == "" {
+			tableStatus = string(core.StatusPassed)
+		}
+	}
+
 	var out strings.Builder
-	out.WriteString(`<section class="exec-table-block">`)
+	out.WriteString(`<section class="exec-table-block`)
+	if tableStatus != "" {
+		out.WriteString(` `)
+		out.WriteString(template.HTMLEscapeString(tableStatus))
+	}
+	out.WriteString(`">`)
 	out.WriteString(`<div class="exec-table-header">`)
 	out.WriteString(`<span class="exec-kind">fixture:`)
 	out.WriteString(template.HTMLEscapeString(node.Fixture))
@@ -253,14 +281,9 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 	}
 	out.WriteString(`<th>Status</th></tr></thead>`)
 	out.WriteString(`<tbody>`)
-	for _, row := range node.Rows {
-		if row.ID == nil {
-			continue
-		}
-		result, ok := caseResults[row.ID.Key()]
-		if !ok {
-			return markdownToHTML(node.Markdown())
-		}
+	for _, item := range rows {
+		row := item.node
+		result := item.result
 		out.WriteString(`<tr class="`)
 		out.WriteString(template.HTMLEscapeString(string(result.Status)))
 		out.WriteString(`" id="`)
@@ -594,8 +617,17 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .spec {
       margin: 0;
-      padding-top: 2rem;
+      padding: 2rem 0 0 0.9rem;
       border-top: 1px solid var(--rule);
+      border-left: 2px solid var(--rule);
+    }
+
+    .spec.passed {
+      border-left-color: #9ab9a0;
+    }
+
+    .spec.failed {
+      border-left-color: #d9a597;
     }
 
     .spec-header {
@@ -646,6 +678,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       scroll-margin-top: 1.5rem;
     }
 
+    .exec-block.passed {
+      border-left-color: #94b79a;
+      background: linear-gradient(90deg, #f4faf5 0%, transparent 18rem);
+    }
+
     .exec-block.failed {
       border-left-color: #d9a597;
       background: linear-gradient(90deg, var(--fail-bg) 0%, transparent 20rem);
@@ -657,6 +694,14 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       border-left: 3px solid var(--rule);
       background: transparent;
       overflow-x: auto;
+    }
+
+    .exec-table-block.passed {
+      border-left-color: #94b79a;
+    }
+
+    .exec-table-block.failed {
+      border-left-color: #d9a597;
     }
 
     .exec-table-header {
@@ -688,6 +733,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .exec-table tbody tr.failed {
       background: var(--fail-bg);
+    }
+
+    .exec-table tbody td:first-child {
+      box-shadow: inset 3px 0 0 transparent;
+    }
+
+    .exec-table tbody tr.passed td:first-child {
+      box-shadow: inset 3px 0 0 #94b79a;
+    }
+
+    .exec-table tbody tr.failed td:first-child {
+      box-shadow: inset 3px 0 0 #d9a597;
     }
 
     .cell-template {
@@ -814,7 +871,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     </section>
 
     {{ range .Specs }}
-    <article class="spec">
+    <article class="spec {{ .Status }}">
       <header class="spec-header">
         <p class="spec-meta"><span class="spec-path">{{ .Path }}</span> · <span class="status {{ .Status }}">{{ .Status }}</span></p>
       </header>
