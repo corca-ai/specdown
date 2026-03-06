@@ -16,7 +16,8 @@ import (
 
 type reportView struct {
 	GeneratedAt string
-	Summary     core.Summary
+	PassedCount int
+	FailedCount int
 	Failures    []failureView
 	Specs       []specView
 }
@@ -76,7 +77,8 @@ func Write(report core.Report, outPath string) error {
 
 	view := reportView{
 		GeneratedAt: report.GeneratedAt.Format(time.RFC3339),
-		Summary:     report.Summary,
+		PassedCount: report.Summary.CasesPassed + report.Summary.AlloyChecksPassed,
+		FailedCount: report.Summary.CasesFailed + report.Summary.AlloyChecksFailed,
 		Failures:    failures,
 		Specs:       specs,
 	}
@@ -525,8 +527,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .hero h1 {
-      margin: 0 0 0.75rem;
-      font-size: 2rem;
+      margin: 0 0 0.5rem;
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
     }
 
     .meta {
@@ -824,19 +828,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 <body>
   <main>
     <section class="hero">
-      <h1>specdown report</h1>
-      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, executable blocks, fixture tables, Alloy model fragments, and Alloy references. Adapter cases execute in document order, embedded Alloy bundles are checked alongside them, failures are summarized, and status is annotated inline.</p>
+      <h1>report</h1>
       <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
-        <span class="pill">specs {{ .Summary.SpecsTotal }}</span>
-        <span class="pill pass">spec pass {{ .Summary.SpecsPassed }}</span>
-        <span class="pill fail">spec fail {{ .Summary.SpecsFailed }}</span>
-        <span class="pill">cases {{ .Summary.CasesTotal }}</span>
-        <span class="pill pass">case pass {{ .Summary.CasesPassed }}</span>
-        <span class="pill fail">case fail {{ .Summary.CasesFailed }}</span>
-        <span class="pill">alloy {{ .Summary.AlloyChecksTotal }}</span>
-        <span class="pill pass">alloy pass {{ .Summary.AlloyChecksPassed }}</span>
-        <span class="pill fail">alloy fail {{ .Summary.AlloyChecksFailed }}</span>
+        <span class="pill pass">pass {{ .PassedCount }}</span>
+        <span class="pill fail">fail {{ .FailedCount }}</span>
       </div>
       {{ if .Failures }}
       <section class="failures">

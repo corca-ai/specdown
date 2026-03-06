@@ -161,10 +161,10 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "<h1 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h1>") {
 		t.Fatalf("expected markdown heading in html, got %q", html)
 	}
-	if !strings.Contains(html, "case pass 3") {
+	if !strings.Contains(html, "pass 3") {
 		t.Fatalf("expected pass summary, got %q", html)
 	}
-	if !strings.Contains(html, "case fail 1") {
+	if !strings.Contains(html, "fail 1") {
 		t.Fatalf("expected fail summary, got %q", html)
 	}
 	if !strings.Contains(html, "captured bindings: boardName=board-1") {
@@ -287,8 +287,8 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 	}
 
 	html := string(body)
-	if !strings.Contains(html, "alloy fail 1") {
-		t.Fatalf("expected alloy summary, got %q", html)
+	if !strings.Contains(html, "pass 0") || !strings.Contains(html, "fail 1") {
+		t.Fatalf("expected compact summary, got %q", html)
 	}
 	if !strings.Contains(html, "alloy:model(board)") {
 		t.Fatalf("expected alloy model label, got %q", html)
