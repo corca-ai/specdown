@@ -489,8 +489,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .toc {
       position: sticky;
       top: 1.5rem;
-      font-size: 0.92rem;
-      line-height: 1.5;
+      max-height: 100vh;
+      overflow-y: auto;
+      font-size: 0.82rem;
+      line-height: 1.45;
     }
 
     .toc-inner { padding: 1.1rem 0 0; }
@@ -606,9 +608,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       }
 
       & h1 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: 0; z-index: 14; }
-      & h2 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: 4.5rem; z-index: 13; }
-      & h3 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: 7.8rem; z-index: 12; }
-      & :is(h4, h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: 10.4rem; z-index: 11; }
+      & h2 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: calc(4.5rem - 1px); z-index: 13; }
+      & h3 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: calc(7.8rem - 1px); z-index: 12; }
+      & :is(h4, h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: calc(10.4rem - 1px); z-index: 11; }
     }
 
     .status {

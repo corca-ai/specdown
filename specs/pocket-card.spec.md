@@ -38,6 +38,8 @@ create-card "${boardName}" "명세 쓰기"
 move-card "${boardName}" "${cardId}" doing
 ```
 
+### doing으로 이동
+
 `doing`으로 이동한 카드는 같은 보드에서 `doing` 컬럼으로 조회되어야 한다.
 
 <!-- fixture:card-column -->
@@ -45,12 +47,89 @@ move-card "${boardName}" "${cardId}" doing
 | --- | --- | --- |
 | ${boardName} | ${cardId} | doing |
 
-작업 중인 카드는 동시에 `done` 후보 컬럼에서도 조회될 수 있어야 한다.
+### done으로 이동
+
+작업이 끝난 카드는 `done`으로 이동할 수 있어야 한다.
+
+```run:board
+move-card "${boardName}" "${cardId}" done
+```
 
 <!-- fixture:card-column -->
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | done |
+
+### 존재하지 않는 컬럼으로 이동하면 오류
+
+정의되지 않은 컬럼 이름으로 이동하면 오류를 반환해야 한다.
+
+```verify:board
+moving "${cardId}" to "invalid" should fail
+```
+
+### 같은 컬럼으로 이동해도 오류가 아니다
+
+이미 있는 컬럼으로 다시 이동해도 정상 처리되어야 한다.
+
+```verify:board
+moving "${cardId}" to current column should succeed
+```
+
+## 카드 제목
+
+### 제목은 빈 문자열일 수 없다
+
+카드 제목이 비어 있으면 생성이 거부되어야 한다.
+
+```verify:board
+card with empty title should be rejected
+```
+
+### 제목 길이는 256자 이하여야 한다
+
+257자 이상의 제목은 거부되어야 한다.
+
+```verify:board
+card title length must be at most 256
+```
+
+### 제목은 수정할 수 있다
+
+기존 카드의 제목을 변경할 수 있어야 한다.
+
+```run:board
+rename-card "${boardName}" "${cardId}" "명세 완성"
+```
+
+```verify:board
+card "${cardId}" title should be "명세 완성"
+```
+
+## 카드 삭제
+
+### 존재하는 카드를 삭제할 수 있다
+
+카드를 삭제하면 더 이상 조회되지 않아야 한다.
+
+```run:board
+delete-card "${boardName}" "${cardId}"
+```
+
+### 삭제한 카드는 조회되지 않는다
+
+<!-- fixture:card-exists -->
+| board | card | exists |
+| --- | --- | --- |
+| ${boardName} | ${cardId} | 아니오 |
+
+### 존재하지 않는 카드를 삭제하면 오류
+
+한 번도 만들지 않은 카드를 삭제하려 하면 오류를 반환해야 한다.
+
+```verify:board
+deleting nonexistent card should fail
+```
 
 ## 형식 규칙
 
@@ -81,6 +160,22 @@ check cardHasExactlyOneColumn for 5
 ```
 
 <!-- alloy:ref(board#cardHasExactlyOneColumn, scope=5) -->
+
+### 카드는 정확히 하나의 보드에 속해야 한다
+
+카드가 여러 보드에 동시에 속하는 것은 불가능해야 한다.
+
+```alloy:model(board)
+assert cardBelongsToOneBoard {
+  all c: Card | one c.board
+}
+
+check cardBelongsToOneBoard for 5
+```
+
+<!-- alloy:ref(board#cardBelongsToOneBoard, scope=5) -->
+
+### 의도적 반례
 
 의도적으로 틀린 단언: 카드가 둘 이상의 컬럼을 가질 수 있다고 주장한다.
 
