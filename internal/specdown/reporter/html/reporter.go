@@ -237,15 +237,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<span class="exec-kind">`)
 	out.WriteString(template.HTMLEscapeString(result.Block))
 	out.WriteString(`</span>`)
-	out.WriteString(`<span class="exec-id">`)
-	out.WriteString(template.HTMLEscapeString(formatSpecID(*node.ID)))
-	out.WriteString(`</span>`)
 	out.WriteString(`</div>`)
-	out.WriteString(`<span class="status `)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	out.WriteString(`">`)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	out.WriteString(`</span>`)
 	out.WriteString(`</div>`)
 	out.WriteString(`<pre class="exec-source"><code>`)
 	out.WriteString(template.HTMLEscapeString(result.Template))
@@ -420,15 +412,7 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	out.WriteString(`<span class="exec-kind">`)
 	out.WriteString(template.HTMLEscapeString("alloy:ref(" + node.Model + "#" + node.Assertion + ", scope=" + node.Scope + ")"))
 	out.WriteString(`</span>`)
-	out.WriteString(`<span class="exec-id">`)
-	out.WriteString(template.HTMLEscapeString(formatSpecID(*node.ID)))
-	out.WriteString(`</span>`)
 	out.WriteString(`</div>`)
-	out.WriteString(`<span class="status `)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	out.WriteString(`">`)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	out.WriteString(`</span>`)
 	out.WriteString(`</div>`)
 	out.WriteString(`<p class="exec-note">assertion <code>`)
 	out.WriteString(template.HTMLEscapeString(result.Assertion))
@@ -474,13 +458,6 @@ func markdownToHTML(source string) (string, error) {
 		return "", err
 	}
 	return out.String(), nil
-}
-
-func formatSpecID(id core.SpecID) string {
-	if len(id.HeadingPath) == 0 {
-		return id.File + "#" + fmt.Sprintf("%d", id.Ordinal)
-	}
-	return id.File + "#" + strings.Join(id.HeadingPath, " / ") + " / " + fmt.Sprintf("%d", id.Ordinal)
 }
 
 var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
@@ -728,8 +705,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       line-height: 1.5;
     }
 
-    .spec-path,
-    .exec-id {
+    .spec-path {
       color: var(--muted);
       font-family: "SFMono-Regular", Menlo, monospace;
       font-size: 0.9rem;
