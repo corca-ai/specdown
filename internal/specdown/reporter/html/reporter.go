@@ -761,24 +761,24 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .spec-body h1 {
       font-size: 2.5rem;
-      margin: 0 0 1rem;
+      margin: 0 0 1.1rem;
     }
 
     .spec-body h2 {
       font-size: 1.85rem;
-      margin: 2.4rem 0 0.85rem;
+      margin: 2.9rem 0 0.95rem;
     }
 
     .spec-body h3 {
       font-size: 1.4rem;
-      margin: 1.9rem 0 0.7rem;
+      margin: 2.25rem 0 0.78rem;
     }
 
     .spec-body h4,
     .spec-body h5,
     .spec-body h6 {
       font-size: 1.08rem;
-      margin: 1.4rem 0 0.6rem;
+      margin: 1.7rem 0 0.68rem;
     }
 
     .spec-body :first-child {
@@ -980,6 +980,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       border-radius: 0.2rem;
       background: var(--code-bg);
       font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.92rem;
+      line-height: 1.45;
       overflow-x: auto;
     }
 
@@ -1009,6 +1011,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     kbd,
     samp {
       font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.94em;
+      line-height: 1.45;
     }
 
     @media (max-width: 960px) {
