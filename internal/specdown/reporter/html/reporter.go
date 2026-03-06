@@ -111,7 +111,7 @@ func renderDocument(result core.DocumentResult, outPath string) (string, error) 
 	for _, node := range result.Document.Nodes {
 		switch current := node.(type) {
 		case core.HeadingNode:
-			html, err := markdownToHTML(current.Markdown())
+			html, err := renderHeading(current, result.Document.RelativeTo)
 			if err != nil {
 				return "", err
 			}
@@ -215,6 +215,19 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	}
 	out.WriteString(`</section>`)
 	return out.String(), nil
+}
+
+func renderHeading(node core.HeadingNode, documentPath string) (string, error) {
+	html, err := markdownToHTML(node.Markdown())
+	if err != nil {
+		return "", err
+	}
+	if len(node.HeadingPath) == 0 {
+		return html, nil
+	}
+	openTag := fmt.Sprintf("<h%d>", node.Level)
+	replacement := fmt.Sprintf("<h%d id=\"%s\">", node.Level, template.HTMLEscapeString(core.HeadingAnchor(documentPath, node.HeadingPath)))
+	return strings.Replace(html, openTag, replacement, 1), nil
 }
 
 func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (string, error) {
@@ -337,9 +350,9 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	out.WriteString(template.HTMLEscapeString(result.Scope))
 	out.WriteString(`</code></p>`)
 	if result.SourceRef != "" {
-		out.WriteString(`<p class="exec-note">source ref: <code>`)
-		out.WriteString(template.HTMLEscapeString(result.SourceRef))
-		out.WriteString(`</code></p>`)
+		out.WriteString(`<p class="exec-note">source ref: `)
+		out.WriteString(renderSourceRefLink(result.SourceRef))
+		out.WriteString(`</p>`)
 	}
 	if result.BundleLine > 0 {
 		out.WriteString(`<p class="exec-note">bundle line: <code>`)
@@ -411,6 +424,38 @@ func relativeAssetHref(reportPath string, assetPath string) string {
 		return ""
 	}
 	return filepath.ToSlash(relative)
+}
+
+func renderSourceRefLink(sourceRef string) string {
+	file, headingPath, ok := parseSourceRef(sourceRef)
+	if !ok {
+		return `<code>` + template.HTMLEscapeString(sourceRef) + `</code>`
+	}
+	anchor := core.HeadingAnchor(file, headingPath)
+	var out strings.Builder
+	out.WriteString(`<a href="#`)
+	out.WriteString(template.HTMLEscapeString(anchor))
+	out.WriteString(`"><code>`)
+	out.WriteString(template.HTMLEscapeString(sourceRef))
+	out.WriteString(`</code></a>`)
+	return out.String()
+}
+
+func parseSourceRef(sourceRef string) (string, []string, bool) {
+	parts := strings.SplitN(sourceRef, "#", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", nil, false
+	}
+	rawPath := strings.Split(parts[1], "/")
+	headingPath := make([]string, 0, len(rawPath))
+	for _, part := range rawPath {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			return "", nil, false
+		}
+		headingPath = append(headingPath, trimmed)
+	}
+	return parts[0], headingPath, true
 }
 
 func markdownToHTML(source string) (string, error) {

@@ -35,15 +35,21 @@ func (id SpecID) Anchor() string {
 	return "case-" + slug(strings.Join(parts, "-"))
 }
 
+func HeadingAnchor(file string, headingPath []string) string {
+	parts := append([]string{file}, headingPath...)
+	return "section-" + slug(strings.Join(parts, "-"))
+}
+
 type Node interface {
 	isNode()
 	Markdown() string
 }
 
 type HeadingNode struct {
-	Level int    `json:"level"`
-	Text  string `json:"text"`
-	Raw   string `json:"raw"`
+	Level       int      `json:"level"`
+	Text        string   `json:"text"`
+	Raw         string   `json:"raw"`
+	HeadingPath []string `json:"headingPath,omitempty"`
 }
 
 func (HeadingNode) isNode() {}

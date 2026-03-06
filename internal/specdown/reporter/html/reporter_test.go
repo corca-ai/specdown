@@ -30,7 +30,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 					Title:      "Pocket Board",
 					RelativeTo: "specs/pocket-board.spec.md",
 					Nodes: []core.Node{
-						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n"},
+						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n", HeadingPath: []string{"Pocket Board"}},
 						core.ProseNode{Raw: "\n설명 문단.\n\n"},
 						core.CodeBlockNode{
 							Block:  core.BlockSpec{Raw: "run:board -> $boardName", Kind: core.BlockKindRun, Target: "board", CaptureNames: []string{"boardName"}},
@@ -158,7 +158,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 
 	html := string(body)
-	if !strings.Contains(html, "<h1>Pocket Board</h1>") {
+	if !strings.Contains(html, "<h1 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h1>") {
 		t.Fatalf("expected markdown heading in html, got %q", html)
 	}
 	if !strings.Contains(html, "case pass 3") {
@@ -231,7 +231,8 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 					Title:      "Pocket Board",
 					RelativeTo: "specs/pocket-board.spec.md",
 					Nodes: []core.Node{
-						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n"},
+						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n", HeadingPath: []string{"Pocket Board"}},
+						core.HeadingNode{Level: 2, Text: "형식 규칙", Raw: "## 형식 규칙\n", HeadingPath: []string{"Pocket Board", "형식 규칙"}},
 						core.AlloyModelNode{
 							Model:  "board",
 							Source: "module board\n\nsig Card {}",
@@ -306,6 +307,9 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(html, "source ref") || !strings.Contains(html, "bundle line") {
 		t.Fatalf("expected structured source location, got %q", html)
+	}
+	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board-형식-규칙\"") {
+		t.Fatalf("expected source ref anchor link, got %q", html)
 	}
 }
 

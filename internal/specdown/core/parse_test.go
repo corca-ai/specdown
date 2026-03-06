@@ -42,8 +42,11 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 
 	var blocks []CodeBlockNode
 	var tables []TableNode
+	var headings []HeadingNode
 	for _, node := range doc.Nodes {
 		switch current := node.(type) {
+		case HeadingNode:
+			headings = append(headings, current)
 		case CodeBlockNode:
 			blocks = append(blocks, current)
 		case TableNode:
@@ -53,6 +56,12 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 code blocks, got %d", len(blocks))
+	}
+	if len(headings) != 4 {
+		t.Fatalf("expected 4 headings, got %d", len(headings))
+	}
+	if got := headings[2].HeadingPath; len(got) != 3 || got[0] != "Pocket Board" || got[2] != "생성한 보드 확인" {
+		t.Fatalf("unexpected heading path %#v", got)
 	}
 	if len(tables) != 1 {
 		t.Fatalf("expected 1 table, got %d", len(tables))

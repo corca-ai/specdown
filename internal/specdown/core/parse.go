@@ -146,9 +146,10 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			}
 			headingPath = nextHeadingPath(headingPath, level, text)
 			nodes = append(nodes, HeadingNode{
-				Level: level,
-				Text:  text,
-				Raw:   line,
+				Level:       level,
+				Text:        text,
+				Raw:         line,
+				HeadingPath: append([]string(nil), headingPath...),
 			})
 			i++
 			continue
