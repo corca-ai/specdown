@@ -484,150 +484,129 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f4f1e8;
-      --panel: #fffdf8;
+      --bg: #f7f2e7;
+      --paper: #fffdf8;
       --ink: #1f1f1b;
       --muted: #5b594f;
-      --border: #d8d0bd;
-      --pass-bg: #dff5e3;
-      --pass-ink: #1d5d2a;
-      --fail-bg: #f9dfdb;
+      --rule: #d8d0bd;
+      --pass-ink: #1f5e2e;
       --fail-ink: #7a2618;
       --accent: #a34b2a;
-      --code-bg: #f7f1e3;
+      --code-bg: #f4ecdc;
+      --note-bg: #fbf7ef;
+      --fail-bg: #fff5f2;
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Georgia, "Times New Roman", serif;
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, #fff7dd 0, transparent 28rem),
-        linear-gradient(180deg, #f7f3e8 0%, var(--bg) 100%);
+      background: var(--bg);
     }
 
     main {
-      max-width: 60rem;
+      max-width: 48rem;
       margin: 0 auto;
-      padding: 3rem 1.25rem 4rem;
-    }
-
-    .hero,
-    .spec {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 1rem;
-      box-shadow: 0 0.8rem 2rem rgba(74, 56, 24, 0.08);
+      padding: 2.75rem 1.5rem 4rem;
     }
 
     .hero {
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 2.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--rule);
     }
 
     .hero h1 {
-      margin: 0 0 0.5rem;
-      font-size: 1.2rem;
+      margin: 0 0 0.35rem;
+      font-size: 0.95rem;
       font-weight: 600;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .meta {
       color: var(--muted);
       margin: 0;
+      line-height: 1.65;
     }
 
     .summary {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-top: 1rem;
+      margin-top: 0.2rem;
     }
 
     .failures {
       margin-top: 1.25rem;
-      padding: 1rem 1rem 0.35rem;
-      border-radius: 0.9rem;
-      border: 1px solid #efb9ae;
-      background: #fff1ee;
+      padding-left: 1rem;
+      border-left: 2px solid #e2b6ac;
     }
 
     .failures h2 {
       margin: 0 0 0.75rem;
       font-size: 1rem;
-      color: var(--fail-ink);
+      font-weight: 600;
     }
 
     .failure-list {
-      list-style: none;
       margin: 0;
-      padding: 0;
+      padding-left: 1.2rem;
     }
 
     .failure-list li {
-      margin: 0 0 0.75rem;
-      padding: 0 0 0.75rem;
-      border-bottom: 1px solid #efc7bf;
-    }
-
-    .failure-list li:last-child {
-      border-bottom: 0;
-      margin-bottom: 0;
+      margin: 0 0 0.8rem;
     }
 
     .failure-link {
-      display: inline-block;
-      font-weight: 700;
+      font-weight: 600;
       text-decoration: none;
-      color: var(--fail-ink);
+      color: var(--ink);
+    }
+
+    .failure-link:hover {
+      text-decoration: underline;
     }
 
     .failure-message {
-      margin: 0.25rem 0 0;
-      color: var(--ink);
+      margin: 0.2rem 0 0;
+      color: var(--muted);
     }
 
     .pill {
-      display: inline-block;
-      padding: 0.45rem 0.75rem;
-      border-radius: 999px;
-      background: #efe8d7;
-      color: var(--ink);
-      border: 1px solid var(--border);
+      display: inline;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .pill::before {
+      content: "· ";
+      color: var(--muted);
     }
 
     .pill.pass {
-      background: var(--pass-bg);
       color: var(--pass-ink);
-      border-color: #b7ddbf;
     }
 
     .pill.fail {
-      background: var(--fail-bg);
       color: var(--fail-ink);
-      border-color: #efb9ae;
     }
 
     .spec {
-      overflow: hidden;
-      margin-top: 1rem;
+      margin: 0;
+      padding-top: 2rem;
+      border-top: 1px solid var(--rule);
     }
 
     .spec-header {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 0.75rem;
-      align-items: center;
-      padding: 1rem 1.25rem;
-      border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, #fdf7eb 0%, #fbf7f0 100%);
+      margin-bottom: 1rem;
     }
 
-    .spec-header h2 {
+    .spec-meta {
       margin: 0;
-      font-size: 1.2rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
     }
 
     .spec-path,
@@ -638,8 +617,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .spec-body {
-      padding: 1.25rem;
-      line-height: 1.65;
+      line-height: 1.82;
+      font-size: 1.04rem;
     }
 
     .spec-body :first-child {
@@ -647,80 +626,68 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .status {
-      display: inline-block;
-      padding: 0.35rem 0.65rem;
-      border-radius: 999px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-      font-size: 0.82rem;
+      font-weight: 600;
+      font-size: 0.95rem;
     }
 
     .status.passed {
-      background: var(--pass-bg);
       color: var(--pass-ink);
     }
 
     .status.failed {
-      background: var(--fail-bg);
       color: var(--fail-ink);
     }
 
     .exec-block {
-      margin: 1rem 0;
-      padding: 0.9rem 1rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: 0.85rem;
-      background: #fffaf0;
+      margin: 1.35rem 0;
+      padding: 0.15rem 0 0.2rem 1rem;
+      border-left: 3px solid var(--rule);
+      background: transparent;
       scroll-margin-top: 1.5rem;
     }
 
     .exec-block.failed {
-      border-color: #efb9ae;
-      background: #fff3f0;
+      border-left-color: #d9a597;
+      background: linear-gradient(90deg, var(--fail-bg) 0%, transparent 20rem);
     }
 
     .exec-table-block {
-      margin: 1rem 0;
-      padding: 0.9rem 1rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: 0.85rem;
-      background: #fffaf0;
+      margin: 1.35rem 0;
+      padding: 0.15rem 0 0.2rem 1rem;
+      border-left: 3px solid var(--rule);
+      background: transparent;
       overflow-x: auto;
     }
 
     .exec-table-header {
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.55rem;
     }
 
     .exec-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.98rem;
+      font-size: 0.95rem;
+      background: var(--paper);
     }
 
     .exec-table th,
     .exec-table td {
-      padding: 0.75rem 0.85rem;
-      border-top: 1px solid var(--border);
+      padding: 0.7rem 0.75rem;
+      border-top: 1px solid var(--rule);
       vertical-align: top;
       text-align: left;
     }
 
     .exec-table thead th {
       border-top: 0;
-      font-size: 0.88rem;
-      letter-spacing: 0.02em;
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--muted);
     }
 
-    .exec-table tbody tr.passed {
-      background: #fbfff8;
-    }
-
     .exec-table tbody tr.failed {
-      background: #fff3f0;
+      background: var(--fail-bg);
     }
 
     .cell-template {
@@ -746,10 +713,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .failure-diff {
       margin: 0.75rem 0 0;
-      padding: 0.75rem 0.85rem;
-      border-radius: 0.75rem;
-      background: #fff7f4;
-      border: 1px solid #efc7bf;
+      padding: 0.65rem 0.8rem;
+      background: var(--note-bg);
+      border-left: 2px solid #e2b6ac;
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.35rem 0.75rem;
@@ -777,47 +743,47 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .exec-header {
       display: flex;
       flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
+      align-items: baseline;
+      gap: 0.6rem 1rem;
+      margin-bottom: 0.55rem;
     }
 
     .exec-labels {
       display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.8rem;
     }
 
     .exec-kind {
-      font-weight: 700;
+      font-weight: 600;
       color: var(--accent);
       font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 0.92rem;
     }
 
     .exec-source {
       margin: 0;
-      padding: 0.9rem 1rem;
-      border-radius: 0.75rem;
+      padding: 0.8rem 0.9rem;
+      border-radius: 0.2rem;
       background: var(--code-bg);
       overflow-x: auto;
     }
 
     .exec-source.resolved {
       margin-top: 0.4rem;
-      border: 1px solid var(--border);
+      border: 1px solid var(--rule);
     }
 
     .exec-note {
       margin: 0.75rem 0 0.35rem;
       color: var(--muted);
-      font-size: 0.95rem;
+      font-size: 0.92rem;
     }
 
     .exec-message {
       margin: 0.75rem 0 0;
       color: var(--fail-ink);
-      font-weight: 700;
+      font-weight: 600;
     }
 
     a {
@@ -829,14 +795,12 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <main>
     <section class="hero">
       <h1>report</h1>
-      <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
-        <span class="pill pass">pass {{ .PassedCount }}</span>
-        <span class="pill fail">fail {{ .FailedCount }}</span>
+        <p class="meta">Generated at {{ .GeneratedAt }}<span class="pill pass">pass {{ .PassedCount }}</span><span class="pill fail">fail {{ .FailedCount }}</span></p>
       </div>
       {{ if .Failures }}
       <section class="failures">
-        <h2>Failed checks</h2>
+        <h2>Failures</h2>
         <ul class="failure-list">
           {{ range .Failures }}
           <li>
@@ -852,11 +816,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     {{ range .Specs }}
     <article class="spec">
       <header class="spec-header">
-        <div>
-          <h2>{{ .Title }}</h2>
-          <div class="spec-path">{{ .Path }}</div>
-        </div>
-        <span class="status {{ .Status }}">{{ .Status }}</span>
+        <p class="spec-meta"><span class="spec-path">{{ .Path }}</span> · <span class="status {{ .Status }}">{{ .Status }}</span></p>
       </header>
       <section class="spec-body">{{ .Body }}</section>
     </article>
