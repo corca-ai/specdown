@@ -98,13 +98,16 @@ func tocStatusClass(status core.Status) string {
 func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
 	statuses := make(map[string]core.Status)
 	mark := func(path []string, status core.Status) {
-		key := headingPathKey(path)
-		current := statuses[key]
-		if current == core.StatusFailed {
-			return
-		}
-		if status == core.StatusFailed || current == "" {
-			statuses[key] = status
+		// Mark exact path and all ancestor paths
+		for i := 1; i <= len(path); i++ {
+			key := headingPathKey(path[:i])
+			current := statuses[key]
+			if current == core.StatusFailed {
+				continue
+			}
+			if status == core.StatusFailed || current == "" {
+				statuses[key] = status
+			}
 		}
 	}
 
