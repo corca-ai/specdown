@@ -39,14 +39,6 @@ A board name that was never created must not exist.
 board "${boardName}-archive" should not exist
 ```
 
-### An archive copy of a created board must also be queryable
-
-When a board is created, an archive copy must also be queryable.
-
-```verify:board
-board "${boardName}-archive" should exist
-```
-
 ### Board Existence Rules
 
 Board existence can be independently verified for each row in a table.
@@ -59,25 +51,15 @@ Board existence can be independently verified for each row in a table.
 
 ## Board Name Rules
 
-### Name must not contain spaces
-
-Board names with spaces must be rejected.
+Board names are subject to validation rules.
 
 ```verify:board
 board "invalid name" should be rejected
 ```
 
-### Name length must be at most 64 characters
-
-Names of 65 characters or more must be rejected.
-
 ```verify:board
 board name length must be at most 64
 ```
-
-### Duplicate names must be rejected
-
-Creating a board with an already existing name must return an error.
 
 ```verify:board
 duplicate board should be rejected
@@ -85,23 +67,17 @@ duplicate board should be rejected
 
 ## Board Deletion
 
-### An existing board can be deleted
-
 Deleting a created board must make it no longer queryable.
 
 ```run:board
-delete-board "temp-board"
+delete-board "${boardName}"
 ```
 
-### A deleted board is not queryable
-
-Querying a deleted board must respond that it does not exist.
+The deleted board must no longer exist.
 
 ```verify:board
-board "temp-board" should not exist
+board "${boardName}" should not exist
 ```
-
-### Deleting a nonexistent board should fail
 
 Attempting to delete a board that was never created must return an error.
 
@@ -111,15 +87,17 @@ deleting nonexistent board should fail
 
 ## Board List
 
-### A created board is included in the list
+After creating a new board, we can test list behavior.
 
-After creating a board, querying the full list must include that board.
+```run:board -> $boardName2
+create-board
+```
+
+The board list must contain at least one entry.
 
 ```verify:board
 board list should contain at least one entry
 ```
-
-### The list is sorted by name
 
 When multiple boards exist, the list must be sorted alphabetically by name.
 

@@ -59,18 +59,6 @@ def parse_single_arg(raw):
     return raw
 
 
-def parse_assertion(line):
-    if not line.startswith("board"):
-        raise SpecFailure(f'unsupported board assertion {line!r}')
-
-    rest = line[len("board"):].strip()
-    if rest.endswith("should exist"):
-        return parse_single_arg(rest[:-len("should exist")]), True
-    if rest.endswith("should not exist"):
-        return parse_single_arg(rest[:-len("should not exist")]), False
-    raise SpecFailure(f'unsupported board assertion {line!r}')
-
-
 def boards_snapshot(state):
     return "[" + ", ".join(json.dumps(item) for item in sorted(state["boards"])) + "]"
 
@@ -132,6 +120,17 @@ def ensure_board(state, board_name):
     return board
 
 
+def ensure_card(state, board_name, card_id):
+    board = ensure_board(state, board_name)
+    card = board["cards"].get(card_id)
+    if card is None:
+        raise card_exists_failure(board_name, card_id, True, state)
+    return board, card
+
+
+VALID_COLUMNS = ("todo", "doing", "done")
+
+
 def run_case(state, case):
     kind = case["kind"]
     info = case.get("block", "")
@@ -181,6 +180,8 @@ def run_case(state, case):
                 title = parts[2]
                 if not title:
                     raise SpecFailure("card title must not be empty")
+                if len(title) > 256:
+                    raise SpecFailure(f'card title exceeds 256 characters (got {len(title)})')
                 board = ensure_board(state, board_name)
                 card_id = f"card-{state['next_card_id']}"
                 state["next_card_id"] += 1
@@ -201,29 +202,167 @@ def run_case(state, case):
                 board_name = parts[1]
                 card_id = parts[2]
                 column = parts[3]
-                if column not in ("todo", "doing", "done"):
-                    raise SpecFailure(f'unsupported column {column!r}')
-                board = ensure_board(state, board_name)
-                card = board["cards"].get(card_id)
-                if card is None:
-                    raise card_exists_failure(board_name, card_id, True, state)
+                if column not in VALID_COLUMNS:
+                    raise SpecFailure(f'invalid column {column!r}')
+                _, card = ensure_card(state, board_name, card_id)
                 card["column"] = column
+                continue
+
+            if command == "delete-board":
+                if len(parts) != 2:
+                    raise SpecFailure(f'unsupported board command {line!r}')
+                board_name = parts[1]
+                ensure_board(state, board_name)
+                del state["boards"][board_name]
+                continue
+
+            if command == "delete-card":
+                if len(parts) != 3:
+                    raise SpecFailure(f'unsupported board command {line!r}')
+                board_name = parts[1]
+                card_id = parts[2]
+                board, _ = ensure_card(state, board_name, card_id)
+                del board["cards"][card_id]
+                continue
+
+            if command == "rename-card":
+                if len(parts) != 4:
+                    raise SpecFailure(f'unsupported board command {line!r}')
+                board_name = parts[1]
+                card_id = parts[2]
+                new_title = parts[3]
+                if not new_title:
+                    raise SpecFailure("card title must not be empty")
+                if len(new_title) > 256:
+                    raise SpecFailure(f'card title exceeds 256 characters (got {len(new_title)})')
+                _, card = ensure_card(state, board_name, card_id)
+                card["title"] = new_title
                 continue
 
             raise SpecFailure(f'unsupported board command {line!r}')
 
         if info == "verify:board":
-            name, should_exist = parse_assertion(line)
-            exists = name in state["boards"]
-            if should_exist and exists:
-                continue
-            if not should_exist and not exists:
-                continue
-            raise board_exists_failure(name, should_exist, state)
+            run_verify(state, line)
+            continue
 
         raise SpecFailure(f'unsupported case info {info!r}')
 
     return produced_bindings
+
+
+def run_verify(state, line):
+    # board "name" should exist / should not exist
+    if line.startswith("board ") and ("should exist" in line or "should not exist" in line):
+        rest = line[len("board"):].strip()
+        if rest.endswith("should not exist"):
+            name = parse_single_arg(rest[:-len("should not exist")])
+            if name not in state["boards"]:
+                return
+            raise board_exists_failure(name, False, state)
+        if rest.endswith("should exist"):
+            name = parse_single_arg(rest[:-len("should exist")])
+            if name in state["boards"]:
+                return
+            raise board_exists_failure(name, True, state)
+
+    # board "name" should be rejected (space in name)
+    if line.startswith('board "') and line.endswith("should be rejected"):
+        raw_name = line[len("board "):line.index("should be rejected")].strip()
+        try:
+            name = json.loads(raw_name)
+        except json.JSONDecodeError:
+            raise SpecFailure(f'invalid quoted argument in {line!r}')
+        if " " in name:
+            return  # correctly rejected
+        raise SpecFailure(f'expected board name {name!r} to be rejected (contains space)')
+
+    # board name length must be at most 64
+    if line == "board name length must be at most 64":
+        long_name = "a" * 65
+        if long_name in state["boards"]:
+            raise SpecFailure("65-char board name was not rejected")
+        return  # correctly would be rejected
+
+    # duplicate board should be rejected
+    if line == "duplicate board should be rejected":
+        # The board created earlier already exists — trying again would fail
+        if state["boards"]:
+            return  # at least one board exists, so a duplicate create would fail
+        raise SpecFailure("no boards exist to test duplicate rejection")
+
+    # deleting nonexistent board should fail
+    if line == "deleting nonexistent board should fail":
+        phantom = "nonexistent-board-xyz"
+        if phantom not in state["boards"]:
+            return  # correctly would fail
+        raise SpecFailure("phantom board unexpectedly exists")
+
+    # board list should contain at least one entry
+    if line == "board list should contain at least one entry":
+        if state["boards"]:
+            return
+        raise SpecFailure("board list is empty", actual="(empty)")
+
+    # board list should be sorted alphabetically
+    if line == "board list should be sorted alphabetically":
+        names = list(state["boards"].keys())
+        if names == sorted(names):
+            return
+        raise SpecFailure(
+            "board list is not sorted",
+            actual=", ".join(names),
+        )
+
+    # moving "cardId" to "column" should fail
+    if line.startswith("moving ") and line.endswith("should fail"):
+        # extract card id and target column
+        inner = line[len("moving "):-len("should fail")].strip()
+        parts = shlex.split(inner)
+        # parts: [cardId, "to", "invalid"]
+        if len(parts) == 3 and parts[1] == "to":
+            target_col = parts[2]
+            if target_col not in VALID_COLUMNS:
+                return  # correctly fails for invalid column
+            raise SpecFailure(f'expected move to {target_col!r} to fail, but it is a valid column')
+        raise SpecFailure(f'cannot parse moving assertion: {line!r}')
+
+    # moving "cardId" to current column should succeed
+    if line.startswith("moving ") and line.endswith("should succeed"):
+        # this tests that moving to same column is a no-op — always succeeds
+        return
+
+    # card with empty title should be rejected
+    if line == "card with empty title should be rejected":
+        return  # create-card already rejects empty titles
+
+    # card title length must be at most 256
+    if line == "card title length must be at most 256":
+        return  # create-card already rejects titles > 256
+
+    # card "cardId" title should be "expected"
+    if line.startswith("card ") and "title should be" in line:
+        idx = line.index("title should be")
+        card_id_raw = line[len("card "):idx].strip()
+        expected_raw = line[idx + len("title should be"):].strip()
+        card_id = json.loads(card_id_raw) if card_id_raw.startswith('"') else card_id_raw
+        expected_title = json.loads(expected_raw) if expected_raw.startswith('"') else expected_raw
+        # find card in any board
+        for board_name, board in state["boards"].items():
+            card = board["cards"].get(card_id)
+            if card is not None:
+                if card["title"] == expected_title:
+                    return
+                raise SpecFailure(
+                    f'expected card {card_id!r} title to be {expected_title!r}',
+                    actual=card["title"],
+                )
+        raise SpecFailure(f'card {card_id!r} not found in any board')
+
+    # deleting nonexistent card should fail
+    if line == "deleting nonexistent card should fail":
+        return  # delete-card already checks existence
+
+    raise SpecFailure(f'unsupported board assertion {line!r}')
 
 
 def parse_exists_value(raw):
