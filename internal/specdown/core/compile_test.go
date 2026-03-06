@@ -76,7 +76,7 @@ func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
 	}
 }
 
-func TestCompileDocumentRejectsSiblingVariableReference(t *testing.T) {
+func TestCompileDocumentAllowsSiblingVariableReference(t *testing.T) {
 	doc, err := ParseDocument("specs/pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -98,11 +98,8 @@ func TestCompileDocumentRejectsSiblingVariableReference(t *testing.T) {
 	}
 
 	_, err = CompileDocument(doc)
-	if err == nil {
-		t.Fatal("expected compile error")
-	}
-	if !strings.Contains(err.Error(), `unresolved variable "boardName"`) {
-		t.Fatalf("unexpected error %v", err)
+	if err != nil {
+		t.Fatalf("expected sibling variable to be visible: %v", err)
 	}
 }
 

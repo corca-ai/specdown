@@ -148,7 +148,18 @@ func renderDocument(result core.DocumentResult, meta string) (string, error) {
 	}
 
 	var out strings.Builder
+	var sectionStack []int
 	for _, node := range result.Document.Nodes {
+		if heading, ok := node.(core.HeadingNode); ok {
+			// Close sections at same or deeper level
+			for len(sectionStack) > 0 && sectionStack[len(sectionStack)-1] >= heading.Level {
+				out.WriteString(`</section>`)
+				sectionStack = sectionStack[:len(sectionStack)-1]
+			}
+			out.WriteString(fmt.Sprintf(`<section class="s%d">`, heading.Level))
+			sectionStack = append(sectionStack, heading.Level)
+		}
+
 		switch current := node.(type) {
 		case core.HeadingNode:
 			html, err := renderHeading(current, result.Document.RelativeTo)
@@ -193,6 +204,9 @@ func renderDocument(result core.DocumentResult, meta string) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown node type %T", node)
 		}
+	}
+	for range sectionStack {
+		out.WriteString(`</section>`)
 	}
 	return out.String(), nil
 }
@@ -343,15 +357,11 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 }
 
 func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
-	// Find checks in this model block and match against alloy results
+	// Find checks targeting this model
 	var failedResult *core.AlloyCheckResult
 	hasCheck := false
 	for _, r := range alloyResults {
 		if r.Model != node.Model {
-			continue
-		}
-		checkPattern := "check " + r.Assertion
-		if !strings.Contains(node.Source, checkPattern) {
 			continue
 		}
 		hasCheck = true
@@ -590,12 +600,15 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         line-height: 1.15;
         text-wrap: balance;
         letter-spacing: -0.01em;
+        position: sticky;
+        background: var(--bg);
+        box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.06);
       }
 
-      & h1 { font-size: 2.5rem; margin: 0 0 1.1rem; }
-      & h2 { font-size: 1.85rem; margin: 2.9rem 0 0.95rem; }
-      & h3 { font-size: 1.4rem; margin: 2.25rem 0 0.78rem; }
-      & :is(h4, h5, h6) { font-size: 1.08rem; margin: 1.7rem 0 0.68rem; }
+      & h1 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: 0; z-index: 14; }
+      & h2 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: 4.5rem; z-index: 13; }
+      & h3 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: 7.8rem; z-index: 12; }
+      & :is(h4, h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: 10.4rem; z-index: 11; }
     }
 
     .status {
@@ -724,6 +737,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       font-family: var(--font-mono);
       font-size: 0.92rem;
       line-height: 1.45;
+      white-space: pre-wrap;
       overflow-x: auto;
       border-left: 3px solid transparent;
 

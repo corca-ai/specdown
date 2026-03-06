@@ -178,7 +178,15 @@ func bindingVisible(bindings []bindingDefinition, name string, currentPath []str
 		if bindings[i].Name != name {
 			continue
 		}
-		if headingPathPrefix(bindings[i].HeadingPath, currentPath) {
+		bp := bindings[i].HeadingPath
+		// Visible if binding path is a prefix of current path (ancestor or self)
+		if headingPathPrefix(bp, currentPath) {
+			return true
+		}
+		// Visible if binding is a sibling: same parent, defined earlier in document order
+		if len(bp) > 0 && len(currentPath) > 0 &&
+			len(bp) == len(currentPath) &&
+			headingPathPrefix(bp[:len(bp)-1], currentPath[:len(currentPath)-1]) {
 			return true
 		}
 	}
@@ -233,7 +241,7 @@ func executableCases(doc Document) []CaseSpec {
 	return cases
 }
 
-var variableRefPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var variableRefPattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 func variableReferences(source string) []string {
 	matches := variableRefPattern.FindAllStringSubmatch(source, -1)
@@ -244,7 +252,10 @@ func variableReferences(source string) []string {
 	seen := make(map[string]struct{})
 	refs := make([]string, 0, len(matches))
 	for _, match := range matches {
-		name := match[1]
+		if match[1] == `\` {
+			continue // escaped \${...}
+		}
+		name := match[2]
 		if _, ok := seen[name]; ok {
 			continue
 		}

@@ -182,14 +182,14 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "text-wrap: balance;") {
 		t.Fatalf("expected balanced heading wrap, got %q", html)
 	}
-	if !strings.Contains(html, ".spec-body h1") {
+	if !strings.Contains(html, "& h1 {") {
 		t.Fatalf("expected heading typography rules, got %q", html)
 	}
 	if !strings.Contains(html, "align-items: baseline;") {
 		t.Fatalf("expected baseline-aligned failure diff, got %q", html)
 	}
-	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board\"") {
-		t.Fatalf("expected heading link in toc, got %q", html)
+	if !strings.Contains(html, "toc-spec-title") {
+		t.Fatalf("expected spec title in toc, got %q", html)
 	}
 	if !strings.Contains(html, "classList.toggle('active'") {
 		t.Fatalf("expected active toc script, got %q", html)
@@ -206,7 +206,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "fail 1") {
 		t.Fatalf("expected fail summary, got %q", html)
 	}
-	if !strings.Contains(html, "captured bindings: boardName=board-1") {
+	if !strings.Contains(html, "boardName=board-1") {
 		t.Fatalf("expected binding note, got %q", html)
 	}
 	if !strings.Contains(html, "fixture:board-exists") {
@@ -215,14 +215,8 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "board-1-archive") {
 		t.Fatalf("expected resolved table cell, got %q", html)
 	}
-	if !strings.Contains(html, "expected board &#34;board-1-archive&#34; to exist; actual boards: [&#34;board-1&#34;]") {
-		t.Fatalf("expected failure message, got %q", html)
-	}
-	if !strings.Contains(html, "<dt>expected</dt><dd>board &#34;board-1-archive&#34; exists</dd>") {
-		t.Fatalf("expected structured expected diff, got %q", html)
-	}
-	if !strings.Contains(html, "<dt>actual</dt><dd>boards: [&#34;board-1&#34;]</dd>") {
-		t.Fatalf("expected structured actual diff, got %q", html)
+	if !strings.Contains(html, `<div class="cell-actual">boards: [&#34;board-1&#34;]</div>`) {
+		t.Fatalf("expected cell-actual with failure detail, got %q", html)
 	}
 	if !strings.Contains(html, "id=\"case-specs-pocket-board-spec-md-pocket-board-변수-흐름-표-기반-확인-4\"") {
 		t.Fatalf("expected failure anchor link, got %q", html)
@@ -307,8 +301,8 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	if !strings.Contains(html, "alloy:model(board)") {
 		t.Fatalf("expected alloy model label, got %q", html)
 	}
-	if !strings.Contains(html, "alloy:ref(board#cardShape, scope=5)") {
-		t.Fatalf("expected alloy ref label, got %q", html)
+	if !strings.Contains(html, "counterexample found") {
+		t.Fatalf("expected alloy failure inline in model block, got %q", html)
 	}
 	if strings.Contains(html, "bundle artifact") || strings.Contains(html, "source map") {
 		t.Fatalf("expected no artifact metadata, got %q", html)

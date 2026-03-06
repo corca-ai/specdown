@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"specdown/internal/specdown/config"
 	"specdown/internal/specdown/core"
@@ -58,8 +59,9 @@ func run(args []string) error {
 	}
 
 	if report.Summary.SpecsFailed > 0 || report.Summary.CasesFailed > 0 {
-		fmt.Printf("FAIL %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, report.Summary.AlloyChecksFailed)
-		fmt.Printf("report: %s\n", reportPath)
+		printFailures(report)
+		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, report.Summary.AlloyChecksFailed)
+		fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
 		return fmt.Errorf("spec run failed")
 	}
 
@@ -104,4 +106,37 @@ func resolvePath(baseDir string, value string) string {
 		return value
 	}
 	return filepath.Clean(filepath.Join(baseDir, value))
+}
+
+func printFailures(report core.Report) {
+	for _, doc := range report.Results {
+		for _, c := range doc.Cases {
+			if c.Status != core.StatusFailed {
+				continue
+			}
+			path := strings.Join(c.ID.HeadingPath, " > ")
+			msg := c.Message
+			if c.Actual != "" {
+				msg = c.Actual
+			}
+			fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]\n", path, c.Block+c.Fixture)
+			if msg != "" {
+				fmt.Fprintf(os.Stderr, "        %s\n", msg)
+			}
+		}
+		for _, c := range doc.AlloyChecks {
+			if c.Status != core.StatusFailed {
+				continue
+			}
+			path := strings.Join(c.ID.HeadingPath, " > ")
+			msg := c.Message
+			if c.Actual != "" {
+				msg = c.Actual
+			}
+			fmt.Fprintf(os.Stderr, "  FAIL  %s  [alloy:%s#%s]\n", path, c.Model, c.Assertion)
+			if msg != "" {
+				fmt.Fprintf(os.Stderr, "        %s\n", msg)
+			}
+		}
+	}
 }

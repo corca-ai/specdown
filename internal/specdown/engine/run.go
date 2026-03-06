@@ -220,10 +220,24 @@ func closeSessions(sessions map[string]*adapterhost.Session) error {
 	return firstErr
 }
 
+func bindingReachable(bp []string, current []string) bool {
+	// Ancestor or self
+	if headingPathPrefix(bp, current) {
+		return true
+	}
+	// Sibling: same depth, same parent
+	if len(bp) > 0 && len(current) > 0 &&
+		len(bp) == len(current) &&
+		headingPathPrefix(bp[:len(bp)-1], current[:len(current)-1]) {
+		return true
+	}
+	return false
+}
+
 func visibleBindings(bindings []scopedBinding, headingPath []string) []core.Binding {
 	selected := make(map[string]scopedBinding)
 	for _, binding := range bindings {
-		if !headingPathPrefix(binding.HeadingPath, headingPath) {
+		if !bindingReachable(binding.HeadingPath, headingPath) {
 			continue
 		}
 		current, ok := selected[binding.Binding.Name]
@@ -256,7 +270,7 @@ func headingPathPrefix(prefix []string, current []string) bool {
 	return true
 }
 
-var variablePattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {
 	prepared := specCase
@@ -284,29 +298,25 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 	}
 }
 
-func renderTemplate(template string, bindings []core.Binding) (string, error) {
-	if len(bindings) == 0 {
-		matches := variablePattern.FindAllStringSubmatch(template, -1)
-		if len(matches) == 0 {
-			return template, nil
-		}
-		return "", fmt.Errorf("missing runtime binding for %q", matches[0][1])
-	}
-
+func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
 	values := make(map[string]string, len(bindings))
 	for _, binding := range bindings {
 		values[binding.Name] = binding.Value
 	}
 
 	var unresolved error
-	rendered := variablePattern.ReplaceAllStringFunc(template, func(raw string) string {
+	rendered := variablePattern.ReplaceAllStringFunc(tmpl, func(raw string) string {
 		match := variablePattern.FindStringSubmatch(raw)
-		if len(match) != 2 {
+		if len(match) != 3 {
 			return raw
 		}
-		value, ok := values[match[1]]
+		if match[1] == `\` {
+			// escaped \${...} → literal ${...}
+			return raw[1:]
+		}
+		value, ok := values[match[2]]
 		if !ok {
-			unresolved = fmt.Errorf("missing runtime binding for %q", match[1])
+			unresolved = fmt.Errorf("missing runtime binding for %q", match[2])
 			return raw
 		}
 		return value
