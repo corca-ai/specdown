@@ -2,7 +2,6 @@
 
 `specdown`은 Markdown-first executable specification 시스템이다.
 목표는 reusable core와 product-specific adapter를 분리하는 것이다.
-`coop`는 첫 번째 reference adapter일 뿐, 코어 자체가 아니다.
 
 ## Read First
 
@@ -15,7 +14,6 @@
 
 - `docs/design.md`를 현재 아키텍처의 source of truth로 취급한다.
 - `core`와 `adapter`의 책임 경계를 유지한다.
-- `coop` 전용 DSL, helper, runtime 의미는 코어가 아니라 adapter에 둔다.
 - 문서와 예시는 현재 설계 용어를 그대로 따른다.
   - executable block
   - fixture table
@@ -35,7 +33,6 @@
 - `specdown-alloy`
 - `specdown-adapter-shell`
 - `specdown-adapter-vitest`
-- `specdown-adapter-coop`
 
 ## Documentation Notes
 
