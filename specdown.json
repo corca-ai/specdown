@@ -12,6 +12,9 @@
       "protocol": "specdown-adapter/v1"
     }
   ],
+  "models": {
+    "builtin": "alloy"
+  },
   "reporters": [
     {
       "builtin": "html",

@@ -16,10 +16,10 @@ const (
 )
 
 type BlockSpec struct {
-	Raw          string
-	Kind         BlockKind
-	Target       string
-	CaptureNames []string
+	Raw          string    `json:"raw"`
+	Kind         BlockKind `json:"kind"`
+	Target       string    `json:"target"`
+	CaptureNames []string  `json:"captureNames,omitempty"`
 }
 
 func (b BlockSpec) String() string {

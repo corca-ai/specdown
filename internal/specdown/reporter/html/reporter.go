@@ -160,7 +160,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 
 	result, ok := caseResults[node.ID.Key()]
 	if !ok {
-		return "", fmt.Errorf("missing case result for %s", node.ID.Key())
+		return markdownToHTML(node.Markdown())
 	}
 
 	var out strings.Builder
@@ -244,7 +244,7 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		}
 		result, ok := caseResults[row.ID.Key()]
 		if !ok {
-			return "", fmt.Errorf("missing case result for %s", row.ID.Key())
+			return markdownToHTML(node.Markdown())
 		}
 		out.WriteString(`<tr class="`)
 		out.WriteString(template.HTMLEscapeString(string(result.Status)))

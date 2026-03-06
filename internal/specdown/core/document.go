@@ -41,9 +41,9 @@ type Node interface {
 }
 
 type HeadingNode struct {
-	Level int
-	Text  string
-	Raw   string
+	Level int    `json:"level"`
+	Text  string `json:"text"`
+	Raw   string `json:"raw"`
 }
 
 func (HeadingNode) isNode() {}
@@ -53,7 +53,7 @@ func (n HeadingNode) Markdown() string {
 }
 
 type ProseNode struct {
-	Raw string
+	Raw string `json:"raw"`
 }
 
 func (ProseNode) isNode() {}
@@ -63,10 +63,10 @@ func (n ProseNode) Markdown() string {
 }
 
 type CodeBlockNode struct {
-	Block  BlockSpec
-	Source string
-	Raw    string
-	ID     *SpecID
+	Block  BlockSpec `json:"block"`
+	Source string    `json:"source"`
+	Raw    string    `json:"raw"`
+	ID     *SpecID   `json:"id,omitempty"`
 }
 
 func (CodeBlockNode) isNode() {}
@@ -76,10 +76,10 @@ func (n CodeBlockNode) Markdown() string {
 }
 
 type AlloyModelNode struct {
-	Model       string
-	Source      string
-	Raw         string
-	HeadingPath []string
+	Model       string   `json:"model"`
+	Source      string   `json:"source"`
+	Raw         string   `json:"raw"`
+	HeadingPath []string `json:"headingPath,omitempty"`
 }
 
 func (AlloyModelNode) isNode() {}
@@ -89,12 +89,12 @@ func (n AlloyModelNode) Markdown() string {
 }
 
 type AlloyRefNode struct {
-	Model       string
-	Assertion   string
-	Scope       string
-	Raw         string
-	HeadingPath []string
-	ID          *SpecID
+	Model       string   `json:"model"`
+	Assertion   string   `json:"assertion"`
+	Scope       string   `json:"scope"`
+	Raw         string   `json:"raw"`
+	HeadingPath []string `json:"headingPath,omitempty"`
+	ID          *SpecID  `json:"id,omitempty"`
 }
 
 func (AlloyRefNode) isNode() {}
@@ -104,16 +104,16 @@ func (n AlloyRefNode) Markdown() string {
 }
 
 type TableRowNode struct {
-	Cells []string
-	Raw   string
-	ID    *SpecID
+	Cells []string `json:"cells"`
+	Raw   string   `json:"raw"`
+	ID    *SpecID  `json:"id,omitempty"`
 }
 
 type TableNode struct {
-	Fixture string
-	Columns []string
-	Rows    []TableRowNode
-	Raw     string
+	Fixture string         `json:"fixture"`
+	Columns []string       `json:"columns"`
+	Rows    []TableRowNode `json:"rows"`
+	Raw     string         `json:"raw"`
 }
 
 func (TableNode) isNode() {}
@@ -123,10 +123,10 @@ func (n TableNode) Markdown() string {
 }
 
 type Document struct {
-	RelativeTo string
-	Title      string
-	Markdown   string
-	Nodes      []Node
+	RelativeTo string `json:"relativeTo"`
+	Title      string `json:"title"`
+	Markdown   string `json:"markdown"`
+	Nodes      []Node `json:"nodes"`
 }
 
 func slug(input string) string {

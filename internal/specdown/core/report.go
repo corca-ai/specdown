@@ -3,8 +3,8 @@ package core
 import "time"
 
 type Binding struct {
-	Name  string
-	Value string
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type EventType string
@@ -16,70 +16,70 @@ const (
 )
 
 type Event struct {
-	Type     EventType
-	ID       SpecID
-	Label    string
-	Message  string
-	Expected string
-	Actual   string
-	Bindings []Binding
+	Type     EventType `json:"type"`
+	ID       SpecID    `json:"id"`
+	Label    string    `json:"label,omitempty"`
+	Message  string    `json:"message,omitempty"`
+	Expected string    `json:"expected,omitempty"`
+	Actual   string    `json:"actual,omitempty"`
+	Bindings []Binding `json:"bindings,omitempty"`
 }
 
 type CaseResult struct {
-	ID             SpecID
-	Kind           CaseKind
-	Block          string
-	Fixture        string
-	Label          string
-	Template       string
-	RenderedSource string
-	Columns        []string
-	TemplateCells  []string
-	RenderedCells  []string
-	RowNumber      int
-	Status         Status
-	Message        string
-	Expected       string
-	Actual         string
-	Bindings       []Binding
-	Events         []Event
+	ID             SpecID    `json:"id"`
+	Kind           CaseKind  `json:"kind"`
+	Block          string    `json:"block,omitempty"`
+	Fixture        string    `json:"fixture,omitempty"`
+	Label          string    `json:"label"`
+	Template       string    `json:"template,omitempty"`
+	RenderedSource string    `json:"renderedSource,omitempty"`
+	Columns        []string  `json:"columns,omitempty"`
+	TemplateCells  []string  `json:"templateCells,omitempty"`
+	RenderedCells  []string  `json:"renderedCells,omitempty"`
+	RowNumber      int       `json:"rowNumber,omitempty"`
+	Status         Status    `json:"status"`
+	Message        string    `json:"message,omitempty"`
+	Expected       string    `json:"expected,omitempty"`
+	Actual         string    `json:"actual,omitempty"`
+	Bindings       []Binding `json:"bindings,omitempty"`
+	Events         []Event   `json:"events,omitempty"`
 }
 
 type AlloyCheckResult struct {
-	ID                 SpecID
-	Model              string
-	Assertion          string
-	Scope              string
-	Label              string
-	Status             Status
-	Message            string
-	Expected           string
-	Actual             string
-	BundlePath         string
-	CounterexamplePath string
+	ID                 SpecID `json:"id"`
+	Model              string `json:"model"`
+	Assertion          string `json:"assertion"`
+	Scope              string `json:"scope"`
+	Label              string `json:"label"`
+	Status             Status `json:"status"`
+	Message            string `json:"message,omitempty"`
+	Expected           string `json:"expected,omitempty"`
+	Actual             string `json:"actual,omitempty"`
+	BundlePath         string `json:"bundlePath,omitempty"`
+	CounterexamplePath string `json:"counterexamplePath,omitempty"`
 }
 
 type DocumentResult struct {
-	Document    Document
-	Status      Status
-	Cases       []CaseResult
-	AlloyChecks []AlloyCheckResult
+	Document    Document            `json:"document"`
+	Status      Status              `json:"status"`
+	Cases       []CaseResult        `json:"cases,omitempty"`
+	AlloyChecks []AlloyCheckResult  `json:"alloyChecks,omitempty"`
 }
 
 type Summary struct {
-	SpecsTotal        int
-	SpecsPassed       int
-	SpecsFailed       int
-	CasesTotal        int
-	CasesPassed       int
-	CasesFailed       int
-	AlloyChecksTotal  int
-	AlloyChecksPassed int
-	AlloyChecksFailed int
+	SpecsTotal        int `json:"specsTotal"`
+	SpecsPassed       int `json:"specsPassed"`
+	SpecsFailed       int `json:"specsFailed"`
+	CasesTotal        int `json:"casesTotal"`
+	CasesPassed       int `json:"casesPassed"`
+	CasesFailed       int `json:"casesFailed"`
+	AlloyChecksTotal  int `json:"alloyChecksTotal"`
+	AlloyChecksPassed int `json:"alloyChecksPassed"`
+	AlloyChecksFailed int `json:"alloyChecksFailed"`
 }
 
 type Report struct {
-	GeneratedAt time.Time
-	Results     []DocumentResult
-	Summary     Summary
+	GeneratedAt time.Time        `json:"generatedAt"`
+	Results     []DocumentResult `json:"results"`
+	Summary     Summary          `json:"summary"`
 }

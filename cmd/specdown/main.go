@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 
 	"specdown/internal/specdown/config"
+	"specdown/internal/specdown/core"
 	"specdown/internal/specdown/engine"
 	htmlreport "specdown/internal/specdown/reporter/html"
+	jsonreport "specdown/internal/specdown/reporter/json"
 )
 
 func main() {
@@ -20,6 +22,11 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		if err := run(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
+			os.Exit(1)
+		}
+	case "check:model":
+		if err := checkModel(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
 			os.Exit(1)
 		}
@@ -50,16 +57,8 @@ func run(args []string) error {
 		return err
 	}
 
-	reportPath := *outPath
-	if reportPath == "" {
-		reportPath = cfg.HTMLReportOutFile()
-	}
-	if reportPath == "" {
-		reportPath = ".artifacts/specdown/report.html"
-	}
-	reportPath = resolvePath(configDir, reportPath)
-
-	if err := htmlreport.Write(report, reportPath); err != nil {
+	reportPath := resolveReportPath(configDir, cfg, *outPath)
+	if err := writeArtifacts(report, reportPath); err != nil {
 		return err
 	}
 
@@ -74,9 +73,73 @@ func run(args []string) error {
 	return nil
 }
 
+func checkModel(args []string) error {
+	fs := flag.NewFlagSet("check:model", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
+	outPath := fs.String("out", "", "Output HTML report path")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, configDir, err := config.Load(*configPath)
+	if err != nil {
+		return err
+	}
+
+	report, err := engine.CheckModels(configDir, cfg)
+	if err != nil {
+		return err
+	}
+
+	reportPath := resolveReportPath(configDir, cfg, *outPath)
+	if err := writeArtifacts(report, reportPath); err != nil {
+		return err
+	}
+
+	if report.Summary.SpecsFailed > 0 || report.Summary.AlloyChecksFailed > 0 {
+		fmt.Printf("FAIL %d spec(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.AlloyChecksFailed)
+		fmt.Printf("report: %s\n", reportPath)
+		return fmt.Errorf("model check failed")
+	}
+
+	fmt.Printf("PASS %d spec(s), %d alloy check(s)\n", report.Summary.SpecsPassed, report.Summary.AlloyChecksPassed)
+	fmt.Printf("report: %s\n", reportPath)
+	return nil
+}
+
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-out .artifacts/specdown/report.html]")
+	fmt.Fprintln(os.Stderr, "  specdown check:model [-config specdown.json] [-out .artifacts/specdown/report.html]")
+}
+
+func writeArtifacts(report core.Report, reportPath string) error {
+	if err := htmlreport.Write(report, reportPath); err != nil {
+		return err
+	}
+	if err := jsonreport.Write(report, jsonReportPath(reportPath)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func resolveReportPath(baseDir string, cfg config.Config, requested string) string {
+	reportPath := requested
+	if reportPath == "" {
+		reportPath = cfg.HTMLReportOutFile()
+	}
+	if reportPath == "" {
+		reportPath = ".artifacts/specdown/report.html"
+	}
+	return resolvePath(baseDir, reportPath)
+}
+
+func jsonReportPath(htmlReportPath string) string {
+	dir := filepath.Dir(htmlReportPath)
+	return filepath.Join(dir, "report.json")
 }
 
 func resolvePath(baseDir string, value string) string {

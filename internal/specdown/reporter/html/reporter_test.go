@@ -295,3 +295,76 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 		t.Fatalf("expected counterexample note, got %q", html)
 	}
 }
+
+func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T) {
+	outDir := t.TempDir()
+	outPath := filepath.Join(outDir, "report.html")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary: core.Summary{
+			SpecsTotal:        1,
+			SpecsPassed:       1,
+			AlloyChecksTotal:  1,
+			AlloyChecksPassed: 1,
+		},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Pocket Board",
+					RelativeTo: "specs/pocket-board.spec.md",
+					Nodes: []core.Node{
+						core.CodeBlockNode{
+							Block:  core.BlockSpec{Raw: "run:board -> $boardName", Kind: core.BlockKindRun, Target: "board", CaptureNames: []string{"boardName"}},
+							Source: "create-board",
+							Raw:    "```run:board -> $boardName\ncreate-board\n```\n",
+							ID: &core.SpecID{
+								File:        "specs/pocket-board.spec.md",
+								HeadingPath: []string{"Pocket Board", "보드 생성"},
+								Ordinal:     1,
+							},
+						},
+						core.AlloyRefNode{
+							Model:     "board",
+							Assertion: "cardShape",
+							Scope:     "5",
+							Raw:       "<!-- alloy:ref(board#cardShape, scope=5) -->\n",
+							ID: &core.SpecID{
+								File:        "specs/pocket-board.spec.md",
+								HeadingPath: []string{"Pocket Board", "형식 규칙"},
+								Ordinal:     2,
+							},
+						},
+					},
+				},
+				AlloyChecks: []core.AlloyCheckResult{
+					{
+						ID: core.SpecID{
+							File:        "specs/pocket-board.spec.md",
+							HeadingPath: []string{"Pocket Board", "형식 규칙"},
+							Ordinal:     2,
+						},
+						Model:     "board",
+						Assertion: "cardShape",
+						Scope:     "5",
+						Label:     "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+						Status:    core.StatusPassed,
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, outPath); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	if !strings.Contains(string(body), "create-board") {
+		t.Fatalf("expected raw executable block, got %q", string(body))
+	}
+}

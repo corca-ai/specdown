@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -18,6 +19,9 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
       "protocol": "specdown-adapter/v1"
     }
   ],
+  "models": {
+    "builtin": "alloy"
+  },
   "reporters": [
     {
       "builtin": "html",
@@ -42,6 +46,9 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
 	}
 	if len(cfg.Include) != 1 || cfg.Include[0] != "specs/**/*.spec.md" {
 		t.Fatalf("unexpected include %#v", cfg.Include)
+	}
+	if cfg.Models.Builtin != "alloy" {
+		t.Fatalf("unexpected models %#v", cfg.Models)
 	}
 	if got := cfg.HTMLReportOutFile(); got != ".artifacts/specdown/report.html" {
 		t.Fatalf("unexpected report output %q", got)
@@ -70,5 +77,27 @@ func TestLoadConfigAllowsAlloyOnlyProjectWithoutAdapters(t *testing.T) {
 	}
 	if len(cfg.Adapters) != 0 {
 		t.Fatalf("unexpected adapters %#v", cfg.Adapters)
+	}
+}
+
+func TestLoadConfigRejectsUnknownModelBuiltin(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "specdown.json")
+	body := `{
+  "include": ["specs/**/*.spec.md"],
+  "models": {
+    "builtin": "unknown"
+  }
+}`
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, _, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got := err.Error(); got == "" || !strings.Contains(got, `models builtin "unknown" is not supported`) {
+		t.Fatalf("unexpected error %v", err)
 	}
 }

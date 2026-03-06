@@ -12,7 +12,12 @@ import (
 type Config struct {
 	Include   []string        `json:"include"`
 	Adapters  []AdapterConfig `json:"adapters"`
+	Models    ModelConfig     `json:"models"`
 	Reporters []Reporter      `json:"reporters"`
+}
+
+type ModelConfig struct {
+	Builtin string `json:"builtin"`
 }
 
 type AdapterConfig struct {
@@ -60,6 +65,9 @@ func Load(path string) (Config, string, error) {
 		if adapter.Protocol != adapterprotocol.Version {
 			return Config{}, "", fmt.Errorf("adapter %q must use protocol %q", adapter.Name, adapterprotocol.Version)
 		}
+	}
+	if cfg.Models.Builtin != "" && cfg.Models.Builtin != "alloy" {
+		return Config{}, "", fmt.Errorf("models builtin %q is not supported", cfg.Models.Builtin)
 	}
 
 	return cfg, filepath.Dir(absPath), nil

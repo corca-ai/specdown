@@ -106,7 +106,7 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, er
 }
 
 func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, checks []core.AlloyCheckSpec) (modelBundle, error) {
-	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "alloy", bundleFileName(documentPath, model.Name)))
+	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "models", bundleFileName(documentPath, model.Name)))
 	absolutePath := filepath.Join(r.BaseDir, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
 		return modelBundle{}, fmt.Errorf("create alloy artifact dir: %w", err)
