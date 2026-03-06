@@ -92,3 +92,33 @@ move-card "${boardName}" "${cardId}" doing
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | doing |
+
+## 형식 규칙
+
+`Pocket Board`의 상태 모델은 카드가 항상 하나의 컬럼에만 속한다고 본다.
+
+```alloy:model(board)
+module board
+
+abstract sig Column {}
+one sig Todo, Doing, Done extends Column {}
+
+sig Board {}
+
+sig Card {
+  board: one Board,
+  column: one Column
+}
+```
+
+이 모델에서 각 카드는 정확히 하나의 컬럼을 가져야 한다.
+
+```alloy:model(board)
+assert cardHasExactlyOneColumn {
+  all c: Card | one c.column
+}
+
+check cardHasExactlyOneColumn for 5
+```
+
+<!-- alloy:ref(board#cardHasExactlyOneColumn, scope=5) -->
