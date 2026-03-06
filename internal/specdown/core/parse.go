@@ -69,7 +69,7 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 
 		if isFenceStart(line) {
 			info := parseFenceInfo(line)
-			executable, err := classifyCodeBlock(info)
+			block, err := parseBlockSpec(info)
 			if err != nil {
 				return Document{}, fmt.Errorf("%s: %w", relativePath, err)
 			}
@@ -88,11 +88,11 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			raw := strings.Join(lines[i:end+1], "")
 			source := strings.Join(lines[i+1:end], "")
 			node := CodeBlockNode{
-				Info:   info,
+				Block:  block,
 				Source: strings.TrimSuffix(source, "\n"),
 				Raw:    raw,
 			}
-			if executable {
+			if block.Executable() {
 				ordinal++
 				node.ID = &SpecID{
 					File:        relativePath,
@@ -144,24 +144,6 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		Markdown:   markdown,
 		Nodes:      nodes,
 	}, nil
-}
-
-func classifyCodeBlock(info string) (bool, error) {
-	trimmed := strings.TrimSpace(info)
-	if trimmed == "" {
-		return false, nil
-	}
-	if trimmed == "run:board" {
-		return true, nil
-	}
-	if strings.HasPrefix(trimmed, "run:") ||
-		strings.HasPrefix(trimmed, "verify:") ||
-		strings.HasPrefix(trimmed, "test:") ||
-		trimmed == "expect" ||
-		strings.HasPrefix(trimmed, "alloy:") {
-		return false, fmt.Errorf("unsupported spec block %q", trimmed)
-	}
-	return false, nil
 }
 
 func splitLines(markdown string) []string {

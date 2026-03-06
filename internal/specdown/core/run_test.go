@@ -46,6 +46,35 @@ func TestRunExecutesBoardBlock(t *testing.T) {
 	}
 }
 
+func TestRunVerifiesBoardState(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
+
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := "# Pocket Board\n\n## Create Board\n\n```run:board\ncreate-board \"demo\"\n```\n\n## Verify Board\n\n```verify:board\nboard \"demo\" should exist\n```\n"
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	report, err := Run(filepath.Join(root, "specs"))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if report.Summary.SpecsPassed != 1 {
+		t.Fatalf("unexpected spec summary %+v", report.Summary)
+	}
+	if report.Summary.CasesPassed != 2 {
+		t.Fatalf("unexpected case summary %+v", report.Summary)
+	}
+
+	if got := report.Results[0].Cases[1].Info; got != "verify:board" {
+		t.Fatalf("unexpected case info %q", got)
+	}
+}
+
 func TestRunFailsWhenBoardCommandFails(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
@@ -79,14 +108,14 @@ func TestRunFailsWhenBoardCommandFails(t *testing.T) {
 	}
 }
 
-func TestRunAggregatesPassAndFailCasesInOneDocument(t *testing.T) {
+func TestRunFailsWhenBoardVerificationFails(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	source := "# Pocket Board\n\n## Create Board\n\n```run:board\ncreate-board \"demo\"\n```\n\n## Duplicate Board\n\n```run:board\ncreate-board \"demo\"\n```\n"
+	source := "# Pocket Board\n\n## Create Board\n\n```run:board\ncreate-board \"demo\"\n```\n\n## Verify Missing Board\n\n```verify:board\nboard \"archive\" should exist\n```\n"
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
@@ -110,5 +139,8 @@ func TestRunAggregatesPassAndFailCasesInOneDocument(t *testing.T) {
 	}
 	if report.Results[0].Cases[1].Status != StatusFailed {
 		t.Fatalf("unexpected second case status %q", report.Results[0].Cases[1].Status)
+	}
+	if got := report.Results[0].Cases[1].Message; got != "expected board \"archive\" to exist; actual boards: [\"demo\"]" {
+		t.Fatalf("unexpected verification message %q", got)
 	}
 }

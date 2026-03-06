@@ -76,7 +76,7 @@ func executeCodeBlock(runtime *boardRuntime, node CodeBlockNode) CaseResult {
 
 	result := CaseResult{
 		ID:     id,
-		Info:   node.Info,
+		Info:   node.Block.String(),
 		Label:  label,
 		Source: node.Source,
 		Status: StatusPassed,
@@ -87,7 +87,7 @@ func executeCodeBlock(runtime *boardRuntime, node CodeBlockNode) CaseResult {
 		}},
 	}
 
-	if err := runtime.Execute(node.Source); err != nil {
+	if err := executeBoardBlock(runtime, node); err != nil {
 		result.Status = StatusFailed
 		result.Message = err.Error()
 		result.Events = append(result.Events, Event{
@@ -109,7 +109,18 @@ func executeCodeBlock(runtime *boardRuntime, node CodeBlockNode) CaseResult {
 
 func caseLabel(node CodeBlockNode) string {
 	if node.ID == nil || len(node.ID.HeadingPath) == 0 {
-		return node.Info
+		return node.Block.String()
 	}
-	return node.Info + " @ " + node.ID.HeadingPath[len(node.ID.HeadingPath)-1]
+	return node.Block.String() + " @ " + node.ID.HeadingPath[len(node.ID.HeadingPath)-1]
+}
+
+func executeBoardBlock(runtime *boardRuntime, node CodeBlockNode) error {
+	switch node.Block.Kind {
+	case BlockKindRun:
+		return runtime.Run(node.Source)
+	case BlockKindVerify:
+		return runtime.Verify(node.Source)
+	default:
+		return fmt.Errorf("unsupported executable block %q", node.Block.String())
+	}
 }

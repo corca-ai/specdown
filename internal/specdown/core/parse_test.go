@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParseDocumentBuildsHeadingPathAndExecutableID(t *testing.T) {
+func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	doc, err := ParseDocument("pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -17,6 +17,12 @@ func TestParseDocumentBuildsHeadingPathAndExecutableID(t *testing.T) {
 		"create-board \"demo\"",
 		"```",
 		"",
+		"## Verify Created Board",
+		"",
+		"```verify:board",
+		"board \"demo\" should exist",
+		"```",
+		"",
 	}, "\n"))
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
@@ -26,32 +32,36 @@ func TestParseDocumentBuildsHeadingPathAndExecutableID(t *testing.T) {
 		t.Fatalf("unexpected title %q", doc.Title)
 	}
 
-	var code CodeBlockNode
-	found := false
+	var blocks []CodeBlockNode
 	for _, node := range doc.Nodes {
 		current, ok := node.(CodeBlockNode)
 		if ok {
-			code = current
-			found = true
-			break
+			blocks = append(blocks, current)
 		}
 	}
-	if !found {
-		t.Fatal("expected code block node")
+
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 code blocks, got %d", len(blocks))
 	}
-	if code.ID == nil {
-		t.Fatal("expected executable block id")
+	if blocks[0].Block.Kind != BlockKindRun || blocks[1].Block.Kind != BlockKindVerify {
+		t.Fatalf("unexpected block kinds %#v", blocks)
 	}
-	if got, want := code.ID.HeadingPath, []string{"Pocket Board", "First Executable Check"}; strings.Join(got, " / ") != strings.Join(want, " / ") {
-		t.Fatalf("unexpected heading path %#v", got)
+	if blocks[0].ID == nil || blocks[1].ID == nil {
+		t.Fatal("expected executable ids")
 	}
-	if code.ID.Ordinal != 1 {
-		t.Fatalf("unexpected ordinal %d", code.ID.Ordinal)
+	if got, want := blocks[0].ID.HeadingPath, []string{"Pocket Board", "First Executable Check"}; strings.Join(got, " / ") != strings.Join(want, " / ") {
+		t.Fatalf("unexpected first heading path %#v", got)
+	}
+	if got, want := blocks[1].ID.HeadingPath, []string{"Pocket Board", "Verify Created Board"}; strings.Join(got, " / ") != strings.Join(want, " / ") {
+		t.Fatalf("unexpected second heading path %#v", got)
+	}
+	if blocks[0].ID.Ordinal != 1 || blocks[1].ID.Ordinal != 2 {
+		t.Fatalf("unexpected ordinals %d, %d", blocks[0].ID.Ordinal, blocks[1].ID.Ordinal)
 	}
 }
 
 func TestParseDocumentRejectsUnsupportedReservedBlock(t *testing.T) {
-	_, err := ParseDocument("bad.spec.md", "```verify:board\nnoop\n```\n")
+	_, err := ParseDocument("bad.spec.md", "```run:shell\necho hi\n```\n")
 	if err == nil {
 		t.Fatal("expected parse error")
 	}

@@ -139,7 +139,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<div class="exec-header">`)
 	out.WriteString(`<div class="exec-labels">`)
 	out.WriteString(`<span class="exec-kind">`)
-	out.WriteString(template.HTMLEscapeString(node.Info))
+	out.WriteString(template.HTMLEscapeString(node.Block.String()))
 	out.WriteString(`</span>`)
 	out.WriteString(`<span class="exec-id">`)
 	out.WriteString(template.HTMLEscapeString(formatSpecID(*node.ID)))
@@ -425,7 +425,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <main>
     <section class="hero">
       <h1>specdown report</h1>
-      <p class="meta">Phase 2 run. Documents are parsed into headings, prose, and fenced code blocks. Supported executable blocks are executed, failures are summarized, and block status is annotated inline.</p>
+      <p class="meta">Phase 3 run. Documents are parsed into headings, prose, and fenced code blocks. Supported executable and verification blocks run against shared document state, failures are summarized, and block status is annotated inline.</p>
       <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
         <span class="pill">specs {{ .Summary.SpecsTotal }}</span>

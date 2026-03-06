@@ -79,7 +79,7 @@ func (n ProseNode) Markdown() string {
 }
 
 type CodeBlockNode struct {
-	Info   string
+	Block  BlockSpec
 	Source string
 	Raw    string
 	ID     *SpecID
