@@ -15,15 +15,11 @@ import (
 )
 
 type reportView struct {
-	GeneratedAt string
-	PassedCount int
-	FailedCount int
-	Specs       []specView
+	Specs []specView
 }
 
 type specView struct {
 	Title    string
-	Path     string
 	Headings []tocItemView
 	Body     template.HTML
 }
@@ -37,24 +33,22 @@ type tocItemView struct {
 
 func Write(report core.Report, outPath string) error {
 	specs := make([]specView, 0, len(report.Results))
+	meta := buildMeta(report)
 	for _, result := range report.Results {
-		body, err := renderDocument(result)
+		body, err := renderDocument(result, meta)
 		if err != nil {
 			return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 		}
 		specs = append(specs, specView{
 			Title:    result.Document.Title,
-			Path:     result.Document.RelativeTo,
 			Headings: collectHeadings(result),
 			Body:     template.HTML(body),
 		})
+		meta = "" // only inject meta after first spec's h1
 	}
 
 	view := reportView{
-		GeneratedAt: report.GeneratedAt.Format(time.RFC3339),
-		PassedCount: report.Summary.CasesPassed + report.Summary.AlloyChecksPassed,
-		FailedCount: report.Summary.CasesFailed + report.Summary.AlloyChecksFailed,
-		Specs:       specs,
+		Specs: specs,
 	}
 
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
@@ -81,7 +75,7 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 		if !ok {
 			continue
 		}
-		if len(heading.HeadingPath) == 0 {
+		if len(heading.HeadingPath) == 0 || heading.Level == 1 {
 			continue
 		}
 		items = append(items, tocItemView{
@@ -127,7 +121,23 @@ func headingPathKey(path []string) string {
 	return strings.Join(path, "\x00")
 }
 
-func renderDocument(result core.DocumentResult) (string, error) {
+func buildMeta(report core.Report) string {
+	passed := report.Summary.CasesPassed + report.Summary.AlloyChecksPassed
+	failed := report.Summary.CasesFailed + report.Summary.AlloyChecksFailed
+	var b strings.Builder
+	b.WriteString(`<p class="content-meta">`)
+	b.WriteString(template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)))
+	b.WriteString(`<span class="pill pass">pass `)
+	b.WriteString(fmt.Sprintf("%d", passed))
+	b.WriteString(`</span>`)
+	b.WriteString(`<span class="pill fail">fail `)
+	b.WriteString(fmt.Sprintf("%d", failed))
+	b.WriteString(`</span>`)
+	b.WriteString(`</p>`)
+	return b.String()
+}
+
+func renderDocument(result core.DocumentResult, meta string) (string, error) {
 	caseResults := make(map[string]core.CaseResult, len(result.Cases))
 	for _, item := range result.Cases {
 		caseResults[item.ID.Key()] = item
@@ -146,6 +156,10 @@ func renderDocument(result core.DocumentResult) (string, error) {
 				return "", err
 			}
 			out.WriteString(html)
+			if current.Level == 1 && meta != "" {
+				out.WriteString(meta)
+				meta = ""
+			}
 		case core.ProseNode:
 			html, err := markdownToHTML(current.Markdown())
 			if err != nil {
@@ -159,7 +173,7 @@ func renderDocument(result core.DocumentResult) (string, error) {
 			}
 			out.WriteString(rendered)
 		case core.AlloyModelNode:
-			rendered, err := renderAlloyModel(current)
+			rendered, err := renderAlloyModel(current, alloyResults)
 			if err != nil {
 				return "", err
 			}
@@ -199,42 +213,39 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
-	out.WriteString(`<div class="exec-header">`)
-	out.WriteString(`<div class="exec-labels">`)
-	out.WriteString(`<span class="exec-kind">`)
-	out.WriteString(template.HTMLEscapeString(result.Block))
-	out.WriteString(`</span>`)
-	out.WriteString(`</div>`)
-	out.WriteString(`</div>`)
-	out.WriteString(`<pre class="exec-source"><code>`)
-	out.WriteString(template.HTMLEscapeString(result.Template))
-	out.WriteString(`</code></pre>`)
-	if result.RenderedSource != "" && result.RenderedSource != result.Template {
-		out.WriteString(`<p class="exec-note">resolved input</p>`)
-		out.WriteString(`<pre class="exec-source resolved"><code>`)
-		out.WriteString(template.HTMLEscapeString(result.RenderedSource))
-		out.WriteString(`</code></pre>`)
+	source := result.Template
+	if result.RenderedSource != "" {
+		source = result.RenderedSource
+	}
+	out.WriteString(`<div class="exec-source">`)
+	out.WriteString(`<code>`)
+	out.WriteString(template.HTMLEscapeString(source))
+	out.WriteString(`</code>`)
+	if result.Actual != "" {
+		out.WriteString(`<div class="cell-actual">`)
+		out.WriteString(template.HTMLEscapeString(result.Actual))
+		out.WriteString(`</div>`)
+	} else if result.Message != "" {
+		out.WriteString(`<div class="cell-actual">`)
+		out.WriteString(template.HTMLEscapeString(result.Message))
+		out.WriteString(`</div>`)
 	}
 	if len(result.Bindings) > 0 {
-		out.WriteString(`<p class="exec-note">captured bindings: `)
-		for i, binding := range result.Bindings {
+		out.WriteString(`<div class="exec-bindings">`)
+		for i, b := range result.Bindings {
 			if i > 0 {
 				out.WriteString(`, `)
 			}
-			out.WriteString(template.HTMLEscapeString(binding.Name))
+			out.WriteString(template.HTMLEscapeString(b.Name))
 			out.WriteString(`=`)
-			out.WriteString(template.HTMLEscapeString(binding.Value))
+			out.WriteString(template.HTMLEscapeString(b.Value))
 		}
-		out.WriteString(`</p>`)
+		out.WriteString(`</div>`)
 	}
-	if result.Message != "" {
-		out.WriteString(`<p class="exec-message">`)
-		out.WriteString(template.HTMLEscapeString(result.Message))
-		out.WriteString(`</p>`)
-	}
-	if result.Expected != "" || result.Actual != "" {
-		out.WriteString(renderFailureDiff(result.Expected, result.Actual, false))
-	}
+	out.WriteString(`</div>`)
+	out.WriteString(`<p class="exec-block-footer">`)
+	out.WriteString(template.HTMLEscapeString(result.Block))
+	out.WriteString(`</p>`)
 	out.WriteString(`</section>`)
 	return out.String(), nil
 }
@@ -287,11 +298,6 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		out.WriteString(template.HTMLEscapeString(tableStatus))
 	}
 	out.WriteString(`">`)
-	out.WriteString(`<div class="exec-table-header">`)
-	out.WriteString(`<span class="exec-kind">fixture:`)
-	out.WriteString(template.HTMLEscapeString(node.Fixture))
-	out.WriteString(`</span>`)
-	out.WriteString(`</div>`)
 	out.WriteString(`<table class="exec-table">`)
 	out.WriteString(`<thead><tr>`)
 	for _, column := range node.Columns {
@@ -299,7 +305,7 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		out.WriteString(template.HTMLEscapeString(column))
 		out.WriteString(`</th>`)
 	}
-	out.WriteString(`<th>Status</th></tr></thead>`)
+	out.WriteString(`</tr></thead>`)
 	out.WriteString(`<tbody>`)
 	for _, item := range rows {
 		row := item.node
@@ -309,93 +315,89 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		out.WriteString(`" id="`)
 		out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
 		out.WriteString(`">`)
-		for index, cell := range result.TemplateCells {
+		cells := result.TemplateCells
+		if len(result.RenderedCells) == len(cells) {
+			cells = result.RenderedCells
+		}
+		lastIndex := len(cells) - 1
+		for index, cell := range cells {
 			out.WriteString(`<td>`)
 			out.WriteString(`<div class="cell-template">`)
 			out.WriteString(template.HTMLEscapeString(cell))
 			out.WriteString(`</div>`)
-			if index < len(result.RenderedCells) && result.RenderedCells[index] != cell {
-				out.WriteString(`<div class="cell-resolved">`)
-				out.WriteString(template.HTMLEscapeString(result.RenderedCells[index]))
+			if result.Status == core.StatusFailed && index == lastIndex && result.Actual != "" {
+				out.WriteString(`<div class="cell-actual">`)
+				out.WriteString(template.HTMLEscapeString(result.Actual))
 				out.WriteString(`</div>`)
 			}
 			out.WriteString(`</td>`)
 		}
-		out.WriteString(`<td class="exec-table-status">`)
-		out.WriteString(`<span class="status `)
-		out.WriteString(template.HTMLEscapeString(string(result.Status)))
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(string(result.Status)))
-		out.WriteString(`</span>`)
-		if result.Message != "" {
-			out.WriteString(`<div class="exec-table-message">`)
-			out.WriteString(template.HTMLEscapeString(result.Message))
-			out.WriteString(`</div>`)
-		}
-		if result.Expected != "" || result.Actual != "" {
-			out.WriteString(renderFailureDiff(result.Expected, result.Actual, true))
-		}
-		out.WriteString(`</td></tr>`)
+		out.WriteString(`</tr>`)
 	}
-	out.WriteString(`</tbody></table></section>`)
+	out.WriteString(`</tbody></table>`)
+	out.WriteString(`<p class="exec-table-footer">fixture:`)
+	out.WriteString(template.HTMLEscapeString(node.Fixture))
+	out.WriteString(`</p>`)
+	out.WriteString(`</section>`)
 	return out.String(), nil
 }
 
-func renderAlloyModel(node core.AlloyModelNode) (string, error) {
+func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+	// Find checks in this model block and match against alloy results
+	var failedResult *core.AlloyCheckResult
+	hasCheck := false
+	for _, r := range alloyResults {
+		if r.Model != node.Model {
+			continue
+		}
+		checkPattern := "check " + r.Assertion
+		if !strings.Contains(node.Source, checkPattern) {
+			continue
+		}
+		hasCheck = true
+		if r.Status == core.StatusFailed {
+			rCopy := r
+			failedResult = &rCopy
+			break
+		}
+	}
+
+	statusClass := ""
+	if hasCheck {
+		statusClass = " passed"
+		if failedResult != nil {
+			statusClass = " failed"
+		}
+	}
+
 	var out strings.Builder
-	out.WriteString(`<section class="exec-block alloy-model">`)
-	out.WriteString(`<div class="exec-header">`)
-	out.WriteString(`<div class="exec-labels">`)
-	out.WriteString(`<span class="exec-kind">`)
-	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
-	out.WriteString(`</span>`)
-	out.WriteString(`</div>`)
-	out.WriteString(`</div>`)
-	out.WriteString(`<pre class="exec-source"><code>`)
+	out.WriteString(`<section class="exec-block alloy-model` + statusClass + `">`)
+	out.WriteString(`<div class="exec-source">`)
+	out.WriteString(`<pre><code>`)
 	out.WriteString(template.HTMLEscapeString(node.Source))
 	out.WriteString(`</code></pre>`)
+	if failedResult != nil {
+		actual := failedResult.Actual
+		if actual == "" {
+			actual = failedResult.Message
+		}
+		if actual != "" {
+			out.WriteString(`<div class="cell-actual">`)
+			out.WriteString(template.HTMLEscapeString(actual))
+			out.WriteString(`</div>`)
+		}
+	}
+	out.WriteString(`</div>`)
+	out.WriteString(`<p class="exec-block-footer">`)
+	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
+	out.WriteString(`</p>`)
 	out.WriteString(`</section>`)
 	return out.String(), nil
 }
 
 func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
-	if node.ID == nil {
-		return "", fmt.Errorf("alloy ref is missing an id")
-	}
-
-	result, ok := alloyResults[node.ID.Key()]
-	if !ok {
-		return "", fmt.Errorf("missing alloy result for %s", node.ID.Key())
-	}
-
-	var out strings.Builder
-	out.WriteString(`<section class="exec-block alloy-ref `)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	out.WriteString(`" id="`)
-	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
-	out.WriteString(`">`)
-	out.WriteString(`<div class="exec-header">`)
-	out.WriteString(`<div class="exec-labels">`)
-	out.WriteString(`<span class="exec-kind">`)
-	out.WriteString(template.HTMLEscapeString("alloy:ref(" + node.Model + "#" + node.Assertion + ", scope=" + node.Scope + ")"))
-	out.WriteString(`</span>`)
-	out.WriteString(`</div>`)
-	out.WriteString(`</div>`)
-	out.WriteString(`<p class="exec-note">assertion <code>`)
-	out.WriteString(template.HTMLEscapeString(result.Assertion))
-	out.WriteString(`</code> checked at scope <code>`)
-	out.WriteString(template.HTMLEscapeString(result.Scope))
-	out.WriteString(`</code></p>`)
-	if result.Message != "" {
-		out.WriteString(`<p class="exec-message">`)
-		out.WriteString(template.HTMLEscapeString(result.Message))
-		out.WriteString(`</p>`)
-	}
-	if result.Expected != "" || result.Actual != "" {
-		out.WriteString(renderFailureDiff(result.Expected, result.Actual, false))
-	}
-	out.WriteString(`</section>`)
-	return out.String(), nil
+	// Alloy failures are now shown inline in the model block.
+	return "", nil
 }
 
 func renderFailureDiff(expected string, actual string, compact bool) string {
@@ -448,6 +450,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --accent: #2f64b3;
       --code-bg: #efefea;
       --note-bg: #f5f5f1;
+      --pass-bg: #e8f0e6;
+      --fail-bg: #f0e4e2;
+      --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
     }
 
     * { box-sizing: border-box; }
@@ -460,7 +465,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     main {
       max-width: 78rem;
-      margin: 0 auto;
+      margin-inline: auto;
       padding: 2.75rem 1.5rem 4rem;
     }
 
@@ -474,14 +479,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .toc {
       position: sticky;
       top: 1.5rem;
-      align-self: start;
       font-size: 0.92rem;
       line-height: 1.5;
     }
 
-    .toc-inner {
-      padding: 0.25rem 0;
-    }
+    .toc-inner { padding: 1.1rem 0 0; }
 
     .toc-title {
       margin: 0 0 0.75rem;
@@ -494,23 +496,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .toc-spec {
       margin-bottom: 1.25rem;
-    }
-
-    .toc-spec:last-child {
-      margin-bottom: 0;
+      &:last-child { margin-bottom: 0; }
     }
 
     .toc-spec-title {
       margin: 0 0 0.35rem;
       font-weight: 600;
       color: var(--ink);
-    }
-
-    .toc-spec-path {
-      margin: 0 0 0.55rem;
-      color: var(--muted);
-      font-size: 0.82rem;
-      font-family: "SFMono-Regular", Menlo, monospace;
     }
 
     .toc-list {
@@ -520,7 +512,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .toc-item {
-      margin: 0.18rem 0;
+      margin: 0.1rem 0;
+      &:has(> .toc-level-1) { margin-top: 0.6rem; }
+      &:has(> .toc-level-2) { margin-top: 0.4rem; }
+      &:first-child { margin-top: 0; }
     }
 
     .toc-link {
@@ -529,30 +524,20 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       color: var(--muted);
       position: relative;
       transition: color 120ms ease;
-    }
 
-    .toc-link:hover {
-      color: var(--ink);
-    }
+      &:hover { color: var(--ink); }
+      &.active { color: var(--ink); font-weight: 600; }
 
-    .toc-link.active {
-      color: var(--ink);
-      font-weight: 600;
-    }
-
-    .toc-link.failed {
-      padding-left: 0.95rem;
-    }
-
-    .toc-link.failed::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0.42rem;
-      width: 0.42rem;
-      height: 0.42rem;
-      border-radius: 999px;
-      background: var(--fail-mark);
+      &.failed::before {
+        content: "";
+        position: absolute;
+        left: -0.75rem;
+        top: 0.42rem;
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 999px;
+        background: var(--fail-mark);
+      }
     }
 
     .toc-level-1 {
@@ -566,23 +551,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .toc-level-5,
     .toc-level-6 { padding-left: 2.8rem; }
 
-    .content {
-      min-width: 0;
-    }
+    .content { min-width: 0; }
 
-    .hero {
-      margin-bottom: 1rem;
-    }
-
-    .meta {
+    .content-meta {
+      margin: 0 0 1.5rem;
       color: var(--muted);
-      margin: 0;
       font-size: 0.82rem;
       line-height: 1.65;
-    }
-
-    .summary {
-      margin-top: 0.2rem;
     }
 
     .pill {
@@ -591,282 +566,181 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       border: 0;
       background: transparent;
       color: var(--muted);
-    }
 
-    .pill::before {
-      content: "· ";
-      color: var(--muted);
-    }
-
-    .pill.pass {
-      color: var(--pass-ink);
-    }
-
-    .pill.fail {
-      color: var(--fail-ink);
+      &::before { content: "· "; color: var(--muted); }
+      &.pass { color: var(--pass-ink); }
+      &.fail { color: var(--fail-ink); }
     }
 
     .spec {
       margin: 0;
-      padding: 2rem 0 0 0;
+    }
+
+    .spec + .spec {
+      padding-top: 2rem;
     }
 
     .spec-body {
       line-height: 1.82;
-      font-size: 1rem;
-    }
 
-    .spec-body p,
-    .spec-body li,
-    .spec-body td,
-    .spec-body th {
-      font-size: 1rem;
-    }
+      & :first-child { margin-top: 0; }
 
-    .spec-body h1,
-    .spec-body h2,
-    .spec-body h3,
-    .spec-body h4,
-    .spec-body h5,
-    .spec-body h6 {
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
-      line-height: 1.15;
-      text-wrap: balance;
-      letter-spacing: -0.01em;
-    }
+      & :is(h1, h2, h3, h4, h5, h6) {
+        font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+        line-height: 1.15;
+        text-wrap: balance;
+        letter-spacing: -0.01em;
+      }
 
-    .spec-body h1 {
-      font-size: 2.5rem;
-      margin: 0 0 1.1rem;
-    }
-
-    .spec-body h2 {
-      font-size: 1.85rem;
-      margin: 2.9rem 0 0.95rem;
-    }
-
-    .spec-body h3 {
-      font-size: 1.4rem;
-      margin: 2.25rem 0 0.78rem;
-    }
-
-    .spec-body h4,
-    .spec-body h5,
-    .spec-body h6 {
-      font-size: 1.08rem;
-      margin: 1.7rem 0 0.68rem;
-    }
-
-    .spec-body :first-child {
-      margin-top: 0;
+      & h1 { font-size: 2.5rem; margin: 0 0 1.1rem; }
+      & h2 { font-size: 1.85rem; margin: 2.9rem 0 0.95rem; }
+      & h3 { font-size: 1.4rem; margin: 2.25rem 0 0.78rem; }
+      & :is(h4, h5, h6) { font-size: 1.08rem; margin: 1.7rem 0 0.68rem; }
     }
 
     .status {
       font-weight: 600;
       font-size: 0.95rem;
+      &.passed { color: var(--pass-ink); }
+      &.failed { color: var(--fail-ink); }
     }
 
-    .status.passed {
-      color: var(--pass-ink);
-    }
-
-    .status.failed {
-      color: var(--fail-ink);
-    }
-
-    .exec-block {
-      margin: 1.35rem 0;
-      padding: 0.15rem 0 0.2rem 1rem;
-      background: transparent;
-      scroll-margin-top: 1.5rem;
-    }
-
-    .exec-block.passed {
-      background: transparent;
-    }
-
-    .exec-block.failed {
-      background: transparent;
-    }
-
+    .exec-block,
     .exec-table-block {
       margin: 1.35rem 0;
-      padding: 0.15rem 0 0.2rem 1rem;
-      background: transparent;
-      overflow-x: auto;
     }
 
-    .exec-table-header {
-      margin-bottom: 0.55rem;
-      position: relative;
-      line-height: 1.2;
-    }
+    .exec-block { scroll-margin-top: 1.5rem; }
+    .exec-table-block { overflow-x: auto; }
 
     .exec-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.95rem;
-      background: var(--paper);
+
+      & :is(th, td) {
+        padding: 0.7rem 0.75rem;
+        border: 1px solid var(--rule);
+        vertical-align: top;
+        text-align: left;
+      }
+
+      & thead th {
+        border: 0;
+        padding-bottom: 0;
+        font-weight: normal;
+        font-size: 0.8rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--bg);
+      }
+
+      & thead th:first-child { border-left: 3px solid transparent; }
+
+      & tbody td:first-child { border-left: 3px solid transparent; }
+      & tbody tr.passed td { background: var(--pass-bg); }
+      & tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
+      & tbody tr.failed td { background: var(--fail-bg); }
+      & tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
     }
 
-    .exec-table th,
-    .exec-table td {
-      padding: 0.7rem 0.75rem;
-      border-top: 1px solid var(--rule);
-      vertical-align: top;
-      text-align: left;
-    }
-
-    .exec-table thead th {
-      border-top: 0;
-      font-size: 0.8rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    .exec-table tbody tr.failed {
-      background: transparent;
-    }
-
-    .exec-table tbody td:first-child {
-      position: relative;
-    }
-
-    .exec-table tbody tr.passed td:first-child::before,
-    .exec-table tbody tr.failed td:first-child::before {
-      content: "";
-      position: absolute;
-      left: -1rem;
-      top: 0.72rem;
-      width: 0.28rem;
-      height: 1.16em;
-      border-radius: 999px;
-    }
-
-    .exec-table tbody tr.passed td:first-child::before {
-      background: var(--pass-mark);
-    }
-
-    .exec-table tbody tr.failed td:first-child::before {
-      background: var(--fail-mark);
-    }
-
-    .cell-template {
-      font-family: "SFMono-Regular", Menlo, monospace;
-    }
+    .cell-template { font-family: var(--font-mono); }
 
     .cell-resolved {
       margin-top: 0.35rem;
       color: var(--muted);
-      font-family: "SFMono-Regular", Menlo, monospace;
+      font-family: var(--font-mono);
       font-size: 0.92rem;
     }
 
-    .exec-table-status {
-      min-width: 13rem;
-    }
-
-    .exec-table-message {
-      margin-top: 0.5rem;
+    .cell-actual {
+      margin-top: 0.35rem;
       color: var(--fail-ink);
-      font-weight: 700;
+      font-size: 0.85rem;
+      font-style: italic;
+      white-space: pre-wrap;
     }
 
     .failure-diff {
       margin: 0.75rem 0 0;
       padding: 0.65rem 0.8rem;
-      background: var(--note-bg);
-      border-left: 2px solid var(--rule);
+      background: var(--fail-bg);
+      border-left: 3px solid var(--fail-mark);
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.35rem 0.75rem;
       align-items: baseline;
+
+      &.compact { padding: 0.65rem 0.75rem; border-left: 0; }
+
+      & dt {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.45;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      & dd {
+        margin: 0;
+        font-family: var(--font-mono);
+        line-height: 1.45;
+        word-break: break-word;
+      }
     }
 
-    .failure-diff.compact {
-      margin-top: 0.75rem;
-      padding: 0.65rem 0.75rem;
-    }
 
-    .failure-diff dt {
-      margin: 0;
+    .exec-bindings {
+      margin-top: 0.35rem;
+      font-size: 0.85rem;
+      font-style: italic;
       color: var(--muted);
-      font-size: 0.82rem;
-      line-height: 1.45;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      align-self: baseline;
+      font-family: var(--font-mono);
     }
 
-    .failure-diff dd {
+    :is(.exec-block-footer, .exec-table-footer) {
       margin: 0;
-      font-family: "SFMono-Regular", Menlo, monospace;
-      line-height: 1.45;
-      word-break: break-word;
-      align-self: baseline;
-    }
-
-    .exec-header {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0.6rem 1rem;
-      margin-bottom: 0.55rem;
-      position: relative;
-      line-height: 1.2;
-    }
-
-    .exec-labels {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem 0.8rem;
-    }
-
-    .exec-header::before,
-    .exec-table-header::before {
-      content: "";
-      position: absolute;
-      left: -1rem;
-      top: 0.08em;
-      width: 0.28rem;
-      height: 1.16em;
-      border-radius: 999px;
-      background: #c9c0ab;
-    }
-
-    .exec-block.passed > .exec-header::before,
-    .exec-table-block.passed > .exec-table-header::before {
-      background: var(--pass-mark);
-    }
-
-    .exec-block.failed > .exec-header::before,
-    .exec-table-block.failed > .exec-table-header::before {
-      background: var(--fail-mark);
+      text-align: right;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
     }
 
     .exec-kind {
-      font-weight: 600;
-      color: var(--accent);
-      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
-      font-size: 0.92rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
       line-height: 1.2;
     }
 
     .exec-source {
       margin: 0;
       padding: 0.8rem 0.9rem;
+      border: 1px solid var(--rule);
       border-radius: 0.2rem;
       background: var(--code-bg);
-      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
       font-size: 0.92rem;
       line-height: 1.45;
       overflow-x: auto;
+      border-left: 3px solid transparent;
+
+      &.resolved {
+        margin-top: 0.4rem;
+        border: 1px solid var(--rule);
+      }
     }
 
-    .exec-source.resolved {
-      margin-top: 0.4rem;
-      border: 1px solid var(--rule);
+    .exec-block.passed > .exec-source:not(.resolved) {
+      border-left-color: var(--pass-mark);
+      background: var(--pass-bg);
+    }
+
+    .exec-block.failed > .exec-source:not(.resolved) {
+      border-left-color: var(--fail-mark);
+      background: var(--fail-bg);
     }
 
     .exec-note {
@@ -881,15 +755,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       font-weight: 600;
     }
 
-    a {
-      color: var(--accent);
-    }
+    a { color: var(--accent); }
 
-    code,
-    pre,
-    kbd,
-    samp {
-      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    code, pre, kbd, samp {
+      font-family: var(--font-mono);
       font-size: 0.94em;
       line-height: 1.45;
     }
@@ -900,15 +769,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         gap: 1.5rem;
       }
 
-      .toc {
-        position: static;
-      }
-
-      .toc-inner {
-        padding-left: 0;
-        border-left: 0;
-        padding-bottom: 1rem;
-      }
+      .toc { position: static; }
+      .toc-inner { padding-bottom: 1rem; }
     }
   </style>
 </head>
@@ -921,7 +783,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
           {{ range .Specs }}
           <section class="toc-spec">
             <p class="toc-spec-title">{{ .Title }}</p>
-            <p class="toc-spec-path">{{ .Path }}</p>
             <ul class="toc-list">
               {{ range .Headings }}
               <li class="toc-item">
@@ -935,12 +796,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       </aside>
 
       <div class="content">
-        <section class="hero">
-          <div class="summary">
-            <p class="meta">Generated at {{ .GeneratedAt }}<span class="pill pass">pass {{ .PassedCount }}</span><span class="pill fail">fail {{ .FailedCount }}</span></p>
-          </div>
-        </section>
-
         {{ range .Specs }}
         <article class="spec">
           <section class="spec-body">{{ .Body }}</section>

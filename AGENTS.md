@@ -9,6 +9,13 @@
 
 - [System design](docs/design.md) — 범위, 용어, 패키지 경계, 문법, 인터페이스, 단계별 산출물의 기준 문서
 - [Documentation guide](docs/metadoc.md) — 문서를 짧고 정확하게 유지하는 규칙
+- [Build & Run](docs/build.md) — 빌드, 실행, 테스트 방법
+
+### User Guide
+
+- [Writing Specs](docs/guide-spec.md) — spec 파일 작성법
+- [Writing Adapters](docs/guide-adapter.md) — adapter 구현 방법과 프로토콜
+- [Configuration & Running](docs/guide-config.md) — 설정 파일과 실행
 
 ## Working Rules
 

@@ -129,3 +129,15 @@ check cardHasExactlyOneColumn for 5
 ```
 
 <!-- alloy:ref(board#cardHasExactlyOneColumn, scope=5) -->
+
+의도적으로 틀린 단언: 카드가 둘 이상의 컬럼을 가질 수 있다고 주장한다.
+
+```alloy:model(board)
+assert cardCanHaveMultipleColumns {
+  some c: Card | #c.column > 1
+}
+
+check cardCanHaveMultipleColumns for 5
+```
+
+<!-- alloy:ref(board#cardCanHaveMultipleColumns, scope=5) -->

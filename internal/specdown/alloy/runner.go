@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -268,6 +269,7 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		if err != nil {
 			return nil, err
 		}
+		actual := summarizeCounterexample(command)
 		results = append(results, core.AlloyCheckResult{
 			ID:                 check.ID,
 			Model:              check.Model,
@@ -275,9 +277,8 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 			Scope:              check.Scope,
 			Label:              defaultLabel(check),
 			Status:             core.StatusFailed,
-			Message:            "found counterexample for assertion " + strconvQuote(check.Assertion) + " at scope " + check.Scope,
-			Expected:           "assertion " + strconvQuote(check.Assertion) + " holds for scope " + check.Scope,
-			Actual:             "counterexample found",
+			Message:            "counterexample for " + strconvQuote(check.Assertion),
+			Actual:             actual,
 			BundlePath:         bundle.AbsolutePath,
 			SourceMapPath:      bundle.SourceMapAbsolutePath,
 			SourceRef:          formatSourceRef(check.ID.File, check.ID.HeadingPath),
@@ -328,6 +329,42 @@ func writeCounterexample(baseDir string, check core.AlloyCheckSpec, command rece
 		return "", fmt.Errorf("write counterexample: %w", err)
 	}
 	return absolutePath, nil
+}
+
+func summarizeCounterexample(command receiptCommand) string {
+	if len(command.Solution) == 0 {
+		return "counterexample found"
+	}
+	solution := command.Solution[0]
+	if len(solution.Instances) == 0 {
+		return "counterexample found"
+	}
+
+	var instance struct {
+		Values map[string]map[string][][]string `json:"values"`
+	}
+	if err := json.Unmarshal(solution.Instances[0], &instance); err != nil {
+		return "counterexample found"
+	}
+
+	var lines []string
+	for atom, relations := range instance.Values {
+		if len(relations) == 0 {
+			continue
+		}
+		for rel, tuples := range relations {
+			for _, tuple := range tuples {
+				lines = append(lines, atom+"."+rel+" = "+strings.Join(tuple, ", "))
+			}
+		}
+	}
+
+	if len(lines) == 0 {
+		return "counterexample found"
+	}
+
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
 }
 
 func (r Runner) ensureAlloyJar() (string, error) {

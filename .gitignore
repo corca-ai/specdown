@@ -1,3 +1,4 @@
 .artifacts/
 /specdown
 /org.alloytools.alloy.dist.jar
+.envrc

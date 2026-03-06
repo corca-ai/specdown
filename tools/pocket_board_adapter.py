@@ -83,40 +83,38 @@ def board_cards_snapshot(state, board_name):
 
 
 def board_exists_failure(board_name, should_exist, state):
-    actual = boards_snapshot(state)
+    names = sorted(state["boards"])
+    actual = ", ".join(names) if names else "(none)"
     if should_exist:
         return SpecFailure(
-            f'expected board {board_name!r} to exist; actual boards: {actual}',
-            expected=f'board {board_name!r} exists',
-            actual=f'boards: {actual}',
+            f'expected board {board_name!r} to exist',
+            actual=actual,
         )
     return SpecFailure(
-        f'expected board {board_name!r} not to exist; actual boards: {actual}',
-        expected=f'board {board_name!r} absent',
-        actual=f'boards: {actual}',
+        f'expected board {board_name!r} not to exist',
+        actual=actual,
     )
 
 
 def card_exists_failure(board_name, card_name, should_exist, state):
-    actual = board_cards_snapshot(state, board_name)
+    board = state["boards"].get(board_name)
+    names = sorted(board["cards"]) if board else []
+    actual = ", ".join(names) if names else "(none)"
     if should_exist:
         return SpecFailure(
-            f'expected card {card_name!r} to exist in board {board_name!r}; actual cards: {actual}',
-            expected=f'card {card_name!r} in board {board_name!r} exists',
-            actual=f'cards: {actual}',
+            f'expected card {card_name!r} in board {board_name!r} to exist',
+            actual=actual,
         )
     return SpecFailure(
-        f'expected card {card_name!r} not to exist in board {board_name!r}; actual cards: {actual}',
-        expected=f'card {card_name!r} in board {board_name!r} absent',
-        actual=f'cards: {actual}',
+        f'expected card {card_name!r} in board {board_name!r} not to exist',
+        actual=actual,
     )
 
 
 def card_column_failure(board_name, card_name, column, actual_column):
     return SpecFailure(
-        f'expected card {card_name!r} in board {board_name!r} to be in column {column!r}; actual column: {actual_column!r}',
-        expected=f'card {card_name!r} in board {board_name!r} at column {column!r}',
-        actual=f'column: {actual_column!r}',
+        f'expected column {column!r}, got {actual_column!r}',
+        actual=actual_column,
     )
 
 
