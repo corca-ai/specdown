@@ -167,6 +167,15 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "position: sticky;") {
 		t.Fatalf("expected sticky toc styles, got %q", html)
 	}
+	if !strings.Contains(html, "font-family: \"Avenir Next\", \"Helvetica Neue\", \"Segoe UI\", sans-serif;") {
+		t.Fatalf("expected sans body typography, got %q", html)
+	}
+	if !strings.Contains(html, "text-wrap: balance;") {
+		t.Fatalf("expected balanced heading wrap, got %q", html)
+	}
+	if !strings.Contains(html, ".spec-body h1") {
+		t.Fatalf("expected heading typography rules, got %q", html)
+	}
 	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board\"") {
 		t.Fatalf("expected heading link in toc, got %q", html)
 	}

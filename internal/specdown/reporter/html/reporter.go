@@ -582,7 +582,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+      font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
       color: var(--ink);
       background: var(--bg);
     }
@@ -604,8 +604,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       position: sticky;
       top: 1.5rem;
       align-self: start;
-      font-size: 0.95rem;
-      line-height: 1.45;
+      font-size: 0.92rem;
+      line-height: 1.5;
     }
 
     .toc-inner {
@@ -728,9 +728,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .hero h1 {
       margin: 0 0 0.35rem;
-      font-size: 0.95rem;
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+      font-size: 1.15rem;
       font-weight: 600;
       letter-spacing: 0.08em;
+      text-wrap: balance;
       text-transform: uppercase;
     }
 
@@ -752,8 +754,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .failures h2 {
       margin: 0 0 0.75rem;
-      font-size: 1rem;
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+      font-size: 1.3rem;
       font-weight: 600;
+      text-wrap: balance;
     }
 
     .failure-list {
@@ -847,7 +851,48 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .spec-body {
       line-height: 1.82;
-      font-size: 1.04rem;
+      font-size: 1rem;
+    }
+
+    .spec-body p,
+    .spec-body li,
+    .spec-body td,
+    .spec-body th {
+      font-size: 1rem;
+    }
+
+    .spec-body h1,
+    .spec-body h2,
+    .spec-body h3,
+    .spec-body h4,
+    .spec-body h5,
+    .spec-body h6 {
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+      line-height: 1.15;
+      text-wrap: balance;
+      letter-spacing: -0.01em;
+    }
+
+    .spec-body h1 {
+      font-size: 2.5rem;
+      margin: 0 0 1rem;
+    }
+
+    .spec-body h2 {
+      font-size: 1.85rem;
+      margin: 2.4rem 0 0.85rem;
+    }
+
+    .spec-body h3 {
+      font-size: 1.4rem;
+      margin: 1.9rem 0 0.7rem;
+    }
+
+    .spec-body h4,
+    .spec-body h5,
+    .spec-body h6 {
+      font-size: 1.08rem;
+      margin: 1.4rem 0 0.6rem;
     }
 
     .spec-body :first-child {
@@ -1039,7 +1084,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .exec-kind {
       font-weight: 600;
       color: var(--accent);
-      font-family: "SFMono-Regular", Menlo, monospace;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
       font-size: 0.92rem;
     }
 
@@ -1048,6 +1093,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       padding: 0.8rem 0.9rem;
       border-radius: 0.2rem;
       background: var(--code-bg);
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
       overflow-x: auto;
     }
 
@@ -1070,6 +1116,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     a {
       color: var(--accent);
+    }
+
+    code,
+    pre,
+    kbd,
+    samp {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
     }
 
     @media (max-width: 960px) {
