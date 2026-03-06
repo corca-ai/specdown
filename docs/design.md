@@ -1,68 +1,68 @@
 # Executable Specification (`specdown`)
 
-프로젝트 독립형 executable specification 시스템 설계 문서.
-코어 설계는 특정 제품에 종속되지 않는다.
+Design document for a project-independent executable specification system.
+The core design is not tied to any specific product.
 
 
-## 문서 상태
+## Document Status
 
-- 대상 독자: 독립된 개발팀
-- 목적: reusable core + adapter 기반 제품으로 구현 가능할 만큼 요구사항과 경계를 확정
-- 결과물: `specdown-core`, `specdown-cli`, `specdown-adapter-protocol`, `specdown-reporter-html`, `specdown-alloy`, reference adapters
-
-
-## 문제
-
-설계 문서와 테스트 코드가 분리되면 다음 문제가 반복된다.
-
-- 설계 문서에 적힌 속성이 실제로 검증되는지 추적하기 어렵다
-- 테스트는 동작을 검증하지만 설계 의도와 이유를 충분히 설명하지 않는다
-- 보안 속성이나 상태 공간 성질은 예시 기반 테스트만으로는 충분히 다루기 어렵다
-- 문서, 테스트, 형식 모델이 따로 진화하면서 정합성이 사람의 기억에 의존하게 된다
+- Target audience: independent development teams
+- Purpose: finalize requirements and boundaries to the point where a reusable core + adapter-based product can be implemented
+- Deliverables: `specdown-core`, `specdown-cli`, `specdown-adapter-protocol`, `specdown-reporter-html`, `specdown-alloy`, reference adapters
 
 
-## 목표
+## Problem
 
-`specdown`의 목표는 다음 네 가지다.
+When design documents and test code are separated, the following problems recur.
 
-1. 하나의 Markdown 문서가 읽을 수 있는 명세서이면서 실행 가능한 테스트가 된다.
-2. 같은 문서 안에 Alloy 모델을 literate style로 엮어 넣고 형식 검증까지 연결한다.
-3. 표 기반 명세(FIT 스타일)를 first-class 기능으로 제공한다.
-4. 실행 결과를 HTML로 렌더링해 문서 자체를 green/red 상태가 드러나는 실행 리포트로 본다.
-
-
-## 비목표
-
-다음은 v1 범위에서 제외한다.
-
-- 모든 테스트를 Markdown DSL로 대체하는 것
-- 구현이 형식 모델과 완전히 동치임을 자동 증명하는 것
-- Playwright, Vitest, Jest, Bun test 중 하나를 코어에 내장하는 것
-- DOM selector, shell transcript, editor action 같은 프로젝트 특화 DSL을 코어에 포함하는 것
-- 다중 저장소/다중 패키지 모델 import를 완전 자동화하는 것
+- It is difficult to track whether properties stated in design documents are actually verified
+- Tests verify behavior but do not sufficiently explain design intent and rationale
+- Security properties and state-space properties are hard to cover with example-based tests alone
+- As documents, tests, and formal models evolve separately, consistency depends on human memory
 
 
-## 핵심 결정
+## Goals
 
-이 문서에서 다음 사항은 확정한다.
+`specdown` has four goals.
 
-1. 문서 포맷은 Markdown-first다. 산문은 보존되고, 실행 블록만 구조적으로 해석한다.
-2. 코어는 테스트 프레임워크나 제품 로직을 모른다. 모든 실행 의미는 adapter가 제공한다.
-3. Alloy는 문서 임베딩 블록을 중심으로 지원한다.
-4. 같은 `alloy:model(name)`를 여러 번 쓰면 문서 순서대로 하나의 logical model로 결합한다.
-5. HTML 리포트는 부가 기능이 아니라 1급 산출물이다.
-6. 표 기반 명세는 core 문법이고, 각 표의 실행 의미는 fixture adapter가 정의한다.
-7. adapter 확장 경계는 language-neutral한 process protocol을 기본값으로 한다.
+1. A single Markdown document serves as both a readable specification and an executable test.
+2. Alloy models are woven into the same document in literate style, connecting to formal verification.
+3. Table-based specifications (FIT style) are provided as a first-class feature.
+4. Execution results are rendered as HTML, turning the document itself into an execution report with green/red status.
 
 
-## 제품 구성
+## Non-Goals
 
-권장 패키지 구성은 다음과 같다.
+The following are excluded from the v1 scope.
+
+- Replacing all tests with a Markdown DSL
+- Automatically proving that the implementation is fully equivalent to the formal model
+- Embedding Playwright, Vitest, Jest, or Bun test into the core
+- Including project-specific DSLs such as DOM selectors, shell transcripts, or editor actions in the core
+- Fully automating multi-repository/multi-package model imports
+
+
+## Key Decisions
+
+This document finalizes the following.
+
+1. The document format is Markdown-first. Prose is preserved; only executable blocks are structurally interpreted.
+2. The core knows nothing about test frameworks or product logic. All execution semantics are provided by adapters.
+3. Alloy is supported via document-embedded blocks.
+4. When the same `alloy:model(name)` appears multiple times, fragments are combined in document order into a single logical model.
+5. The HTML report is a first-class deliverable, not an add-on.
+6. Table-based specifications are core grammar; the execution semantics of each table are defined by a fixture adapter.
+7. The adapter extension boundary defaults to a language-neutral process protocol.
+
+
+## Product Layout
+
+The recommended package layout is as follows.
 
 ```text
 packages/
 ├── specdown-core/              # parser, AST, planning, event model
-├── specdown-cli/               # run 진입점
+├── specdown-cli/               # run entry point
 ├── specdown-adapter-protocol/  # adapter process contract + JSON schema
 ├── specdown-reporter-html/     # static HTML report renderer
 ├── specdown-alloy/             # embedded model extraction + Alloy runner
@@ -70,89 +70,89 @@ packages/
 └── specdown-adapter-vitest/    # optional convenience adapter
 ```
 
-`specdown-core`는 `vitest`, `playwright`, `svelte`, DOM selector에 의존하면 안 된다.
+`specdown-core` must not depend on `vitest`, `playwright`, `svelte`, or DOM selectors.
 
 
-## 아키텍처
+## Architecture
 
-두 개의 파이프라인이 하나의 문서에서 갈라진다.
+Two pipelines diverge from a single document.
 
 ```text
 Spec Document (.spec.md)
     │
     ├── Spec Core
-    │     ├── heading / prose / block / table 파싱
-    │     ├── 변수 스코프 계산
-    │     ├── executable unit ID 부여
-    │     └── embedded Alloy model 추출
+    │     ├── heading / prose / block / table parsing
+    │     ├── variable scope computation
+    │     ├── executable unit ID assignment
+    │     └── embedded Alloy model extraction
     │
     ├── Runtime Adapter
-    │     └── 테스트 실행 + Spec Event 방출
+    │     └── test execution + Spec Event emission
     │
     ├── Reporter Adapter
-    │     └── HTML / JSON / CI artifact 생성
+    │     └── HTML / JSON / CI artifact generation
     │
     └── Alloy Runner
-          └── model check + Spec Event 방출
+          └── model check + Spec Event emission
 ```
 
-핵심 원칙은 simple하다.
+The core principle is simple.
 
-- Core는 문서를 구조화하고 실행 계획을 만든다
-- Runtime adapter는 각 블록/표를 실제 테스트나 명령으로 바꾼다
-- Reporter adapter는 실행 이벤트를 사람이 읽을 수 있는 결과물로 바꾼다
-- Alloy runner는 형식 검증 결과를 같은 이벤트 모델로 올린다
-- Adapter는 기본적으로 out-of-process command로 연결된다
-
-
-## 코어와 어댑터 경계
-
-### Core 책임
-
-- Markdown 파싱
-- heading hierarchy를 suite hierarchy로 변환
-- code block, directive, table 추출
-- 변수 바인딩과 스코프 계산
-- `SpecId` 생성
-- embedded Alloy fragment 결합
-- runtime-independent execution plan 생성
-- 공통 event schema 정의
-
-### Adapter 책임
-
-- `run:*`, `verify:*`, `test:*` 같은 블록 의미 해석
-- fixture table의 컬럼 의미 해석
-- shell, browser, API, editor, sandbox 같은 외부 실행 환경 접속
-- 테스트 프레임워크 통합
-- HTML/JSON/JUnit 같은 결과 렌더링
-- process protocol로 core와 통신
-
-### Core가 몰라야 하는 것
-
-- Vitest의 `describe/test` API
-- Playwright page object
-- 특정 제품의 filesystem layout
-- 특정 제품의 command vocabulary
-- adapter 구현 언어와 런타임
+- Core structures the document and creates the execution plan
+- Runtime adapter turns each block/table into an actual test or command
+- Reporter adapter turns execution events into human-readable output
+- Alloy runner feeds formal verification results into the same event model
+- Adapters connect as out-of-process commands by default
 
 
-## 공용 프로토콜
+## Core and Adapter Boundary
 
-adapter 경계는 in-process language API가 아니라 process protocol이어야 한다.
-그래야 각 프로젝트가 Go, Python, Rust, Node, Ruby 등 원하는 언어로 최소 노력으로 adapter를 만들 수 있다.
+### Core Responsibilities
 
-기본 transport는 다음으로 고정한다.
+- Markdown parsing
+- Converting heading hierarchy into suite hierarchy
+- Extracting code blocks, directives, and tables
+- Variable binding and scope computation
+- `SpecId` generation
+- Combining embedded Alloy fragments
+- Generating a runtime-independent execution plan
+- Defining the common event schema
 
-- adapter는 실행 가능한 command다
-- `specdown-cli`가 adapter process를 실행한다
-- stdin/stdout으로 NDJSON 메시지를 주고받는다
-- stdout에는 protocol message만 쓴다
-- 하나의 adapter process는 한 spec run 동안 여러 `runCase` 요청을 순서대로 처리할 수 있다
-- `specdown-cli`는 첫 `runCase` 전에 `setup`을, 마지막 `runCase` 후에 `teardown`을 보낸다
-- adapter는 `setup`/`teardown`을 무시해도 된다 (응답 불필요)
-- non-zero exit는 case failure가 아니라 adapter crash 또는 infrastructure failure로 본다
+### Adapter Responsibilities
 
-전송되는 payload는 JSON-serializable shape여야 한다.
+- Interpreting block semantics such as `run:*`, `verify:*`, `test:*`
+- Interpreting column semantics of fixture tables
+- Connecting to external execution environments like shell, browser, API, editor, or sandbox
+- Test framework integration
+- Rendering results as HTML/JSON/JUnit
+- Communicating with core via process protocol
+
+### What Core Must Not Know
+
+- Vitest's `describe/test` API
+- Playwright page objects
+- Product-specific filesystem layouts
+- Product-specific command vocabularies
+- Adapter implementation language and runtime
+
+
+## Common Protocol
+
+The adapter boundary must be a process protocol, not an in-process language API.
+This allows each project to build adapters with minimal effort in any language: Go, Python, Rust, Node, Ruby, etc.
+
+The default transport is fixed as follows.
+
+- An adapter is an executable command
+- `specdown-cli` launches the adapter process
+- Messages are exchanged via stdin/stdout as NDJSON
+- Only protocol messages are written to stdout
+- A single adapter process can handle multiple `runCase` requests sequentially during one spec run
+- `specdown-cli` sends `setup` before the first `runCase` and `teardown` after the last `runCase`
+- Adapters may ignore `setup`/`teardown` (no response required)
+- A non-zero exit indicates an adapter crash or infrastructure failure, not a case failure
+
+Transmitted payloads must be JSON-serializable shapes.
 
 ```ts
 export type SpecId = {
@@ -211,24 +211,24 @@ export type AdapterResponse =
   | { type: "modelCheckFailed"; model: string; assertion: string; counterexamplePath?: string };
 ```
 
-핵심 규칙:
+Key rules:
 
-- core는 `CodeBlockNode`, `TableNode`, `SpecId`, event schema만 고정한다
-- adapter는 `describe`로 자신이 지원하는 block info와 fixture name을 광고한다
-- `specdown-cli`는 그 광고를 기준으로 어떤 adapter가 어떤 case를 처리할지 결정한다
-- 실행 중에는 문서 순서를 유지한 채 `runCase`를 순서대로 보낸다
-- adapter는 process-local state를 유지할 수 있고, `casePassed.bindings`로 값을 core에 돌려줄 수 있다
-- adapter failure는 가능하면 `message`뿐 아니라 `expected`와 `actual`도 구조화해서 보낸다
-- built-in adapter가 있더라도 같은 protocol contract를 따라야 한다
-- 언어별 helper SDK는 optional convenience일 뿐, architecture의 핵심이 아니다
+- Core fixes only `CodeBlockNode`, `TableNode`, `SpecId`, and event schema
+- An adapter advertises the block info and fixture names it supports via `describe`
+- `specdown-cli` decides which adapter handles which case based on that advertisement
+- During execution, `runCase` requests are sent in document order
+- An adapter can maintain process-local state and return values to core via `casePassed.bindings`
+- On adapter failure, provide not just `message` but also structured `expected` and `actual` when possible
+- Built-in adapters must follow the same protocol contract
+- Language-specific helper SDKs are optional conveniences, not architectural essentials
 
 
-## 설정 방식
+## Configuration
 
-구현팀은 data-only 설정 파일을 기본값으로 채택한다.
-canonical config는 특정 언어 runtime에 종속되면 안 된다.
+Implementation teams adopt a data-only configuration file as the default.
+The canonical config must not depend on any specific language runtime.
 
-예시:
+Example:
 
 ```json
 {
@@ -256,15 +256,15 @@ canonical config는 특정 언어 runtime에 종속되면 안 된다.
 }
 ```
 
-언어별 helper가 이 파일을 생성해 줄 수는 있지만, 정본 format은 data-only여야 한다.
-v1에서는 `specdown.json` 하나면 충분하다.
+Language-specific helpers may generate this file, but the canonical format must be data-only.
+For v1, a single `specdown.json` is sufficient.
 
 
-## 문서 문법
+## Document Grammar
 
 ### Frontmatter
 
-spec 파일 상단에 선택적으로 YAML 형식의 frontmatter를 둘 수 있다.
+An optional YAML frontmatter can be placed at the top of a spec file.
 
 ```markdown
 ---
@@ -272,43 +272,43 @@ timeout: 5000
 ---
 ```
 
-| 키 | 의미 |
-|----|------|
-| `timeout` | adapter 케이스별 실행 제한 시간 (밀리초). 0이면 무제한 |
+| Key | Meaning |
+|-----|---------|
+| `timeout` | Per-case execution time limit in milliseconds. 0 means unlimited |
 
-frontmatter가 없으면 기본값(무제한)이 적용된다.
+If frontmatter is absent, defaults (unlimited) apply.
 
-### 구조 매핑
+### Structure Mapping
 
-Heading hierarchy는 테스트 suite 계층으로 변환된다.
+Heading hierarchy is converted into a test suite hierarchy.
 
-| Markdown | 의미 |
-|----------|------|
+| Markdown | Meaning |
+|----------|---------|
 | `#`, `##`, `###` | suite hierarchy |
-| 일반 산문 | 문서 본문, 실행 대상 아님 |
-| fenced code block | 실행 블록 또는 모델 블록 |
-| HTML comment directive | setup, teardown, fixture, alloy reference 등 메타 지시자 |
-| Markdown table | fixture directive와 결합될 때 실행 데이터 |
+| plain prose | document body, not an execution target |
+| fenced code block | executable block or model block |
+| HTML comment directive | meta directives such as setup, teardown, fixture, alloy reference |
+| Markdown table | execution data when combined with a fixture directive |
 
-### 지원 블록
+### Supported Blocks
 
-코어는 다음 규칙만 안다.
+The core knows only the following rules.
 
-| 표기 | core 의미 | 실행 의미 제공 주체 |
-|------|----------|--------------------|
+| Notation | Core meaning | Execution semantics provider |
+|----------|-------------|------------------------------|
 | `run:<target>` | side-effecting executable block | block adapter |
 | `verify:<target>` | assertion-bearing executable block | block adapter |
-| `expect` | assertion block | block adapter 또는 core helper |
+| `expect` | assertion block | block adapter or core helper |
 | `test:<name>` | named high-level test DSL | block adapter |
 | `alloy:model(name)` | embedded Alloy fragment | core + Alloy runner |
 
-`<target>`과 `<name>`의 실제 의미는 core가 아니라 adapter가 정한다.
+The actual meaning of `<target>` and `<name>` is determined by the adapter, not the core.
 
-### 변수
+### Variables
 
-문서 안에서 동적 값을 연결하기 위해 변수 바인딩을 지원한다.
+Variable bindings are supported to connect dynamic values within a document.
 
-예시:
+Example:
 
 ````markdown
 ```run:shell -> $channelId
@@ -320,12 +320,12 @@ ${channelId} matches /^ch-/
 ```
 ````
 
-규칙:
+Rules:
 
-- 상위 섹션 변수는 하위 섹션에서 읽을 수 있다
-- 같은 깊이의 형제 섹션끼리도 공유 가능하다 (문서 순서 기준, 앞에서 캡처한 값만)
-- unresolved variable은 compile-time error다
-- `\${...}`로 이스케이프하면 리터럴 `${...}`로 전달된다
+- Variables from parent sections are readable in child sections
+- Sibling sections at the same depth can share variables (in document order, only previously captured values)
+- An unresolved variable is a compile-time error
+- Escaping with `\${...}` passes a literal `${...}`
 
 ### Setup / Teardown
 
@@ -334,54 +334,54 @@ ${channelId} matches /^ch-/
 <!-- teardown -->
 ```
 
-이 지시자는 현재 heading subtree 전체에 적용된다.
-실제 훅으로 바꾸는 책임은 runtime adapter에 있다.
+These directives apply to the entire current heading subtree.
+The responsibility for converting them into actual hooks lies with the runtime adapter.
 
 
-## 표 기반 명세
+## Table-Based Specifications
 
-FIT 스타일의 핵심은 유지하되, 코어는 fixture adapter 구조로 일반화한다.
+The essence of the FIT style is preserved, but the core generalizes via a fixture adapter structure.
 
-예시:
+Example:
 
 ````markdown
 <!-- fixture:write-permission(user=alan) -->
 | path                       | write | reason                |
 |----------------------------|-------|-----------------------|
-| /private/test.txt          | yes   | 개인 작업 공간        |
-| /MEMORY.md                 | yes   | 실행 간 기억 지속     |
-| /channels/general/chat.log | no    | 채널은 post로만 기록  |
+| /private/test.txt          | yes   | personal workspace    |
+| /MEMORY.md                 | yes   | persists across runs  |
+| /channels/general/chat.log | no    | channels are post-only|
 ````
 
-규칙:
+Rules:
 
-- table은 바로 위의 `fixture` directive와 결합될 때만 executable이다
-- 첫 행은 반드시 header다
-- 각 fixture adapter는 필요한 컬럼을 명시적으로 검증해야 한다
-- unknown fixture는 compile-time error다
-- 각 row는 독립된 test case이자 독립된 report row가 된다
+- A table is executable only when combined with a `fixture` directive immediately above it
+- The first row must be a header
+- Each fixture adapter must explicitly validate the required columns
+- An unknown fixture is a compile-time error
+- Each row becomes an independent test case and an independent report row
 
-fixture adapter contract는 다음 요구를 만족해야 한다.
+The fixture adapter contract must satisfy the following requirements.
 
-- 입력 table을 row 단위 실행 계획으로 확장할 수 있어야 한다
-- 실패 시 어느 row가 왜 실패했는지 `SpecId`와 함께 reportable해야 한다
-- 가능한 경우 expected/actual diff를 구조화해서 제공해야 한다
+- It must be able to expand an input table into a per-row execution plan
+- On failure, it must report which row failed and why, together with a `SpecId`
+- When possible, it should provide a structured expected/actual diff
 
 
 ## Literate Alloy
 
-Alloy는 문서 안에 자연어와 weaving 되는 것이 중요하다.
-v1에서는 다음 규칙으로 고정한다.
+It is important that Alloy is woven with natural language inside the document.
+For v1, the following rules are fixed.
 
-### 임베딩 규칙
+### Embedding Rules
 
-`alloy:model(name)`는 logical model `name`에 속한 fragment다.
-같은 `name`을 가진 fragment는 문서 순서대로 결합된다.
+`alloy:model(name)` is a fragment belonging to the logical model `name`.
+Fragments with the same `name` are combined in document order.
 
-예시:
+Example:
 
 ````markdown
-텍스트로 개념을 설명한다.
+Explain the concept in prose.
 
 ```alloy:model(access)
 module access
@@ -390,7 +390,7 @@ sig Node {}
 sig Path {}
 ```
 
-private 규칙의 이유를 설명한다.
+Explain the rationale for the private rule.
 
 ```alloy:model(access)
 sig PrivatePath in Path {}
@@ -403,221 +403,221 @@ check privateIsolation for 5
 ```
 ````
 
-### 결합 규칙
+### Combination Rules
 
-- 같은 model name의 fragment는 하나의 virtual `.als` 파일로 합쳐진다
-- 첫 fragment만 `module` 선언을 포함할 수 있다
-- 이후 fragment에 `module`이 다시 나오면 compile-time error다
-- 생성된 model에는 source mapping comment를 삽입한다
-  - 예: `-- specdown-source: docs/foo.spec.md#Access/Isolation`
+- Fragments with the same model name are merged into a single virtual `.als` file
+- Only the first fragment may contain a `module` declaration
+- A `module` declaration in a subsequent fragment is a compile-time error
+- Source mapping comments are inserted into the generated model
+  - e.g., `-- specdown-source: docs/foo.spec.md#Access/Isolation`
 
-### 모델 참조
+### Model Reference
 
-문서 독자가 어떤 assertion이 검증되었는지 쉽게 볼 수 있도록 explicit directive를 둔다.
+An explicit directive is provided so document readers can easily see which assertions have been verified.
 
 ```markdown
 <!-- alloy:ref(access#privateIsolation, scope=5) -->
 ```
 
-이 directive는 다음 역할을 한다.
+This directive serves the following purposes.
 
-- 현재 문단/섹션과 특정 model check 결과를 연결
-- HTML report에 badge 또는 status row로 노출
-- 실패 시 대응 counterexample artifact로 링크
+- Links the current paragraph/section to a specific model check result
+- Displayed as a badge or status row in the HTML report
+- Links to a corresponding counterexample artifact on failure
 
-자연어 blockquote는 자유롭게 써도 되지만, machine-readable contract는 위 directive를 기준으로 한다.
+Natural-language blockquotes may be used freely, but the machine-readable contract is based on the above directive.
 
 
-## 실행 결과 HTML 뷰
+## Execution Result HTML View
 
-HTML 리포트는 v1의 핵심 deliverable이다.
-목표는 "테스트 로그"가 아니라 "실행된 명세서"를 보여 주는 것이다.
+The HTML report is a core deliverable of v1.
+The goal is to show an "executed specification," not a "test log."
 
-### 기본 요구사항
+### Basic Requirements
 
-- heading 구조를 그대로 유지한 문서 레이아웃
-- prose는 그대로 표시하고, 실행 결과만 상태로 주석화
-- section, code block, table row, alloy reference 단위 상태 표시
-- pass는 녹색 배경 또는 badge
-- fail은 붉은 배경 또는 badge
-- fail 항목에는 기대값/실제값/오류 메시지/stack trace/stdout/stderr를 인라인 또는 펼침 패널로 표시
-- summary pane 제공
-  - 총 실행 수
-  - pass/fail 수
-  - 실패 목록
-  - model check 결과
+- Document layout preserving the heading structure
+- Prose displayed as-is; only execution results annotated with status
+- Status indicators at section, code block, table row, and alloy reference levels
+- Pass shown with green background or badge
+- Fail shown with red background or badge
+- Failed items display expected value/actual value/error message/stack trace/stdout/stderr inline or in an expandable panel
+- Summary pane provided
+  - Total execution count
+  - Pass/fail counts
+  - Failure list
+  - Model check results
 
-### 아티팩트 요구사항
+### Artifact Requirements
 
-최소 산출물:
+Minimum deliverables:
 
 - `.artifacts/specdown/report.html`
 - `.artifacts/specdown/report.json`
 - `.artifacts/specdown/models/*.als`
-- `.artifacts/specdown/counterexamples/*` (실패 시)
+- `.artifacts/specdown/counterexamples/*` (on failure)
 
-### UX 원칙
+### UX Principles
 
-- JavaScript가 없어도 본문과 주요 실패 정보는 읽혀야 한다
-- anchor link로 원문 heading에 바로 이동 가능해야 한다
-- 실패 row와 실패 block은 fold/unfold가 가능해야 한다
-- 동일 문서의 prose와 결과를 분리하지 않는다
+- The body and key failure information must be readable without JavaScript
+- Anchor links must allow jumping directly to original headings
+- Failed rows and failed blocks must support fold/unfold
+- Prose and results from the same document must not be separated
 
 
 ## CLI
 
-독립 팀이 구현할 CLI 표면은 다음 정도면 충분하다.
+The CLI surface for an independent team to implement is roughly as follows.
 
 ```bash
-specdown run                          # 기본 실행
-specdown run -filter "보드" -jobs 4   # 필터링 + 병렬 실행
-specdown run -dry-run                 # 파싱·검증만 수행
-specdown version                      # 버전 출력
-specdown alloy dump                   # Alloy 모델 .als 파일만 생성
+specdown run                          # default execution
+specdown run -filter "board" -jobs 4  # filtering + parallel execution
+specdown run -dry-run                 # parse and validate only
+specdown version                      # print version
+specdown alloy dump                   # generate only Alloy model .als files
 ```
 
-의미:
+Meaning:
 
-- `run`: Markdown parse, adapter 실행, embedded Alloy 검사, model bundle 생성, report artifact 생성을 한 번에 수행한다
-- `version`: 빌드 시 주입된 버전 문자열을 출력한다
-- `alloy dump`: adapter 실행 없이 Alloy 모델 파일만 생성한다
+- `run`: performs Markdown parsing, adapter execution, embedded Alloy checks, model bundle generation, and report artifact generation in one pass
+- `version`: prints the version string injected at build time
+- `alloy dump`: generates only Alloy model files without running adapters
 
-v1에서는 `specdown run`이 compile + execute + report를 한 번에 수행하는 기본 경로다.
+In v1, `specdown run` is the default path that performs compile + execute + report in one pass.
 
-실패 시 각 실패 항목의 heading path, 블록/fixture 이름, 오류 메시지를 stderr에 출력한 뒤 요약을 표시한다.
+On failure, it prints each failed item's heading path, block/fixture name, and error message to stderr, followed by a summary.
 
 
-## 구현 단계
+## Implementation Phases
 
-독립 팀에 전달할 구현 순서는 다음으로 고정한다.
+The implementation order for handoff to an independent team is fixed as follows.
 
-### Phase 1: Core 문법과 serializable event schema 고정
+### Phase 1: Fix Core Grammar and Serializable Event Schema
 
-목표:
+Goals:
 
-- parser, AST, `SpecId`, execution plan, event schema를 고정
-- adapter에 넘길 수 있는 JSON-serializable node shape를 고정
+- Fix parser, AST, `SpecId`, execution plan, and event schema
+- Fix the JSON-serializable node shape to be passed to adapters
 
-산출물:
+Deliverables:
 
 - `specdown-core`
-- execution plan / event schema 문서
-- compile-time error 규칙 문서
+- Execution plan / event schema documentation
+- Compile-time error rules documentation
 
-### Phase 2: Adapter protocol과 host 고정
+### Phase 2: Fix Adapter Protocol and Host
 
-목표:
+Goals:
 
-- adapter 경계를 early phase에 고정해 프로젝트별 확장이 코어 변경 없이 가능하게 함
-- 각 프로젝트가 원하는 언어로 최소 노력 adapter를 만들 수 있게 함
+- Fix the adapter boundary early so project-specific extensions are possible without core changes
+- Enable each project to build minimal-effort adapters in any language
 
-산출물:
+Deliverables:
 
 - `specdown-adapter-protocol`
 - `specdown-cli` adapter launcher
 - `specdown.json` loader
-- stdin/stdout NDJSON protocol 문서
-- 서로 다른 두 언어로 작성된 minimal reference adapter 2개
+- stdin/stdout NDJSON protocol documentation
+- Two minimal reference adapters written in two different languages
 
-### Phase 3: HTML reporter
+### Phase 3: HTML Reporter
 
-목표:
+Goals:
 
-- event stream만으로 문서 중심 HTML 리포트 생성
+- Generate a document-centric HTML report from the event stream alone
 
-산출물:
+Deliverables:
 
 - `specdown-reporter-html`
 - `report.json` schema
-- anchorable static HTML artifact
+- Anchorable static HTML artifact
 
-### Phase 4: Optional built-in generic adapters
+### Phase 4: Optional Built-in Generic Adapters
 
-목표:
+Goals:
 
-- 범용성이 높은 adapter만 builtin package로 제공
-- architecture는 builtin adapter 없이도 성립하게 유지
+- Provide only highly reusable adapters as builtin packages
+- Maintain architecture viability without any builtin adapter
 
-산출물:
+Deliverables:
 
-- `specdown-adapter-shell` 같은 optional adapter 1~2개
-- optional helper SDK 또는 adapter template
+- One or two optional adapters such as `specdown-adapter-shell`
+- Optional helper SDK or adapter template
 
-### Phase 5: Table fixtures
+### Phase 5: Table Fixtures
 
-목표:
+Goals:
 
-- FIT 스타일 표 명세를 fixture adapter로 일반화
+- Generalize FIT-style table specifications via fixture adapters
 
-산출물:
+Deliverables:
 
-- fixture adapter protocol extension
-- sample fixtures 2~3개
-- row-level reporting
+- Fixture adapter protocol extension
+- Two or three sample fixtures
+- Row-level reporting
 
-### Phase 6: Alloy support
+### Phase 6: Alloy Support
 
-목표:
+Goals:
 
-- literate Alloy fragment 추출, bundle 생성, model check 연결
+- Literate Alloy fragment extraction, bundle generation, and model check integration
 
-산출물:
+Deliverables:
 
 - `specdown-alloy`
-- embedded model source mapping
-- counterexample artifact wiring
+- Embedded model source mapping
+- Counterexample artifact wiring
 
-### Phase 7: Reference product adapter
+### Phase 7: Reference Product Adapter
 
-목표:
+Goals:
 
-- 특정 제품의 DSL을 adapter로 분리해 통합 예시 제공
+- Provide an integration example by separating a specific product's DSL into an adapter
 
-산출물:
+Deliverables:
 
-- reference adapter package 1개
-- reference specs 1~3개 migration
-
-
-## 수용 기준
-
-독립 팀 handoff 기준의 완료 조건은 다음과 같다.
-
-1. `specdown-core`가 특정 테스트 프레임워크나 제품 코드에 의존하지 않는다.
-2. 하나의 `.spec.md` 문서에 prose, executable block, fixture table, Alloy fragment를 함께 쓸 수 있다.
-3. 같은 model name을 가진 `alloy:model(...)` fragment가 문서 순서대로 결합된다.
-4. HTML report에서 section, block, row, alloy check 상태가 각각 보인다.
-5. failure detail이 문서 컨텍스트를 잃지 않고 표시된다.
-6. 프로젝트는 data-only config에 adapter command 하나만 등록해도 문서를 실행할 수 있다.
-7. adapter는 stdin/stdout protocol만 따르면 어떤 언어로도 구현할 수 있다.
-8. 제품 특화 DSL과 helper는 core가 아니라 adapter에만 존재한다.
+- One reference adapter package
+- Migration of one to three reference specs
 
 
-## 예시
+## Acceptance Criteria
 
-### 문서 예시
+The completion criteria for independent team handoff are as follows.
+
+1. `specdown-core` does not depend on any specific test framework or product code.
+2. A single `.spec.md` document can contain prose, executable blocks, fixture tables, and Alloy fragments together.
+3. `alloy:model(...)` fragments with the same model name are combined in document order.
+4. The HTML report shows status for sections, blocks, rows, and alloy checks individually.
+5. Failure details are displayed without losing document context.
+6. A project can execute documents by registering just one adapter command in a data-only config.
+7. An adapter can be implemented in any language as long as it follows the stdin/stdout protocol.
+8. Product-specific DSLs and helpers exist only in adapters, not in core.
+
+
+## Examples
+
+### Document Example
 
 ````markdown
 ## Write permissions
 
-노드는 최소 권한 원칙을 따른다.
+Nodes follow the principle of least privilege.
 
 <!-- alloy:ref(access#writeMinimality, scope=5) -->
 
 <!-- fixture:write-permission(user=alan) -->
 | path                       | write | reason                |
 |----------------------------|-------|-----------------------|
-| /private/test.txt          | yes   | 개인 작업 공간        |
-| /MEMORY.md                 | yes   | 실행 간 기억 지속     |
-| /channels/general/chat.log | no    | 채널은 post로만 기록  |
+| /private/test.txt          | yes   | personal workspace    |
+| /MEMORY.md                 | yes   | persists across runs  |
+| /channels/general/chat.log | no    | channels are post-only|
 ````
 
-### Alloy weaving 예시
+### Alloy Weaving Example
 
 ````markdown
 ## Private Isolation
 
-private 경로는 소유자 본인만 읽을 수 있어야 한다.
+Private paths must be readable only by their owner.
 
 ```alloy:model(access)
 module access
@@ -627,7 +627,7 @@ sig Path { owner: one Node }
 sig PrivatePath in Path {}
 ```
 
-위 개념에서 "읽기 가능" 관계를 도입한다.
+Introduce a "can read" relation from the above concepts.
 
 ```alloy:model(access)
 pred canRead[n: Node, p: Path] {
@@ -647,20 +647,20 @@ check privateIsolation for 5
 ````
 
 
-## 평가
+## Evaluation
 
-| 기준 | 기존 방식 | `specdown` |
-|------|----------|------------|
-| 문서 가독성 | 설계와 테스트가 분리됨 | 하나의 literate spec 문서 |
-| 형식 검증 | 별도 모델 없거나 수동 | Alloy로 연결 |
-| 테스트 추가 비용 | 코드 작성 필요 | 표 행 추가 또는 블록 추가 |
-| 결과 가시성 | 테스트 로그 중심 | HTML 문서 중심 |
-| 제품 독립성 | 제품마다 새로 구현 | core + adapter 구조 |
-| 재사용성 | 낮음 | 런타임/리포터/DSL 교체 가능 |
+| Criterion | Traditional approach | `specdown` |
+|-----------|---------------------|------------|
+| Document readability | Design and tests are separated | Single literate spec document |
+| Formal verification | No separate model, or manual | Connected via Alloy |
+| Test addition cost | Requires code | Add a table row or a block |
+| Result visibility | Test-log centric | HTML-document centric |
+| Product independence | Re-implement per product | Core + adapter architecture |
+| Reusability | Low | Runtime/reporter/DSL are swappable |
 
 
-## 결론
+## Conclusion
 
-`specdown`은 "Markdown 기반 literate specification + embedded Alloy + FIT 스타일 표 명세 + HTML 실행 리포트"를 reusable core로 제공하는 시스템이다.
+`specdown` is a system that provides "Markdown-based literate specification + embedded Alloy + FIT-style table specifications + HTML execution report" as a reusable core.
 
-독립 팀은 이 문서를 기준으로 core와 adapter 경계를 분명히 유지한 채 바로 구현을 시작할 수 있어야 한다.
+Independent teams should be able to start implementation immediately based on this document, maintaining clear boundaries between core and adapters.

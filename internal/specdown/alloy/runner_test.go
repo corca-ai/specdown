@@ -15,12 +15,12 @@ func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {
 		Fragments: []core.AlloyFragmentSpec{
 			{
 				Model:       "board",
-				HeadingPath: []string{"Pocket Board", "형식 규칙"},
+				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Source:      "module board\n\nsig Card {}",
 			},
 			{
 				Model:       "board",
-				HeadingPath: []string{"Pocket Board", "형식 규칙"},
+				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Source:      "assert cardShape { some Card }",
 			},
 		},
@@ -28,7 +28,7 @@ func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {
 		{
 			ID: core.SpecID{
 				File:        "specs/pocket-board.spec.md",
-				HeadingPath: []string{"Pocket Board", "형식 규칙"},
+				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Ordinal:     1,
 			},
 			Model:     "board",
@@ -37,7 +37,7 @@ func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {
 		},
 	})
 
-	if !strings.Contains(source, "-- specdown-source: specs/pocket-board.spec.md#Pocket Board/형식 규칙") {
+	if !strings.Contains(source, "-- specdown-source: specs/pocket-board.spec.md#Pocket Board/Formal Rules") {
 		t.Fatalf("expected source mapping comment, got %q", source)
 	}
 	if !strings.Contains(source, "module board") || !strings.Contains(source, "assert cardShape { some Card }") {
@@ -53,9 +53,9 @@ func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {
 
 func TestAnnotateAlloyFailureMapsBundleLineToSource(t *testing.T) {
 	location, ok := locateAlloyFailure([]string{
-		"specs/pocket-board.spec.md#Pocket Board/형식 규칙",
-		"specs/pocket-board.spec.md#Pocket Board/형식 규칙",
-		"specs/pocket-board.spec.md#Pocket Board/형식 규칙",
+		"specs/pocket-board.spec.md#Pocket Board/Formal Rules",
+		"specs/pocket-board.spec.md#Pocket Board/Formal Rules",
+		"specs/pocket-board.spec.md#Pocket Board/Formal Rules",
 	}, "Syntax error at line 3 column 1")
 	if !ok {
 		t.Fatal("expected failure location")
@@ -64,7 +64,7 @@ func TestAnnotateAlloyFailureMapsBundleLineToSource(t *testing.T) {
 	if !strings.Contains(message, "bundle line 3") {
 		t.Fatalf("expected bundle line, got %q", message)
 	}
-	if !strings.Contains(message, "source: specs/pocket-board.spec.md#Pocket Board/형식 규칙") {
+	if !strings.Contains(message, "source: specs/pocket-board.spec.md#Pocket Board/Formal Rules") {
 		t.Fatalf("expected source annotation, got %q", message)
 	}
 }
@@ -130,7 +130,7 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 		Fragments: []core.AlloyFragmentSpec{
 			{
 				Model:       "board",
-				HeadingPath: []string{"Pocket Board", "형식 규칙"},
+				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Source:      "module board\n\nsig Card {}",
 			},
 		},
@@ -138,7 +138,7 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 		{
 			ID: core.SpecID{
 				File:        "specs/pocket-board.spec.md",
-				HeadingPath: []string{"Pocket Board", "형식 규칙"},
+				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Ordinal:     1,
 			},
 			Model:     "board",
@@ -164,7 +164,7 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 	if !strings.Contains(text, `"bundlePath": ".artifacts/specdown/models/specs-pocket-board-spec-md-board.als"`) {
 		t.Fatalf("expected bundle path in source map, got %q", text)
 	}
-	if !strings.Contains(text, `"sourceRef": "specs/pocket-board.spec.md#Pocket Board/형식 규칙"`) {
+	if !strings.Contains(text, `"sourceRef": "specs/pocket-board.spec.md#Pocket Board/Formal Rules"`) {
 		t.Fatalf("expected source ref in source map, got %q", text)
 	}
 	if ext := filepath.Ext(bundle.SourceMapAbsolutePath); ext != ".json" {

@@ -1,55 +1,55 @@
 # Pocket Card
 
-카드는 보드 안에서 작업을 추적하는 단위다.
+A card is the unit for tracking work within a board.
 
-먼저 보드를 만든다.
+First, create a board.
 
 ```run:board -> $boardName
 create-board
 ```
 
-카드를 만들면 시스템은 새 카드 식별자를 반환해야 한다.
+When a card is created, the system must return a new card identifier.
 
 ```run:board -> $cardId
-create-card "${boardName}" "명세 쓰기"
+create-card "${boardName}" "write spec"
 ```
 
-## 카드 조회
+## Card Lookup
 
-방금 생성한 카드는 생성한 보드 안에서 바로 조회 가능해야 한다.
+A card just created must be immediately queryable within the board it was created in.
 
 <!-- fixture:card-exists -->
 | board | card | exists |
 | --- | --- | --- |
-| ${boardName} | ${cardId} | 예 |
+| ${boardName} | ${cardId} | yes |
 
-새로 만든 카드는 항상 `todo` 컬럼에 놓여야 한다.
+A newly created card must always be placed in the `todo` column.
 
 <!-- fixture:card-column -->
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | todo |
 
-## 카드 이동
+## Card Movement
 
-카드는 현재 작업 상태를 반영하도록 다른 컬럼으로 이동할 수 있어야 한다.
+A card must be movable to another column to reflect its current work status.
 
 ```run:board
 move-card "${boardName}" "${cardId}" doing
 ```
 
-### doing으로 이동
+### Move to doing
 
-`doing`으로 이동한 카드는 같은 보드에서 `doing` 컬럼으로 조회되어야 한다.
+A card moved to `doing` must be queryable under the `doing` column in the same board.
 
 <!-- fixture:card-column -->
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | doing |
 
-### done으로 이동
+### Move to done
 
-작업이 끝난 카드는 `done`으로 이동할 수 있어야 한다.
+A completed card must be movable to `done`.
 
 ```run:board
 move-card "${boardName}" "${cardId}" done
@@ -60,80 +60,80 @@ move-card "${boardName}" "${cardId}" done
 | --- | --- | --- |
 | ${boardName} | ${cardId} | done |
 
-### 존재하지 않는 컬럼으로 이동하면 오류
+### Moving to a nonexistent column should fail
 
-정의되지 않은 컬럼 이름으로 이동하면 오류를 반환해야 한다.
+Moving to an undefined column name must return an error.
 
 ```verify:board
 moving "${cardId}" to "invalid" should fail
 ```
 
-### 같은 컬럼으로 이동해도 오류가 아니다
+### Moving to the same column is not an error
 
-이미 있는 컬럼으로 다시 이동해도 정상 처리되어야 한다.
+Moving to the column the card is already in must be handled without error.
 
 ```verify:board
 moving "${cardId}" to current column should succeed
 ```
 
-## 카드 제목
+## Card Title
 
-### 제목은 빈 문자열일 수 없다
+### Title must not be empty
 
-카드 제목이 비어 있으면 생성이 거부되어야 한다.
+Creating a card with an empty title must be rejected.
 
 ```verify:board
 card with empty title should be rejected
 ```
 
-### 제목 길이는 256자 이하여야 한다
+### Title length must be at most 256 characters
 
-257자 이상의 제목은 거부되어야 한다.
+Titles of 257 characters or more must be rejected.
 
 ```verify:board
 card title length must be at most 256
 ```
 
-### 제목은 수정할 수 있다
+### Title can be modified
 
-기존 카드의 제목을 변경할 수 있어야 한다.
+It must be possible to change the title of an existing card.
 
 ```run:board
-rename-card "${boardName}" "${cardId}" "명세 완성"
+rename-card "${boardName}" "${cardId}" "spec complete"
 ```
 
 ```verify:board
-card "${cardId}" title should be "명세 완성"
+card "${cardId}" title should be "spec complete"
 ```
 
-## 카드 삭제
+## Card Deletion
 
-### 존재하는 카드를 삭제할 수 있다
+### An existing card can be deleted
 
-카드를 삭제하면 더 이상 조회되지 않아야 한다.
+Once a card is deleted, it must no longer be queryable.
 
 ```run:board
 delete-card "${boardName}" "${cardId}"
 ```
 
-### 삭제한 카드는 조회되지 않는다
+### A deleted card is not queryable
 
 <!-- fixture:card-exists -->
 | board | card | exists |
 | --- | --- | --- |
-| ${boardName} | ${cardId} | 아니오 |
+| ${boardName} | ${cardId} | no |
 
-### 존재하지 않는 카드를 삭제하면 오류
+### Deleting a nonexistent card should fail
 
-한 번도 만들지 않은 카드를 삭제하려 하면 오류를 반환해야 한다.
+Attempting to delete a card that was never created must return an error.
 
 ```verify:board
 deleting nonexistent card should fail
 ```
 
-## 형식 규칙
+## Formal Rules
 
-`Pocket Board`의 상태 모델은 카드가 항상 하나의 컬럼에만 속한다고 본다.
+The state model of `Pocket Board` assumes that a card always belongs to exactly one column.
 
 ```alloy:model(board)
 module board
@@ -149,7 +149,7 @@ sig Card {
 }
 ```
 
-이 모델에서 각 카드는 정확히 하나의 컬럼을 가져야 한다.
+In this model, each card must have exactly one column.
 
 ```alloy:model(board)
 assert cardHasExactlyOneColumn {
@@ -161,9 +161,9 @@ check cardHasExactlyOneColumn for 5
 
 <!-- alloy:ref(board#cardHasExactlyOneColumn, scope=5) -->
 
-### 카드는 정확히 하나의 보드에 속해야 한다
+### A card must belong to exactly one board
 
-카드가 여러 보드에 동시에 속하는 것은 불가능해야 한다.
+It must be impossible for a card to belong to multiple boards simultaneously.
 
 ```alloy:model(board)
 assert cardBelongsToOneBoard {
@@ -175,9 +175,9 @@ check cardBelongsToOneBoard for 5
 
 <!-- alloy:ref(board#cardBelongsToOneBoard, scope=5) -->
 
-### 의도적 반례
+### Intentional Counterexample
 
-의도적으로 틀린 단언: 카드가 둘 이상의 컬럼을 가질 수 있다고 주장한다.
+An intentionally incorrect assertion: claims that a card can have more than one column.
 
 ```alloy:model(board)
 assert cardCanHaveMultipleColumns {

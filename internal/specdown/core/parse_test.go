@@ -9,27 +9,27 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	doc, err := ParseDocument("pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"소개 문단.",
+		"Introduction paragraph.",
 		"",
-		"## 변수 흐름",
+		"## Variable Flow",
 		"",
 		"```run:board -> $boardName",
 		"create-board",
 		"```",
 		"",
-		"### 생성한 보드 확인",
+		"### Verify Created Board",
 		"",
 		"```verify:board",
 		"board \"${boardName}\" should exist",
 		"```",
 		"",
-		"### 표 기반 확인",
+		"### Table Check",
 		"",
 		"<!-- fixture:board-exists -->",
 		"| board | exists |",
 		"| --- | --- |",
-		"| ${boardName} | 예 |",
-		"| ${boardName}-archive | 예 |",
+		"| ${boardName} | yes |",
+		"| ${boardName}-archive | yes |",
 		"",
 	}, "\n"))
 	if err != nil {
@@ -60,7 +60,7 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	if len(headings) != 4 {
 		t.Fatalf("expected 4 headings, got %d", len(headings))
 	}
-	if got := headings[2].HeadingPath; len(got) != 3 || got[0] != "Pocket Board" || got[2] != "생성한 보드 확인" {
+	if got := headings[2].HeadingPath; len(got) != 3 || got[0] != "Pocket Board" || got[2] != "Verify Created Board" {
 		t.Fatalf("unexpected heading path %#v", got)
 	}
 	if len(tables) != 1 {
@@ -111,7 +111,7 @@ func TestParseDocumentSupportsAlloyModelBlocksAndReferences(t *testing.T) {
 	doc, err := ParseDocument("pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 형식 규칙",
+		"## Formal Rules",
 		"",
 		"```alloy:model(board)",
 		"module board",

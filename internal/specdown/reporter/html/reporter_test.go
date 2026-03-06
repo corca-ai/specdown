@@ -31,14 +31,14 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 					RelativeTo: "specs/pocket-board.spec.md",
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n", HeadingPath: []string{"Pocket Board"}},
-						core.ProseNode{Raw: "\n설명 문단.\n\n"},
+						core.ProseNode{Raw: "\nDescription paragraph.\n\n"},
 						core.CodeBlockNode{
 							Block:  core.BlockSpec{Raw: "run:board -> $boardName", Kind: core.BlockKindRun, Target: "board", CaptureNames: []string{"boardName"}},
 							Source: "create-board",
 							Raw:    "```run:board -> $boardName\ncreate-board\n```\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
-								HeadingPath: []string{"Pocket Board", "변수 흐름"},
+								HeadingPath: []string{"Pocket Board", "Variable Flow"},
 								Ordinal:     1,
 							},
 						},
@@ -48,7 +48,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 							Raw:    "```verify:board\nboard \"${boardName}\" should exist\n```\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
-								HeadingPath: []string{"Pocket Board", "변수 흐름", "생성한 보드 확인"},
+								HeadingPath: []string{"Pocket Board", "Variable Flow", "Verify Created Board"},
 								Ordinal:     2,
 							},
 						},
@@ -57,25 +57,25 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 							Columns: []string{"board", "exists"},
 							Rows: []core.TableRowNode{
 								{
-									Cells: []string{"${boardName}", "예"},
-									Raw:   "| ${boardName} | 예 |\n",
+									Cells: []string{"${boardName}", "yes"},
+									Raw:   "| ${boardName} | yes |\n",
 									ID: &core.SpecID{
 										File:        "specs/pocket-board.spec.md",
-										HeadingPath: []string{"Pocket Board", "변수 흐름", "표 기반 확인"},
+										HeadingPath: []string{"Pocket Board", "Variable Flow", "Table Check"},
 										Ordinal:     3,
 									},
 								},
 								{
-									Cells: []string{"${boardName}-archive", "예"},
-									Raw:   "| ${boardName}-archive | 예 |\n",
+									Cells: []string{"${boardName}-archive", "yes"},
+									Raw:   "| ${boardName}-archive | yes |\n",
 									ID: &core.SpecID{
 										File:        "specs/pocket-board.spec.md",
-										HeadingPath: []string{"Pocket Board", "변수 흐름", "표 기반 확인"},
+										HeadingPath: []string{"Pocket Board", "Variable Flow", "Table Check"},
 										Ordinal:     4,
 									},
 								},
 							},
-							Raw: "| board | exists |\n| --- | --- |\n| ${boardName} | 예 |\n| ${boardName}-archive | 예 |\n",
+							Raw: "| board | exists |\n| --- | --- |\n| ${boardName} | yes |\n| ${boardName}-archive | yes |\n",
 						},
 					},
 				},
@@ -83,12 +83,12 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
-							HeadingPath: []string{"Pocket Board", "변수 흐름"},
+							HeadingPath: []string{"Pocket Board", "Variable Flow"},
 							Ordinal:     1,
 						},
 						Kind:           core.CaseKindCode,
 						Block:          "run:board",
-						Label:          "run:board @ 변수 흐름",
+						Label:          "run:board @ Variable Flow",
 						Template:       "create-board",
 						RenderedSource: "create-board",
 						Status:         core.StatusPassed,
@@ -100,12 +100,12 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
-							HeadingPath: []string{"Pocket Board", "변수 흐름", "생성한 보드 확인"},
+							HeadingPath: []string{"Pocket Board", "Variable Flow", "Verify Created Board"},
 							Ordinal:     2,
 						},
 						Kind:           core.CaseKindCode,
 						Block:          "verify:board",
-						Label:          "verify:board @ 생성한 보드 확인",
+						Label:          "verify:board @ Verify Created Board",
 						Template:       "board \"${boardName}\" should exist",
 						RenderedSource: "board \"board-1\" should exist",
 						Status:         core.StatusPassed,
@@ -113,30 +113,30 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
-							HeadingPath: []string{"Pocket Board", "변수 흐름", "표 기반 확인"},
+							HeadingPath: []string{"Pocket Board", "Variable Flow", "Table Check"},
 							Ordinal:     3,
 						},
 						Kind:          core.CaseKindTableRow,
 						Fixture:       "board-exists",
-						Label:         "fixture:board-exists @ 표 기반 확인 row 1",
+						Label:         "fixture:board-exists @ Table Check row 1",
 						Columns:       []string{"board", "exists"},
-						TemplateCells: []string{"${boardName}", "예"},
-						RenderedCells: []string{"board-1", "예"},
+						TemplateCells: []string{"${boardName}", "yes"},
+						RenderedCells: []string{"board-1", "yes"},
 						RowNumber:     1,
 						Status:        core.StatusPassed,
 					},
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
-							HeadingPath: []string{"Pocket Board", "변수 흐름", "표 기반 확인"},
+							HeadingPath: []string{"Pocket Board", "Variable Flow", "Table Check"},
 							Ordinal:     4,
 						},
 						Kind:          core.CaseKindTableRow,
 						Fixture:       "board-exists",
-						Label:         "fixture:board-exists @ 표 기반 확인 row 2",
+						Label:         "fixture:board-exists @ Table Check row 2",
 						Columns:       []string{"board", "exists"},
-						TemplateCells: []string{"${boardName}-archive", "예"},
-						RenderedCells: []string{"board-1-archive", "예"},
+						TemplateCells: []string{"${boardName}-archive", "yes"},
+						RenderedCells: []string{"board-1-archive", "yes"},
 						RowNumber:     2,
 						Status:        core.StatusFailed,
 						Message:       "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]",
@@ -218,7 +218,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, `<div class="cell-actual">boards: [&#34;board-1&#34;]</div>`) {
 		t.Fatalf("expected cell-actual with failure detail, got %q", html)
 	}
-	if !strings.Contains(html, "id=\"case-specs-pocket-board-spec-md-pocket-board-변수-흐름-표-기반-확인-4\"") {
+	if !strings.Contains(html, "id=\"case-specs-pocket-board-spec-md-pocket-board-variable-flow-table-check-4\"") {
 		t.Fatalf("expected failure anchor link, got %q", html)
 	}
 }
@@ -243,7 +243,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 					RelativeTo: "specs/pocket-board.spec.md",
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n", HeadingPath: []string{"Pocket Board"}},
-						core.HeadingNode{Level: 2, Text: "형식 규칙", Raw: "## 형식 규칙\n", HeadingPath: []string{"Pocket Board", "형식 규칙"}},
+						core.HeadingNode{Level: 2, Text: "Formal Rules", Raw: "## Formal Rules\n", HeadingPath: []string{"Pocket Board", "Formal Rules"}},
 						core.AlloyModelNode{
 							Model:  "board",
 							Source: "module board\n\nsig Card {}",
@@ -256,7 +256,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 							Raw:       "<!-- alloy:ref(board#cardShape, scope=5) -->\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
-								HeadingPath: []string{"Pocket Board", "형식 규칙"},
+								HeadingPath: []string{"Pocket Board", "Formal Rules"},
 								Ordinal:     1,
 							},
 						},
@@ -266,18 +266,18 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
-							HeadingPath: []string{"Pocket Board", "형식 규칙"},
+							HeadingPath: []string{"Pocket Board", "Formal Rules"},
 							Ordinal:     1,
 						},
 						Model:      "board",
 						Assertion:  "cardShape",
 						Scope:      "5",
-						Label:      "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+						Label:      "alloy:ref(board#cardShape, scope=5) @ Formal Rules",
 						Status:     core.StatusFailed,
 						Message:    "found counterexample for assertion \"cardShape\" at scope 5",
 						Expected:   "assertion \"cardShape\" holds for scope 5",
 						Actual:     "counterexample found",
-						SourceRef:  "specs/pocket-board.spec.md#Pocket Board/형식 규칙",
+						SourceRef:  "specs/pocket-board.spec.md#Pocket Board/Formal Rules",
 						BundleLine: 7,
 					},
 				},
@@ -386,7 +386,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 							Raw:    "```run:board -> $boardName\ncreate-board\n```\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
-								HeadingPath: []string{"Pocket Board", "보드 생성"},
+								HeadingPath: []string{"Pocket Board", "Board Creation"},
 								Ordinal:     1,
 							},
 						},
@@ -397,7 +397,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 							Raw:       "<!-- alloy:ref(board#cardShape, scope=5) -->\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
-								HeadingPath: []string{"Pocket Board", "형식 규칙"},
+								HeadingPath: []string{"Pocket Board", "Formal Rules"},
 								Ordinal:     2,
 							},
 						},
@@ -407,13 +407,13 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
-							HeadingPath: []string{"Pocket Board", "형식 규칙"},
+							HeadingPath: []string{"Pocket Board", "Formal Rules"},
 							Ordinal:     2,
 						},
 						Model:     "board",
 						Assertion: "cardShape",
 						Scope:     "5",
-						Label:     "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+						Label:     "alloy:ref(board#cardShape, scope=5) @ Formal Rules",
 						Status:    core.StatusPassed,
 					},
 				},

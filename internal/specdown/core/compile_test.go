@@ -53,8 +53,8 @@ func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
 		"<!-- fixture:board-exists -->",
 		"| board | exists |",
 		"| --- | --- |",
-		"| ${boardName} | 예 |",
-		"| ${boardName}-archive | 예 |",
+		"| ${boardName} | yes |",
+		"| ${boardName}-archive | yes |",
 		"",
 	}, "\n"))
 	if err != nil {
@@ -107,7 +107,7 @@ func TestCompileDocumentCollectsAlloyModelsAndChecks(t *testing.T) {
 	doc, err := ParseDocument("specs/pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 형식 규칙",
+		"## Formal Rules",
 		"",
 		"```alloy:model(board)",
 		"module board",
@@ -148,7 +148,7 @@ func TestCompileDocumentRejectsAlloyModuleRedeclarationInLaterFragment(t *testin
 	doc, err := ParseDocument("specs/pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 형식 규칙",
+		"## Formal Rules",
 		"",
 		"```alloy:model(board)",
 		"module board",
@@ -176,7 +176,7 @@ func TestCompileDocumentRejectsAlloyReferenceToUnknownModel(t *testing.T) {
 	doc, err := ParseDocument("specs/pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 형식 규칙",
+		"## Formal Rules",
 		"",
 		"<!-- alloy:ref(board#cardExists, scope=5) -->",
 		"",

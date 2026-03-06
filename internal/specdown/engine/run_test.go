@@ -24,51 +24,51 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 보드 생성",
+		"## Board Creation",
 		"",
 		"```run:board -> $boardName",
 		"create-board",
 		"```",
 		"",
-		"### 생성한 보드는 즉시 존재해야 한다",
+		"### A created board must exist immediately",
 		"",
 		"```verify:board",
 		"board \"${boardName}\" should exist",
 		"```",
 		"",
-		"### 생성하지 않은 보드는 존재하지 않아야 한다",
+		"### A board that was not created must not exist",
 		"",
 		"```verify:board",
 		"board \"${boardName}-archive\" should not exist",
 		"```",
 		"",
-		"### 카드 수명 주기",
+		"### Card Lifecycle",
 		"",
 		"```run:board -> $cardId",
-		"create-card \"${boardName}\" \"명세 쓰기\"",
+		"create-card \"${boardName}\" \"write spec\"",
 		"```",
 		"",
-		"#### 생성한 카드는 보드에 속해야 한다",
+		"#### A created card must belong to a board",
 		"",
 		"<!-- fixture:card-exists -->",
 		"| board | card | exists |",
 		"| --- | --- | --- |",
-		"| ${boardName} | ${cardId} | 예 |",
+		"| ${boardName} | ${cardId} | yes |",
 		"",
-		"#### 새 카드는 todo에 있어야 한다",
+		"#### New cards must be in todo",
 		"",
 		"<!-- fixture:card-column -->",
 		"| board | card | column |",
 		"| --- | --- | --- |",
 		"| ${boardName} | ${cardId} | todo |",
 		"",
-		"#### 카드는 다른 컬럼으로 이동할 수 있다",
+		"#### Cards can be moved to another column",
 		"",
 		"```run:board",
 		"move-card \"${boardName}\" \"${cardId}\" doing",
 		"```",
 		"",
-		"##### 이동한 카드는 doing에 있어야 한다",
+		"##### A moved card must be in doing",
 		"",
 		"<!-- fixture:card-column -->",
 		"| board | card | column |",
@@ -97,7 +97,7 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 	if got := report.Results[0].Cases[3].Bindings; len(got) != 1 || got[0].Name != "cardId" || got[0].Value != "card-1" {
 		t.Fatalf("unexpected card binding %#v", got)
 	}
-	if got := report.Results[0].Cases[4].RenderedCells; len(got) != 3 || got[0] != "board-1" || got[1] != "card-1" || got[2] != "예" {
+	if got := report.Results[0].Cases[4].RenderedCells; len(got) != 3 || got[0] != "board-1" || got[1] != "card-1" || got[2] != "yes" {
 		t.Fatalf("unexpected card exists row %#v", got)
 	}
 	if got := report.Results[0].Cases[7].RenderedCells; len(got) != 3 || got[2] != "doing" {
@@ -114,19 +114,19 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 보드 생성",
+		"## Board Creation",
 		"",
 		"```run:board -> $boardName",
 		"create-board",
 		"```",
 		"",
-		"### 카드 수명 주기",
+		"### Card Lifecycle",
 		"",
 		"```run:board -> $cardId",
-		"create-card \"${boardName}\" \"명세 쓰기\"",
+		"create-card \"${boardName}\" \"write spec\"",
 		"```",
 		"",
-		"#### 카드 컬럼 확인",
+		"#### Card Column Check",
 		"",
 		"<!-- fixture:card-column -->",
 		"| board | card | column |",
@@ -166,18 +166,18 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 보드 생성",
+		"## Board Creation",
 		"",
 		"```run:board -> $boardName",
 		"create-board board-1",
 		"```",
 		"",
-		"### 보드 존재 규칙",
+		"### Board Existence Rules",
 		"",
 		"<!-- fixture:board-exists -->",
 		"| board | exists |",
 		"| --- | --- |",
-		"| ${boardName} | 예 |",
+		"| ${boardName} | yes |",
 		"",
 	}, "\n")
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
@@ -206,7 +206,7 @@ func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 표 기반 확인",
+		"## Table Check",
 		"",
 		"<!-- fixture:unknown -->",
 		"| board | exists |",
@@ -236,13 +236,13 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"## 보드 생성",
+		"## Board Creation",
 		"",
 		"```run:board -> $boardName",
 		"create-board",
 		"```",
 		"",
-		"## 형식 규칙",
+		"## Formal Rules",
 		"",
 		"```alloy:model(board)",
 		"module board",
@@ -263,16 +263,16 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 		Adapters: helperAdapterConfig().Adapters,
 	}, adapterhost.Host{BaseDir: root}, fakeAlloyRunner{
 		results: map[string]core.AlloyCheckResult{
-			"specs/pocket-board.spec.md|Pocket Board|형식 규칙|2": {
+			"specs/pocket-board.spec.md|Pocket Board|Formal Rules|2": {
 				ID: core.SpecID{
 					File:        "specs/pocket-board.spec.md",
-					HeadingPath: []string{"Pocket Board", "형식 규칙"},
+					HeadingPath: []string{"Pocket Board", "Formal Rules"},
 					Ordinal:     2,
 				},
 				Model:     "board",
 				Assertion: "cardShape",
 				Scope:     "5",
-				Label:     "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+				Label:     "alloy:ref(board#cardShape, scope=5) @ Formal Rules",
 				Status:    core.StatusPassed,
 			},
 		},
@@ -284,7 +284,7 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	if report.Summary.SpecsPassed != 1 || report.Summary.CasesPassed != 1 || report.Summary.AlloyChecksPassed != 1 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].AlloyChecks[0].Label; got != "alloy:ref(board#cardShape, scope=5) @ 형식 규칙" {
+	if got := report.Results[0].AlloyChecks[0].Label; got != "alloy:ref(board#cardShape, scope=5) @ Formal Rules" {
 		t.Fatalf("unexpected alloy label %q", got)
 	}
 }
@@ -295,20 +295,20 @@ func TestFilterPlanKeepsMatchingCases(t *testing.T) {
 			{
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
-					{ID: core.SpecID{HeadingPath: []string{"Board", "생성"}}},
-					{ID: core.SpecID{HeadingPath: []string{"Board", "삭제"}}},
+					{ID: core.SpecID{HeadingPath: []string{"Board", "Create"}}},
+					{ID: core.SpecID{HeadingPath: []string{"Board", "Delete"}}},
 				},
 			},
 		},
 	}
-	filtered := filterPlan(plan, "생성")
+	filtered := filterPlan(plan, "Create")
 	if len(filtered.Documents) != 1 {
 		t.Fatalf("expected 1 document, got %d", len(filtered.Documents))
 	}
 	if len(filtered.Documents[0].Cases) != 1 {
 		t.Fatalf("expected 1 case, got %d", len(filtered.Documents[0].Cases))
 	}
-	if filtered.Documents[0].Cases[0].ID.HeadingPath[1] != "생성" {
+	if filtered.Documents[0].Cases[0].ID.HeadingPath[1] != "Create" {
 		t.Fatalf("unexpected case %v", filtered.Documents[0].Cases[0].ID.HeadingPath)
 	}
 }
@@ -322,7 +322,7 @@ func TestFilterPlanDropsDocumentsWithNoCases(t *testing.T) {
 			},
 		},
 	}
-	filtered := filterPlan(plan, "없는패턴")
+	filtered := filterPlan(plan, "nonexistent-pattern")
 	if len(filtered.Documents) != 0 {
 		t.Fatalf("expected 0 documents, got %d", len(filtered.Documents))
 	}
@@ -871,7 +871,7 @@ func parseHelperCommandArg(input string) (string, error) {
 
 func parseHelperExists(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "예", "yes", "true":
+	case "yes", "true":
 		return true
 	default:
 		return false

@@ -1,37 +1,37 @@
 # Agent Guide
 
-`specdown`은 Markdown-first executable specification 시스템이다.
-목표는 reusable core와 product-specific adapter를 분리하는 것이다.
+`specdown` is a Markdown-first executable specification system.
+The goal is to separate a reusable core from product-specific adapters.
 
 ## Read First
 
-작업 전 아래 문서를 먼저 읽는다.
+Read the following documents before starting work.
 
-- [System design](docs/design.md) — 범위, 용어, 패키지 경계, 문법, 인터페이스, 단계별 산출물의 기준 문서
-- [Documentation guide](docs/metadoc.md) — 문서를 짧고 정확하게 유지하는 규칙
-- [Build & Run](docs/build.md) — 빌드, 실행, 테스트 방법
+- [System design](docs/design.md) — scope, terminology, package boundaries, grammar, interfaces, and phased deliverables
+- [Documentation guide](docs/metadoc.md) — rules for keeping docs short and accurate
+- [Build & Run](docs/build.md) — how to build, run, and test
 
 ### User Guide
 
-- [Writing Specs](docs/guide-spec.md) — spec 파일 작성법
-- [Writing Adapters](docs/guide-adapter.md) — adapter 구현 방법과 프로토콜
-- [Configuration & Running](docs/guide-config.md) — 설정 파일과 실행
+- [Writing Specs](docs/guide-spec.md) — how to write spec files
+- [Writing Adapters](docs/guide-adapter.md) — how to implement adapters and the protocol
+- [Configuration & Running](docs/guide-config.md) — configuration files and execution
 
 ## Working Rules
 
-- `docs/design.md`를 현재 아키텍처의 source of truth로 취급한다.
-- `core`와 `adapter`의 책임 경계를 유지한다.
-- 문서와 예시는 현재 설계 용어를 그대로 따른다.
+- Treat `docs/design.md` as the source of truth for the current architecture.
+- Maintain the responsibility boundary between `core` and `adapter`.
+- Documentation and examples must follow current design terminology exactly.
   - executable block
   - fixture table
   - `alloy:model(name)`
   - HTML report
   - `SpecId`, `SpecEvent`
-- 오래된 용어와 이전 아키텍처 흔적은 발견 즉시 수정하거나 삭제한다.
+- Fix or remove outdated terminology and legacy architecture traces immediately upon discovery.
 
 ## Target Package Shape
 
-현재 설계의 권장 구성은 다음과 같다.
+The recommended package layout for the current design is as follows.
 
 - `specdown-core`
 - `specdown-cli`
@@ -43,9 +43,9 @@
 
 ## Documentation Notes
 
-- `AGENTS.md`는 entry point만 담고, 자세한 설명은 개별 문서로 분리한다.
-- 새 문서를 추가할 때는 작은 주제 단위로 만들고 관련 상위 문서에서 링크한다.
-- 자동 생성 문서는 버전 관리하지 않는다.
-- 예시는 실제 설계와 런타임 동작에 맞아야 한다.
+- `AGENTS.md` serves only as an entry point; detailed explanations go in separate documents.
+- When adding new documents, keep them focused on small topics and link from the relevant parent document.
+- Do not version control auto-generated documents.
+- Examples must match the actual design and runtime behavior.
 
-`CLAUDE.md`는 `AGENTS.md`의 symlink로 유지한다.
+`CLAUDE.md` is maintained as a symlink to `AGENTS.md`.

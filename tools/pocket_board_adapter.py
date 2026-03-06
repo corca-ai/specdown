@@ -228,9 +228,9 @@ def run_case(state, case):
 
 def parse_exists_value(raw):
     value = raw.strip().lower()
-    if value in ("yes", "true", "y", "예"):
+    if value in ("yes", "true", "y"):
         return True
-    if value in ("no", "false", "n", "아니오"):
+    if value in ("no", "false", "n"):
         return False
     raise SpecFailure(f'unsupported exists value {raw!r}')
 
