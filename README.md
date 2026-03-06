@@ -1,18 +1,16 @@
 # specdown
 
-Markdown-first executable specifications. Write readable documents that double as runnable tests.
+Executable specifications in Markdown. One document is both a readable spec and a runnable test suite.
 
 ```
 specdown run
 ```
 
-A single Markdown file can contain:
+## Why
 
-- **Executable blocks** — code fences dispatched to adapters (`run:`, `verify:`)
-- **Fixture tables** — FIT-style tabular specs with pass/fail per row
-- **Alloy models** — literate Alloy fragments checked inline
+Specs drift from tests. Tests lack context. Formal models live in separate files nobody reads. specdown puts all three in one Markdown document so they stay in sync.
 
-Results are rendered into a self-contained HTML report.
+See [Introduction](docs/introduction.md) for the full rationale.
 
 ## Install
 
@@ -51,9 +49,11 @@ The HTML report is written to `.artifacts/specdown/report.html`.
 
 ## Documentation
 
+- [Introduction](docs/introduction.md) — problem, approach, and how the three layers work together
 - [Writing Specs](docs/guide-spec.md) — spec file syntax
 - [Writing Adapters](docs/guide-adapter.md) — adapter protocol and examples
 - [Configuration & Running](docs/guide-config.md) — `specdown.json` and CLI options
+- [Build & Run](docs/build.md) — building from source and releasing
 - [System Design](docs/design.md) — architecture and internals
 
 ## License
