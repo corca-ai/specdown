@@ -523,7 +523,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .toc-list {
       list-style: none;
       margin: 0;
-      padding: 0;
+      padding: 0 0 0 0.85rem;
     }
 
     .toc-item {

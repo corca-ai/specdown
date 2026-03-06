@@ -340,6 +340,8 @@ def main():
         if request["type"] == "runCase":
             handle_run_case(state, request["case"])
             continue
+        if request["type"] in ("setup", "teardown"):
+            continue
 
         raise SystemExit(f"unsupported request type {request['type']!r}")
 
