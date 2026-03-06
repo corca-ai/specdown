@@ -336,7 +336,18 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	out.WriteString(`</code> checked at scope <code>`)
 	out.WriteString(template.HTMLEscapeString(result.Scope))
 	out.WriteString(`</code></p>`)
+	if result.SourceRef != "" {
+		out.WriteString(`<p class="exec-note">source ref: <code>`)
+		out.WriteString(template.HTMLEscapeString(result.SourceRef))
+		out.WriteString(`</code></p>`)
+	}
+	if result.BundleLine > 0 {
+		out.WriteString(`<p class="exec-note">bundle line: <code>`)
+		out.WriteString(template.HTMLEscapeString(fmt.Sprintf("%d", result.BundleLine)))
+		out.WriteString(`</code></p>`)
+	}
 	renderArtifactLink(&out, "bundle artifact", result.BundlePath, outPath)
+	renderArtifactLink(&out, "source map", result.SourceMapPath, outPath)
 	renderArtifactLink(&out, "counterexample", result.CounterexamplePath, outPath)
 	if result.Message != "" {
 		out.WriteString(`<p class="exec-message">`)

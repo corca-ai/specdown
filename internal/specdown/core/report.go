@@ -56,6 +56,9 @@ type AlloyCheckResult struct {
 	Expected           string `json:"expected,omitempty"`
 	Actual             string `json:"actual,omitempty"`
 	BundlePath         string `json:"bundlePath,omitempty"`
+	SourceMapPath      string `json:"sourceMapPath,omitempty"`
+	BundleLine         int    `json:"bundleLine,omitempty"`
+	SourceRef          string `json:"sourceRef,omitempty"`
 	CounterexamplePath string `json:"counterexamplePath,omitempty"`
 }
 

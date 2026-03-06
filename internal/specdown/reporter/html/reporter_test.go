@@ -197,6 +197,7 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 	outDir := t.TempDir()
 	reportPath := filepath.Join(outDir, "report.html")
 	bundlePath := filepath.Join(outDir, "alloy", "board.als")
+	sourceMapPath := bundlePath + ".map.json"
 	counterexamplePath := filepath.Join(outDir, "counterexamples", "case-board.json")
 
 	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil {
@@ -207,6 +208,9 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 	}
 	if err := os.WriteFile(bundlePath, []byte("module board\n"), 0o644); err != nil {
 		t.Fatalf("write bundle: %v", err)
+	}
+	if err := os.WriteFile(sourceMapPath, []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write source map: %v", err)
 	}
 	if err := os.WriteFile(counterexamplePath, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write counterexample: %v", err)
@@ -262,6 +266,9 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 						Expected:           "assertion \"cardShape\" holds for scope 5",
 						Actual:             "counterexample found",
 						BundlePath:         bundlePath,
+						SourceMapPath:      sourceMapPath,
+						SourceRef:          "specs/pocket-board.spec.md#Pocket Board/형식 규칙",
+						BundleLine:         7,
 						CounterexamplePath: counterexamplePath,
 					},
 				},
@@ -291,8 +298,14 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 	if !strings.Contains(html, "bundle artifact") {
 		t.Fatalf("expected bundle artifact note, got %q", html)
 	}
+	if !strings.Contains(html, "source map") {
+		t.Fatalf("expected source map note, got %q", html)
+	}
 	if !strings.Contains(html, "counterexample") {
 		t.Fatalf("expected counterexample note, got %q", html)
+	}
+	if !strings.Contains(html, "source ref") || !strings.Contains(html, "bundle line") {
+		t.Fatalf("expected structured source location, got %q", html)
 	}
 }
 

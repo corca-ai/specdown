@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"specdown/internal/specdown/core"
@@ -31,11 +32,28 @@ type Runner struct {
 }
 
 type modelBundle struct {
-	Model        string
-	RelativePath string
-	AbsolutePath string
-	Source       string
-	LineRefs     []string
+	Model                 string
+	RelativePath          string
+	AbsolutePath          string
+	SourceMapRelativePath string
+	SourceMapAbsolutePath string
+	Source                string
+	LineRefs              []string
+}
+
+type sourceMapArtifact struct {
+	BundlePath string              `json:"bundlePath"`
+	Lines      []sourceMapLineItem `json:"lines"`
+}
+
+type sourceMapLineItem struct {
+	Number    int    `json:"number"`
+	SourceRef string `json:"sourceRef,omitempty"`
+}
+
+type failureLocation struct {
+	BundleLine int
+	SourceRef  string
 }
 
 type receipt struct {
@@ -117,12 +135,20 @@ func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, chec
 		return modelBundle{}, fmt.Errorf("write alloy bundle: %w", err)
 	}
 
+	sourceMapRelativePath := relativePath + ".map.json"
+	sourceMapAbsolutePath := absolutePath + ".map.json"
+	if err := writeSourceMap(sourceMapAbsolutePath, relativePath, lineRefs); err != nil {
+		return modelBundle{}, err
+	}
+
 	return modelBundle{
-		Model:        model.Name,
-		RelativePath: relativePath,
-		AbsolutePath: absolutePath,
-		Source:       source,
-		LineRefs:     lineRefs,
+		Model:                 model.Name,
+		RelativePath:          relativePath,
+		AbsolutePath:          absolutePath,
+		SourceMapRelativePath: sourceMapRelativePath,
+		SourceMapAbsolutePath: sourceMapAbsolutePath,
+		Source:                source,
+		LineRefs:              lineRefs,
 	}, nil
 }
 
@@ -181,7 +207,8 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		if message == "" {
 			message = err.Error()
 		}
-		return failedChecks(checks, bundle.AbsolutePath, annotateAlloyFailure(message, bundle.LineRefs)), nil
+		location, ok := locateAlloyFailure(bundle.LineRefs, message)
+		return failedChecks(checks, bundle.AbsolutePath, bundle.SourceMapAbsolutePath, annotateAlloyFailure(message, location, ok), location, ok), nil
 	}
 
 	receiptPath := filepath.Join(outputDir, "receipt.json")
@@ -216,6 +243,8 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 				Expected:   "Alloy command " + strconvQuote(commandSource),
 				Actual:     "no matching receipt command",
 				BundlePath: bundle.AbsolutePath,
+				SourceMapPath: bundle.SourceMapAbsolutePath,
+				SourceRef: formatSourceRef(check.ID.File, check.ID.HeadingPath),
 			})
 			continue
 		}
@@ -229,6 +258,8 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 				Label:      defaultLabel(check),
 				Status:     core.StatusPassed,
 				BundlePath: bundle.AbsolutePath,
+				SourceMapPath: bundle.SourceMapAbsolutePath,
+				SourceRef: formatSourceRef(check.ID.File, check.ID.HeadingPath),
 			})
 			continue
 		}
@@ -247,7 +278,9 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 			Message:            "found counterexample for assertion " + strconvQuote(check.Assertion) + " at scope " + check.Scope,
 			Expected:           "assertion " + strconvQuote(check.Assertion) + " holds for scope " + check.Scope,
 			Actual:             "counterexample found",
-			BundlePath:         bundle.RelativePath,
+			BundlePath:         bundle.AbsolutePath,
+			SourceMapPath:      bundle.SourceMapAbsolutePath,
+			SourceRef:          formatSourceRef(check.ID.File, check.ID.HeadingPath),
 			CounterexamplePath: counterexamplePath,
 		})
 	}
@@ -255,10 +288,10 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 	return results, nil
 }
 
-func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, message string) []core.AlloyCheckResult {
+func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.AlloyCheckResult {
 	results := make([]core.AlloyCheckResult, 0, len(checks))
 	for _, check := range checks {
-		results = append(results, core.AlloyCheckResult{
+		result := core.AlloyCheckResult{
 			ID:         check.ID,
 			Model:      check.Model,
 			Assertion:  check.Assertion,
@@ -269,7 +302,13 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, message strin
 			Expected:   "Alloy check " + strconvQuote(checkCommandSource(check)) + " succeeds",
 			Actual:     "Alloy execution error",
 			BundlePath: bundlePath,
-		})
+			SourceMapPath: sourceMapPath,
+		}
+		if hasLocation {
+			result.BundleLine = location.BundleLine
+			result.SourceRef = location.SourceRef
+		}
+		results = append(results, result)
 	}
 	return results
 }
@@ -337,6 +376,28 @@ func splitBundleLines(source string) []string {
 	return strings.Split(strings.ReplaceAll(source, "\r\n", "\n"), "\n")
 }
 
+func writeSourceMap(outPath string, bundlePath string, lineRefs []string) error {
+	items := make([]sourceMapLineItem, 0, len(lineRefs))
+	for i, sourceRef := range lineRefs {
+		items = append(items, sourceMapLineItem{
+			Number:    i + 1,
+			SourceRef: sourceRef,
+		})
+	}
+
+	body, err := json.MarshalIndent(sourceMapArtifact{
+		BundlePath: bundlePath,
+		Lines:      items,
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode alloy source map: %w", err)
+	}
+	if err := os.WriteFile(outPath, body, 0o644); err != nil {
+		return fmt.Errorf("write alloy source map: %w", err)
+	}
+	return nil
+}
+
 func formatSourceRef(documentPath string, headingPath []string) string {
 	if len(headingPath) == 0 {
 		return documentPath
@@ -367,10 +428,10 @@ func defaultLabel(check core.AlloyCheckSpec) string {
 
 var alloyLinePattern = regexp.MustCompile(`\bline\s+([0-9]+)\b`)
 
-func annotateAlloyFailure(message string, lineRefs []string) string {
+func locateAlloyFailure(lineRefs []string, message string) (failureLocation, bool) {
 	match := alloyLinePattern.FindStringSubmatch(message)
 	if len(match) != 2 {
-		return message
+		return failureLocation{}, false
 	}
 
 	lineNumber := 0
@@ -378,13 +439,23 @@ func annotateAlloyFailure(message string, lineRefs []string) string {
 		lineNumber = lineNumber*10 + int(r-'0')
 	}
 	if lineNumber <= 0 || lineNumber > len(lineRefs) {
-		return message
+		return failureLocation{}, false
 	}
 	sourceRef := lineRefs[lineNumber-1]
 	if sourceRef == "" {
+		return failureLocation{}, false
+	}
+	return failureLocation{
+		BundleLine: lineNumber,
+		SourceRef:  sourceRef,
+	}, true
+}
+
+func annotateAlloyFailure(message string, location failureLocation, hasLocation bool) string {
+	if !hasLocation {
 		return message
 	}
-	return message + " (source: " + sourceRef + ")"
+	return message + " (bundle line " + strconv.Itoa(location.BundleLine) + ", source: " + location.SourceRef + ")"
 }
 
 func slug(input string) string {
