@@ -565,19 +565,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f7f2e7;
-      --paper: #fffdf8;
+      --bg: #f3f3f0;
+      --paper: #fcfcfa;
       --ink: #1f1f1b;
-      --muted: #5b594f;
-      --rule: #d8d0bd;
+      --muted: #66665f;
+      --rule: #d6d6cf;
       --pass-ink: #0f7a37;
       --pass-mark: #19a34a;
       --fail-ink: #a1261a;
       --fail-mark: #d63b2d;
-      --accent: #355c7a;
-      --code-bg: #f4ecdc;
-      --note-bg: #fbf7ef;
-      --fail-bg: #fff5f2;
+      --accent: #4d4d46;
+      --code-bg: #efefea;
+      --note-bg: #f5f5f1;
     }
 
     * { box-sizing: border-box; }
@@ -748,7 +747,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .failures {
       margin-top: 1.25rem;
       padding-left: 1rem;
-      border-left: 2px solid #e2b6ac;
+      border-left: 2px solid var(--rule);
     }
 
     .failures h2 {
@@ -888,7 +887,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-block.passed {
-      background: linear-gradient(90deg, #f4faf5 0%, transparent 18rem);
+      background: transparent;
     }
 
     .exec-block.passed::before {
@@ -896,7 +895,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-block.failed {
-      background: linear-gradient(90deg, var(--fail-bg) 0%, transparent 20rem);
+      background: transparent;
     }
 
     .exec-block.failed::before {
@@ -958,7 +957,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-table tbody tr.failed {
-      background: var(--fail-bg);
+      background: transparent;
     }
 
     .exec-table tbody td:first-child {
@@ -998,7 +997,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       margin: 0.75rem 0 0;
       padding: 0.65rem 0.8rem;
       background: var(--note-bg);
-      border-left: 2px solid #e2b6ac;
+      border-left: 2px solid var(--rule);
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.35rem 0.75rem;
