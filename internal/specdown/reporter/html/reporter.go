@@ -23,10 +23,17 @@ type reportView struct {
 }
 
 type specView struct {
-	Title  string
-	Path   string
-	Status string
-	Body   template.HTML
+	Title    string
+	Path     string
+	Status   string
+	Headings []tocItemView
+	Body     template.HTML
+}
+
+type tocItemView struct {
+	Text   string
+	Anchor string
+	Level  int
 }
 
 type failureView struct {
@@ -45,10 +52,11 @@ func Write(report core.Report, outPath string) error {
 			return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 		}
 		specs = append(specs, specView{
-			Title:  result.Document.Title,
-			Path:   result.Document.RelativeTo,
-			Status: string(result.Status),
-			Body:   template.HTML(body),
+			Title:    result.Document.Title,
+			Path:     result.Document.RelativeTo,
+			Status:   string(result.Status),
+			Headings: collectHeadings(result.Document),
+			Body:     template.HTML(body),
 		})
 
 		for _, item := range result.Cases {
@@ -97,6 +105,25 @@ func Write(report core.Report, outPath string) error {
 		return fmt.Errorf("write report: %w", err)
 	}
 	return nil
+}
+
+func collectHeadings(doc core.Document) []tocItemView {
+	items := make([]tocItemView, 0)
+	for _, node := range doc.Nodes {
+		heading, ok := node.(core.HeadingNode)
+		if !ok {
+			continue
+		}
+		if len(heading.HeadingPath) == 0 {
+			continue
+		}
+		items = append(items, tocItemView{
+			Text:   heading.Text,
+			Anchor: core.HeadingAnchor(doc.RelativeTo, heading.HeadingPath),
+			Level:  heading.Level,
+		})
+	}
+	return items
 }
 
 func renderDocument(result core.DocumentResult, outPath string) (string, error) {
@@ -529,9 +556,95 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     main {
-      max-width: 48rem;
+      max-width: 78rem;
       margin: 0 auto;
       padding: 2.75rem 1.5rem 4rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 16rem minmax(0, 48rem);
+      gap: 2.5rem;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 1.5rem;
+      align-self: start;
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .toc-inner {
+      padding: 0.25rem 0 0.25rem 0.9rem;
+      border-left: 1px solid var(--rule);
+    }
+
+    .toc-title {
+      margin: 0 0 0.75rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .toc-spec {
+      margin-bottom: 1.25rem;
+    }
+
+    .toc-spec:last-child {
+      margin-bottom: 0;
+    }
+
+    .toc-spec-title {
+      margin: 0 0 0.35rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .toc-spec-path {
+      margin: 0 0 0.55rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-family: "SFMono-Regular", Menlo, monospace;
+    }
+
+    .toc-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .toc-item {
+      margin: 0.18rem 0;
+    }
+
+    .toc-link {
+      display: block;
+      text-decoration: none;
+      color: var(--muted);
+      padding-left: 0;
+    }
+
+    .toc-link:hover {
+      color: var(--ink);
+    }
+
+    .toc-level-1 {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .toc-level-2 { padding-left: 0.7rem; }
+    .toc-level-3 { padding-left: 1.4rem; }
+    .toc-level-4 { padding-left: 2.1rem; }
+    .toc-level-5,
+    .toc-level-6 { padding-left: 2.8rem; }
+
+    .content {
+      min-width: 0;
     }
 
     .hero {
@@ -846,38 +959,79 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     a {
       color: var(--accent);
     }
+
+    @media (max-width: 960px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.5rem;
+      }
+
+      .toc {
+        position: static;
+      }
+
+      .toc-inner {
+        padding-left: 0;
+        border-left: 0;
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 1rem;
+      }
+    }
   </style>
 </head>
 <body>
   <main>
-    <section class="hero">
-      <h1>report</h1>
-      <div class="summary">
-        <p class="meta">Generated at {{ .GeneratedAt }}<span class="pill pass">pass {{ .PassedCount }}</span><span class="pill fail">fail {{ .FailedCount }}</span></p>
-      </div>
-      {{ if .Failures }}
-      <section class="failures">
-        <h2>Failures</h2>
-        <ul class="failure-list">
-          {{ range .Failures }}
-          <li>
-            <a class="failure-link" href="#{{ .Anchor }}">{{ .DocumentTitle }}: {{ .Label }}</a>
-            <p class="failure-message">{{ .Message }}</p>
-          </li>
+    <div class="layout">
+      <aside class="toc" aria-label="Table of contents">
+        <div class="toc-inner">
+          <p class="toc-title">Contents</p>
+          {{ range .Specs }}
+          <section class="toc-spec">
+            <p class="toc-spec-title">{{ .Title }}</p>
+            <p class="toc-spec-path">{{ .Path }}</p>
+            <ul class="toc-list">
+              {{ range .Headings }}
+              <li class="toc-item">
+                <a class="toc-link toc-level-{{ .Level }}" href="#{{ .Anchor }}">{{ .Text }}</a>
+              </li>
+              {{ end }}
+            </ul>
+          </section>
           {{ end }}
-        </ul>
-      </section>
-      {{ end }}
-    </section>
+        </div>
+      </aside>
 
-    {{ range .Specs }}
-    <article class="spec {{ .Status }}">
-      <header class="spec-header">
-        <p class="spec-meta"><span class="spec-path">{{ .Path }}</span> · <span class="status {{ .Status }}">{{ .Status }}</span></p>
-      </header>
-      <section class="spec-body">{{ .Body }}</section>
-    </article>
-    {{ end }}
+      <div class="content">
+        <section class="hero">
+          <h1>report</h1>
+          <div class="summary">
+            <p class="meta">Generated at {{ .GeneratedAt }}<span class="pill pass">pass {{ .PassedCount }}</span><span class="pill fail">fail {{ .FailedCount }}</span></p>
+          </div>
+          {{ if .Failures }}
+          <section class="failures">
+            <h2>Failures</h2>
+            <ul class="failure-list">
+              {{ range .Failures }}
+              <li>
+                <a class="failure-link" href="#{{ .Anchor }}">{{ .DocumentTitle }}: {{ .Label }}</a>
+                <p class="failure-message">{{ .Message }}</p>
+              </li>
+              {{ end }}
+            </ul>
+          </section>
+          {{ end }}
+        </section>
+
+        {{ range .Specs }}
+        <article class="spec {{ .Status }}">
+          <header class="spec-header">
+            <p class="spec-meta"><span class="spec-path">{{ .Path }}</span> · <span class="status {{ .Status }}">{{ .Status }}</span></p>
+          </header>
+          <section class="spec-body">{{ .Body }}</section>
+        </article>
+        {{ end }}
+      </div>
+    </div>
   </main>
 </body>
 </html>

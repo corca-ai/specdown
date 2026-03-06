@@ -161,6 +161,15 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "<h1 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h1>") {
 		t.Fatalf("expected markdown heading in html, got %q", html)
 	}
+	if !strings.Contains(html, "aria-label=\"Table of contents\"") {
+		t.Fatalf("expected toc sidebar, got %q", html)
+	}
+	if !strings.Contains(html, "position: sticky;") {
+		t.Fatalf("expected sticky toc styles, got %q", html)
+	}
+	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board\"") {
+		t.Fatalf("expected heading link in toc, got %q", html)
+	}
 	if !strings.Contains(html, "pass 3") {
 		t.Fatalf("expected pass summary, got %q", html)
 	}
