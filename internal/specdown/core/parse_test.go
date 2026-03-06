@@ -9,19 +9,27 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	doc, err := ParseDocument("pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
-		"Intro prose.",
+		"소개 문단.",
 		"",
-		"## First Executable Check",
+		"## 변수 흐름",
 		"",
 		"```run:board -> $boardName",
 		"create-board",
 		"```",
 		"",
-		"## Verify Created Board",
+		"### 생성한 보드 확인",
 		"",
 		"```verify:board",
-		"board \"demo\" should exist",
+		"board \"${boardName}\" should exist",
 		"```",
+		"",
+		"### 표 기반 확인",
+		"",
+		"<!-- fixture:board-exists -->",
+		"| board | exists |",
+		"| --- | --- |",
+		"| ${boardName} | 예 |",
+		"| ${boardName}-archive | 예 |",
 		"",
 	}, "\n"))
 	if err != nil {
@@ -33,33 +41,50 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	}
 
 	var blocks []CodeBlockNode
+	var tables []TableNode
 	for _, node := range doc.Nodes {
-		current, ok := node.(CodeBlockNode)
-		if ok {
+		switch current := node.(type) {
+		case CodeBlockNode:
 			blocks = append(blocks, current)
+		case TableNode:
+			tables = append(tables, current)
 		}
 	}
 
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 code blocks, got %d", len(blocks))
 	}
-	if blocks[0].Block.Kind != BlockKindRun || blocks[1].Block.Kind != BlockKindVerify {
-		t.Fatalf("unexpected block kinds %#v", blocks)
+	if len(tables) != 1 {
+		t.Fatalf("expected 1 table, got %d", len(tables))
 	}
-	if len(blocks[0].Block.CaptureNames) != 1 || blocks[0].Block.CaptureNames[0] != "boardName" {
-		t.Fatalf("unexpected capture names %#v", blocks[0].Block.CaptureNames)
+	if tables[0].Fixture != "board-exists" {
+		t.Fatalf("unexpected fixture %q", tables[0].Fixture)
 	}
-	if blocks[0].ID == nil || blocks[1].ID == nil {
-		t.Fatal("expected executable ids")
+	if len(tables[0].Rows) != 2 {
+		t.Fatalf("unexpected row count %d", len(tables[0].Rows))
 	}
-	if got, want := blocks[0].ID.HeadingPath, []string{"Pocket Board", "First Executable Check"}; strings.Join(got, " / ") != strings.Join(want, " / ") {
-		t.Fatalf("unexpected first heading path %#v", got)
+	if tables[0].Rows[0].ID == nil || tables[0].Rows[1].ID == nil {
+		t.Fatal("expected executable table row ids")
 	}
-	if got, want := blocks[1].ID.HeadingPath, []string{"Pocket Board", "Verify Created Board"}; strings.Join(got, " / ") != strings.Join(want, " / ") {
-		t.Fatalf("unexpected second heading path %#v", got)
+	if blocks[0].ID.Ordinal != 1 || blocks[1].ID.Ordinal != 2 || tables[0].Rows[0].ID.Ordinal != 3 || tables[0].Rows[1].ID.Ordinal != 4 {
+		t.Fatalf("unexpected ordinals %d %d %d %d", blocks[0].ID.Ordinal, blocks[1].ID.Ordinal, tables[0].Rows[0].ID.Ordinal, tables[0].Rows[1].ID.Ordinal)
 	}
-	if blocks[0].ID.Ordinal != 1 || blocks[1].ID.Ordinal != 2 {
-		t.Fatalf("unexpected ordinals %d, %d", blocks[0].ID.Ordinal, blocks[1].ID.Ordinal)
+}
+
+func TestParseDocumentRejectsFixtureDirectiveWithoutTable(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+		"# Bad",
+		"",
+		"<!-- fixture:board-exists -->",
+		"",
+		"not a table",
+		"",
+	}, "\n"))
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "must be followed by a table") {
+		t.Fatalf("unexpected error %v", err)
 	}
 }
 

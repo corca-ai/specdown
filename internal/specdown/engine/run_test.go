@@ -13,43 +13,36 @@ import (
 	"specdown/internal/specdown/config"
 )
 
-func TestRunUsesSessionAdapterAndVariableBindings(t *testing.T) {
+func TestRunUsesSessionAdapterVariableBindingsAndFixtureRows(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	source := "# Pocket Board\n\n## Variable Flow\n\n```run:board -> $boardName\ncreate-board\n```\n\n### Verify Board\n\n```verify:board\nboard \"${boardName}\" should exist\n```\n"
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-
-	report, err := Run(root, helperAdapterConfig())
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-
-	if report.Summary.SpecsPassed != 1 {
-		t.Fatalf("unexpected summary %+v", report.Summary)
-	}
-	if report.Summary.CasesPassed != 2 {
-		t.Fatalf("unexpected summary %+v", report.Summary)
-	}
-	if got := report.Results[0].Cases[0].Bindings; len(got) != 1 || got[0].Name != "boardName" || got[0].Value != "board-1" {
-		t.Fatalf("unexpected bindings %#v", got)
-	}
-	if got := report.Results[0].Cases[1].RenderedSource; got != "board \"board-1\" should exist" {
-		t.Fatalf("unexpected rendered source %q", got)
-	}
-}
-
-func TestRunFailsWhenAdapterReportsVerificationFailure(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	source := "# Pocket Board\n\n## Variable Flow\n\n```run:board -> $boardName\ncreate-board\n```\n\n### Verify Missing Board\n\n```verify:board\nboard \"${boardName}-archive\" should exist\n```\n"
+	source := strings.Join([]string{
+		"# Pocket Board",
+		"",
+		"## 변수 흐름",
+		"",
+		"```run:board -> $boardName",
+		"create-board",
+		"```",
+		"",
+		"### 생성한 보드 확인",
+		"",
+		"```verify:board",
+		"board \"${boardName}\" should exist",
+		"```",
+		"",
+		"### 표 기반 확인",
+		"",
+		"<!-- fixture:board-exists -->",
+		"| board | exists |",
+		"| --- | --- |",
+		"| ${boardName} | 예 |",
+		"| ${boardName}-archive | 예 |",
+		"",
+	}, "\n")
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
@@ -62,18 +55,46 @@ func TestRunFailsWhenAdapterReportsVerificationFailure(t *testing.T) {
 	if report.Summary.SpecsFailed != 1 || report.Summary.CasesFailed != 1 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].Cases[1].Message; got != "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]" {
+	if report.Summary.CasesPassed != 3 {
+		t.Fatalf("unexpected summary %+v", report.Summary)
+	}
+	if got := report.Results[0].Cases[0].Bindings; len(got) != 1 || got[0].Name != "boardName" || got[0].Value != "board-1" {
+		t.Fatalf("unexpected bindings %#v", got)
+	}
+	if got := report.Results[0].Cases[1].RenderedSource; got != "board \"board-1\" should exist" {
+		t.Fatalf("unexpected rendered source %q", got)
+	}
+	if got := report.Results[0].Cases[2].RenderedCells; len(got) != 2 || got[0] != "board-1" || got[1] != "예" {
+		t.Fatalf("unexpected rendered cells %#v", got)
+	}
+	if got := report.Results[0].Cases[3].Message; got != "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]" {
 		t.Fatalf("unexpected failure message %q", got)
 	}
 }
 
-func TestRunFailsWhenRuntimeBindingWasNotProduced(t *testing.T) {
+func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	source := "# Pocket Board\n\n## Variable Flow\n\n```run:board -> $boardName\ncreate-board board-1\n```\n\n### Verify Board\n\n```verify:board\nboard \"${boardName}\" should exist\n```\n"
+	source := strings.Join([]string{
+		"# Pocket Board",
+		"",
+		"## 변수 흐름",
+		"",
+		"```run:board -> $boardName",
+		"create-board board-1",
+		"```",
+		"",
+		"### 표 기반 확인",
+		"",
+		"<!-- fixture:board-exists -->",
+		"| board | exists |",
+		"| --- | --- |",
+		"| ${boardName} | 예 |",
+		"",
+	}, "\n")
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
@@ -91,13 +112,23 @@ func TestRunFailsWhenRuntimeBindingWasNotProduced(t *testing.T) {
 	}
 }
 
-func TestRunFailsWhenNoAdapterSupportsBlock(t *testing.T) {
+func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	source := "# Pocket Board\n\n## Shell\n\n```run:shell\necho hi\n```\n"
+	source := strings.Join([]string{
+		"# Pocket Board",
+		"",
+		"## 표 기반 확인",
+		"",
+		"<!-- fixture:unknown -->",
+		"| board | exists |",
+		"| --- | --- |",
+		"| demo | yes |",
+		"",
+	}, "\n")
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
@@ -106,7 +137,7 @@ func TestRunFailsWhenNoAdapterSupportsBlock(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "no adapter supports block") {
+	if !strings.Contains(err.Error(), "no adapter supports fixture") {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
@@ -176,7 +207,7 @@ func TestHelperAdapterProcess(t *testing.T) {
 			encoder.Encode(adapterprotocol.Response{
 				Type:     "capabilities",
 				Blocks:   []string{"run:board", "verify:board"},
-				Fixtures: []string{},
+				Fixtures: []string{"board-exists"},
 			})
 		case "runCase":
 			if request.Case == nil {
@@ -198,6 +229,9 @@ type helperState struct {
 
 func runHelperCase(encoder *json.Encoder, state *helperState, item adapterprotocol.Case) {
 	label := item.Block
+	if item.Kind == "tableRow" {
+		label = "fixture:" + item.Fixture
+	}
 	if len(item.ID.HeadingPath) > 0 {
 		label += " @ " + item.ID.HeadingPath[len(item.ID.HeadingPath)-1]
 	}
@@ -227,6 +261,10 @@ func runHelperCase(encoder *json.Encoder, state *helperState, item adapterprotoc
 }
 
 func executeHelperBoardCase(state *helperState, item adapterprotocol.Case) ([]adapterprotocol.Binding, error) {
+	if item.Kind == "tableRow" {
+		return executeHelperFixtureRow(state, item)
+	}
+
 	switch item.Block {
 	case "run:board":
 		var name string
@@ -263,6 +301,25 @@ func executeHelperBoardCase(state *helperState, item adapterprotocol.Case) ([]ad
 	default:
 		return nil, &helperError{message: "unsupported case " + item.Block}
 	}
+}
+
+func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]adapterprotocol.Binding, error) {
+	if item.Fixture != "board-exists" {
+		return nil, &helperError{message: "unsupported fixture " + strconvQuote(item.Fixture)}
+	}
+	if len(item.Columns) != len(item.Cells) {
+		return nil, &helperError{message: "fixture row shape mismatch"}
+	}
+
+	values := make(map[string]string, len(item.Columns))
+	for index, column := range item.Columns {
+		values[column] = item.Cells[index]
+	}
+	name := values["board"]
+	if _, exists := state.boards[name]; exists {
+		return nil, nil
+	}
+	return nil, &helperError{message: "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]"}
 }
 
 type helperError struct {

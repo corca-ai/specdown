@@ -25,10 +25,16 @@ type Event struct {
 
 type CaseResult struct {
 	ID             SpecID
+	Kind           CaseKind
 	Block          string
+	Fixture        string
 	Label          string
 	Template       string
 	RenderedSource string
+	Columns        []string
+	TemplateCells  []string
+	RenderedCells  []string
+	RowNumber      int
 	Status         Status
 	Message        string
 	Bindings       []Binding

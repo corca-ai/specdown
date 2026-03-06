@@ -89,23 +89,36 @@ func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
 	}, nil
 }
 
-func (s *Session) RunCase(specCase core.CaseSpec, renderedSource string, visibleBindings []core.Binding) (core.CaseResult, error) {
+func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibleBindings []core.Binding) (core.CaseResult, error) {
 	result := core.CaseResult{
-		ID:             specCase.ID,
-		Block:          specCase.Block.Descriptor(),
-		Label:          defaultLabel(specCase),
-		Template:       specCase.Source,
-		RenderedSource: renderedSource,
+		ID:        original.ID,
+		Kind:      original.Kind,
+		Block:     original.Block.Descriptor(),
+		Fixture:   original.Fixture,
+		Label:     defaultLabel(original),
+		Columns:   append([]string(nil), original.Columns...),
+		RowNumber: original.RowNumber,
+	}
+	if original.Kind == core.CaseKindCode {
+		result.Template = original.Template
+		result.RenderedSource = prepared.Template
+	} else {
+		result.TemplateCells = append([]string(nil), original.Cells...)
+		result.RenderedCells = append([]string(nil), prepared.Cells...)
 	}
 
 	request := adapterprotocol.Request{
 		Type:     "runCase",
 		Protocol: adapterprotocol.Version,
 		Case: &adapterprotocol.Case{
-			ID:           protocolID(specCase.ID),
-			Block:        specCase.Block.Descriptor(),
-			Source:       renderedSource,
-			CaptureNames: append([]string(nil), specCase.Block.CaptureNames...),
+			ID:           protocolID(prepared.ID),
+			Kind:         string(prepared.Kind),
+			Block:        prepared.Block.Descriptor(),
+			Source:       prepared.Template,
+			Fixture:      prepared.Fixture,
+			Columns:      append([]string(nil), prepared.Columns...),
+			Cells:        append([]string(nil), prepared.Cells...),
+			CaptureNames: append([]string(nil), prepared.Block.CaptureNames...),
 			Bindings:     protocolBindings(visibleBindings),
 		},
 	}
@@ -296,9 +309,13 @@ func expectResponseID(expected core.SpecID, response adapterprotocol.Response) e
 
 func defaultLabel(specCase core.CaseSpec) string {
 	if len(specCase.ID.HeadingPath) == 0 {
-		return specCase.Block.Descriptor()
+		return specCase.DisplayKind()
 	}
-	return specCase.Block.Descriptor() + " @ " + specCase.ID.HeadingPath[len(specCase.ID.HeadingPath)-1]
+	label := specCase.DisplayKind() + " @ " + specCase.ID.HeadingPath[len(specCase.ID.HeadingPath)-1]
+	if specCase.Kind == core.CaseKindTableRow {
+		return label + " row " + fmt.Sprintf("%d", specCase.RowNumber)
+	}
+	return label
 }
 
 func protocolID(id core.SpecID) adapterprotocol.SpecID {

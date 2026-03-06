@@ -8,10 +8,22 @@ import (
 	"strings"
 )
 
+type CaseKind string
+
+const (
+	CaseKindCode     CaseKind = "code"
+	CaseKindTableRow CaseKind = "tableRow"
+)
+
 type CaseSpec struct {
 	ID         SpecID
+	Kind       CaseKind
 	Block      BlockSpec
-	Source     string
+	Fixture    string
+	Template   string
+	Columns    []string
+	Cells      []string
+	RowNumber  int
 	References []string
 }
 
@@ -58,7 +70,7 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 	bindings := make([]bindingDefinition, 0)
 
 	for i := range cases {
-		references := variableReferences(cases[i].Source)
+		references := caseReferences(cases[i])
 		cases[i].References = references
 
 		for _, name := range references {
@@ -180,15 +192,35 @@ func headingPathPrefix(prefix []string, current []string) bool {
 func executableCases(doc Document) []CaseSpec {
 	cases := make([]CaseSpec, 0)
 	for _, node := range doc.Nodes {
-		code, ok := node.(CodeBlockNode)
-		if !ok || code.ID == nil {
-			continue
+		switch current := node.(type) {
+		case CodeBlockNode:
+			if current.ID == nil {
+				continue
+			}
+			cases = append(cases, CaseSpec{
+				ID:       *current.ID,
+				Kind:     CaseKindCode,
+				Block:    current.Block,
+				Template: current.Source,
+			})
+		case TableNode:
+			if current.Fixture == "" {
+				continue
+			}
+			for index, row := range current.Rows {
+				if row.ID == nil {
+					continue
+				}
+				cases = append(cases, CaseSpec{
+					ID:        *row.ID,
+					Kind:      CaseKindTableRow,
+					Fixture:   current.Fixture,
+					Columns:   append([]string(nil), current.Columns...),
+					Cells:     append([]string(nil), row.Cells...),
+					RowNumber: index + 1,
+				})
+			}
 		}
-		cases = append(cases, CaseSpec{
-			ID:     *code.ID,
-			Block:  code.Block,
-			Source: code.Source,
-		})
 	}
 	return cases
 }
@@ -212,6 +244,42 @@ func variableReferences(source string) []string {
 		refs = append(refs, name)
 	}
 	return refs
+}
+
+func caseReferences(spec CaseSpec) []string {
+	switch spec.Kind {
+	case CaseKindCode:
+		return variableReferences(spec.Template)
+	case CaseKindTableRow:
+		seen := make(map[string]struct{})
+		refs := make([]string, 0)
+		for _, cell := range spec.Cells {
+			for _, name := range variableReferences(cell) {
+				if _, ok := seen[name]; ok {
+					continue
+				}
+				seen[name] = struct{}{}
+				refs = append(refs, name)
+			}
+		}
+		return refs
+	default:
+		return nil
+	}
+}
+
+func (c CaseSpec) TargetKey() string {
+	if c.Kind == CaseKindCode {
+		return c.Block.Descriptor()
+	}
+	return c.Fixture
+}
+
+func (c CaseSpec) DisplayKind() string {
+	if c.Kind == CaseKindCode {
+		return c.Block.Descriptor()
+	}
+	return "fixture:" + c.Fixture
 }
 
 func toSlash(value string) string {

@@ -188,8 +188,12 @@ export type AdapterRequest =
       protocol: "specdown-adapter/v1";
       case: {
         id: SpecId;
-        block: string;
-        source: string;
+        kind: "code" | "tableRow";
+        block?: string;
+        source?: string;
+        fixture?: string;
+        columns?: string[];
+        cells?: string[];
         captureNames?: string[];
         bindings?: Binding[];
       };

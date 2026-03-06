@@ -75,6 +75,25 @@ func (n CodeBlockNode) Markdown() string {
 	return n.Raw
 }
 
+type TableRowNode struct {
+	Cells []string
+	Raw   string
+	ID    *SpecID
+}
+
+type TableNode struct {
+	Fixture string
+	Columns []string
+	Rows    []TableRowNode
+	Raw     string
+}
+
+func (TableNode) isNode() {}
+
+func (n TableNode) Markdown() string {
+	return n.Raw
+}
+
 type Document struct {
 	RelativeTo string
 	Title      string

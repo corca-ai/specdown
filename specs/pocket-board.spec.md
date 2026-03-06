@@ -1,98 +1,102 @@
 # Pocket Board
 
-`Pocket Board` is the toy project used to develop `specdown` incrementally.
+`Pocket Board`는 `specdown`을 점진적으로 개발할 때 함께 키워 가는 장난감 프로젝트다.
 
-Phase 0 started with a plain natural-language document.
-Phase 1 keeps that prose intact and adds the first executable block.
-The document still has no fixture tables, variables, or embedded models.
+Phase 0에서는 평범한 자연어 문서만 있었다.
+Phase 1에서는 그 산문을 유지한 채 첫 executable block을 추가했다.
+이제 문서는 executable block, 변수 바인딩, fixture table까지 포함한다.
 
-## Product Summary
+## 제품 개요
 
-`Pocket Board` is a tiny kanban board for personal work.
-It has exactly three columns: `todo`, `doing`, and `done`.
-The product is deliberately small so the specification can evolve without a large implementation burden.
+`Pocket Board`는 개인 작업을 위한 아주 작은 칸반 보드다.
+컬럼은 정확히 세 개뿐이다. `todo`, `doing`, `done`.
+프로젝트 크기를 의도적으로 작게 유지해서 명세 시스템 자체를 무겁게 만들지 않으려 한다.
 
-## Why This Project Fits `specdown`
+## 왜 이 프로젝트가 적합한가
 
-This project is small enough to understand in one sitting.
-It still has enough structure to justify richer specification features in later phases.
+이 프로젝트는 한 번에 이해할 수 있을 만큼 작다.
+그러면서도 실행 블록, 변수 흐름, 표 기반 검증, 이후의 형식 모델까지 자연스럽게 얹을 여지는 충분하다.
 
-Later phases can add:
+이 저장소에서 다음 기능을 검증하는 예제로 쓴다.
 
-- executable blocks for board commands
-- fixture tables for transition rules
-- embedded Alloy models for invariants
-- richer HTML reporting with per-block and per-row status
+- executable block 실행
+- adapter state 유지
+- 변수 캡처와 치환
+- fixture table의 row-level reporting
+- 실패 요약이 포함된 HTML 리포트
 
-## Core Concepts
+## 핵심 개념
 
-A board contains cards.
-Each card has an identifier, a title, and a current column.
+보드는 카드를 담는다.
+각 카드는 식별자, 제목, 현재 컬럼을 가진다.
 
-Cards begin in `todo`.
-Work in progress lives in `doing`.
-Completed work lives in `done`.
+카드는 `todo`에서 시작한다.
+진행 중인 일은 `doing`에 놓인다.
+끝난 일은 `done`으로 이동한다.
 
-## Behavioral Intent
+## 동작 의도
 
-The system should feel predictable.
-Users should always be able to tell where a card is and what state it is in.
+이 시스템은 예측 가능해야 한다.
+사용자는 카드가 어디에 있고 지금 어떤 상태인지 항상 알 수 있어야 한다.
 
-The board is expected to support a small set of valid transitions.
-Those transitions are not formalized yet.
-They will be turned into richer executable checks in later phases.
+허용 전이는 작고 명확해야 한다.
+아직 카드 전이 규칙 전체를 형식화하지는 않았지만, 그 기반이 되는 실행 가능한 예시를 이 문서에서 점진적으로 늘린다.
 
-## Phase Status
+## 현재 상태
 
-Phase 0, Phase 1, Phase 2, and Phase 3 are complete in this repository.
-The current repository also supports the first variable capture and substitution flow.
+이 저장소에서는 Phase 0, Phase 1, Phase 2, Phase 3이 완료되었다.
+그리고 그 위에 첫 변수 바인딩 흐름과 첫 fixture table 흐름이 추가되었다.
 
-The current implementation already does all of the following:
+현재 구현은 다음을 수행한다.
 
-- finds this `.spec.md` file
-- parses the document into headings, prose, and fenced code blocks
-- dispatches `run:board` and `verify:board` through an external adapter command from `specdown.json`
-- preserves adapter state across executable blocks in document order
-- captures values from `run:*` blocks and substitutes `${name}` in later blocks within the same heading subtree
-- renders the document and block status into an HTML report
-- shows failed cases in a summary section with links to the failing block
-- returns a failing run result when one of the executable cases fails
+- `.spec.md` 문서를 찾는다
+- 문서를 heading, prose, fenced code block, fixture table로 파싱한다
+- `run:board`, `verify:board`, `fixture:board-exists`를 외부 adapter command로 실행한다
+- 문서 순서대로 adapter state를 유지한다
+- `run:* -> $name` 캡처와 `${name}` 치환을 지원한다
+- HTML 리포트에 block과 table row 상태를 인라인으로 표시한다
+- 실패한 case를 요약 섹션에 모아서 보여 준다
+- 하나라도 실패하면 non-zero로 종료하되 리포트는 남긴다
 
-## Next Target
+## 다음 목표
 
-This same document should be extended, not replaced.
-Later phases can add fixtures, variables, and formal model fragments on top of the current foundation.
+이 문서는 교체하지 않고 계속 확장한다.
+다음 단계에서는 더 많은 fixture와, eventually Alloy fragment도 이 문서 위에 얹을 수 있어야 한다.
 
-## Variable Flow
+## 변수 흐름
 
-The first executable behavior now also captures a value.
-The adapter should generate a board name, create that board, and bind the result to `$boardName`.
+첫 실행 동작은 값을 하나 캡처하는 것이다.
+adapter는 새 보드 이름을 만들고, 그 보드를 생성하고, 결과를 `$boardName`에 바인딩해야 한다.
 
 ```run:board -> $boardName
 create-board
 ```
 
-If this block executes successfully, `specdown` should emit a passing case result, record the captured binding, and show that result inline in the HTML report.
+이 블록이 통과하면 `specdown`은 passing case result를 기록하고, 캡처한 값을 이후 블록과 표에서 재사용할 수 있어야 한다.
 
-### Verify Created Board
+### 생성한 보드 확인
 
-Phase 3 adds the first assertion block.
-After the previous command runs, the captured board name should resolve inside a later verification block.
+앞선 블록이 만든 보드는 뒤이은 verification block에서 참조 가능해야 한다.
 
 ```verify:board
 board "${boardName}" should exist
 ```
 
-This block should pass and confirms that verification can read the state created by earlier `run:board` blocks.
+이 블록은 통과해야 한다.
+이로써 verification이 이전 `run:board` 블록이 만든 상태를 읽을 수 있음을 확인한다.
 
-### Missing Boards Fail Verification
+### 표 기반 확인
 
-Verification failures should be reported differently from command failures.
-If a derived board name does not exist, the assertion should fail with an expected-versus-actual style message.
+Phase 5의 가장 작은 형태는 fixture table이다.
+같은 보드 상태를 표의 각 행에서 독립적으로 검증해야 한다.
 
-```verify:board
-board "${boardName}-archive" should exist
-```
+<!-- fixture:board-exists -->
+| board | exists |
+| --- | --- |
+| ${boardName} | 예 |
+| ${boardName}-archive | 예 |
 
-This block is intentionally failing.
-`specdown run` should now exit non-zero, still write the HTML report, and show this failing verification in the summary with a link to the block.
+첫 번째 행은 통과해야 한다.
+두 번째 행은 의도적으로 실패해야 한다.
+
+`specdown run`은 따라서 non-zero로 종료해야 하지만, HTML 리포트는 정상적으로 생성되어야 하고, 실패한 행으로 바로 이동할 수 있어야 한다.

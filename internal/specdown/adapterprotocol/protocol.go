@@ -21,8 +21,12 @@ type Request struct {
 
 type Case struct {
 	ID           SpecID    `json:"id"`
+	Kind         string    `json:"kind"`
 	Block        string    `json:"block"`
 	Source       string    `json:"source"`
+	Fixture      string    `json:"fixture,omitempty"`
+	Columns      []string  `json:"columns,omitempty"`
+	Cells        []string  `json:"cells,omitempty"`
 	CaptureNames []string  `json:"captureNames,omitempty"`
 	Bindings     []Binding `json:"bindings,omitempty"`
 }

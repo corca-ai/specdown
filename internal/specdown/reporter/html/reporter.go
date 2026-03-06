@@ -113,6 +113,12 @@ func renderDocument(result core.DocumentResult) (string, error) {
 				return "", err
 			}
 			out.WriteString(rendered)
+		case core.TableNode:
+			rendered, err := renderTable(current, caseResults)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(rendered)
 		default:
 			return "", fmt.Errorf("unknown node type %T", node)
 		}
@@ -178,6 +184,69 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		out.WriteString(`</p>`)
 	}
 	out.WriteString(`</section>`)
+	return out.String(), nil
+}
+
+func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (string, error) {
+	if node.Fixture == "" {
+		return markdownToHTML(node.Markdown())
+	}
+
+	var out strings.Builder
+	out.WriteString(`<section class="exec-table-block">`)
+	out.WriteString(`<div class="exec-table-header">`)
+	out.WriteString(`<span class="exec-kind">fixture:`)
+	out.WriteString(template.HTMLEscapeString(node.Fixture))
+	out.WriteString(`</span>`)
+	out.WriteString(`</div>`)
+	out.WriteString(`<table class="exec-table">`)
+	out.WriteString(`<thead><tr>`)
+	for _, column := range node.Columns {
+		out.WriteString(`<th>`)
+		out.WriteString(template.HTMLEscapeString(column))
+		out.WriteString(`</th>`)
+	}
+	out.WriteString(`<th>Status</th></tr></thead>`)
+	out.WriteString(`<tbody>`)
+	for _, row := range node.Rows {
+		if row.ID == nil {
+			continue
+		}
+		result, ok := caseResults[row.ID.Key()]
+		if !ok {
+			return "", fmt.Errorf("missing case result for %s", row.ID.Key())
+		}
+		out.WriteString(`<tr class="`)
+		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+		out.WriteString(`" id="`)
+		out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
+		out.WriteString(`">`)
+		for index, cell := range result.TemplateCells {
+			out.WriteString(`<td>`)
+			out.WriteString(`<div class="cell-template">`)
+			out.WriteString(template.HTMLEscapeString(cell))
+			out.WriteString(`</div>`)
+			if index < len(result.RenderedCells) && result.RenderedCells[index] != cell {
+				out.WriteString(`<div class="cell-resolved">`)
+				out.WriteString(template.HTMLEscapeString(result.RenderedCells[index]))
+				out.WriteString(`</div>`)
+			}
+			out.WriteString(`</td>`)
+		}
+		out.WriteString(`<td class="exec-table-status">`)
+		out.WriteString(`<span class="status `)
+		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+		out.WriteString(`</span>`)
+		if result.Message != "" {
+			out.WriteString(`<div class="exec-table-message">`)
+			out.WriteString(template.HTMLEscapeString(result.Message))
+			out.WriteString(`</div>`)
+		}
+		out.WriteString(`</td></tr>`)
+	}
+	out.WriteString(`</tbody></table></section>`)
 	return out.String(), nil
 }
 
@@ -399,6 +468,70 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       background: #fff3f0;
     }
 
+    .exec-table-block {
+      margin: 1rem 0;
+      padding: 0.9rem 1rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 0.85rem;
+      background: #fffaf0;
+      overflow-x: auto;
+    }
+
+    .exec-table-header {
+      margin-bottom: 0.75rem;
+    }
+
+    .exec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+    }
+
+    .exec-table th,
+    .exec-table td {
+      padding: 0.75rem 0.85rem;
+      border-top: 1px solid var(--border);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .exec-table thead th {
+      border-top: 0;
+      font-size: 0.88rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .exec-table tbody tr.passed {
+      background: #fbfff8;
+    }
+
+    .exec-table tbody tr.failed {
+      background: #fff3f0;
+    }
+
+    .cell-template {
+      font-family: "SFMono-Regular", Menlo, monospace;
+    }
+
+    .cell-resolved {
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 0.92rem;
+    }
+
+    .exec-table-status {
+      min-width: 13rem;
+    }
+
+    .exec-table-message {
+      margin-top: 0.5rem;
+      color: var(--fail-ink);
+      font-weight: 700;
+    }
+
     .exec-header {
       display: flex;
       flex-wrap: wrap;
@@ -454,7 +587,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <main>
     <section class="hero">
       <h1>specdown report</h1>
-      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, and fenced code blocks. Cases execute in document order through external adapter sessions, captured bindings flow into later blocks, failures are summarized, and block status is annotated inline.</p>
+      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, fenced code blocks, and fixture tables. Cases execute in document order through external adapter sessions, captured bindings flow into later blocks and rows, failures are summarized, and status is annotated inline.</p>
       <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
         <span class="pill">specs {{ .Summary.SpecsTotal }}</span>

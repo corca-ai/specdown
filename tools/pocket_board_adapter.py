@@ -9,7 +9,11 @@ def emit(payload):
     sys.stdout.flush()
 
 
-def default_label(case_id, info):
+def default_label(case):
+    case_id = case["id"]
+    info = case.get("block", "")
+    if case.get("kind") == "tableRow":
+        return ""
     heading_path = case_id.get("headingPath", [])
     if heading_path:
         return f"{info} @ {heading_path[-1]}"
@@ -59,11 +63,16 @@ def parse_assertion(line):
 
 
 def run_case(state, case):
-    info = case["block"]
-    source = case["source"]
+    kind = case["kind"]
+    info = case.get("block", "")
+    source = case.get("source", "")
+    fixture = case.get("fixture", "")
     capture_names = case.get("captureNames", [])
     bindings = binding_items(case)
     produced_bindings = []
+
+    if kind == "tableRow":
+        return run_table_row(state, fixture, case.get("columns", []), case.get("cells", []))
 
     for raw_line in source.splitlines():
         line = render_arg(raw_line.strip(), bindings)
@@ -108,16 +117,52 @@ def run_case(state, case):
     return produced_bindings
 
 
+def parse_exists_value(raw):
+    value = raw.strip().lower()
+    if value in ("yes", "true", "y", "예"):
+        return True
+    if value in ("no", "false", "n", "아니오"):
+        return False
+    raise ValueError(f'unsupported exists value {raw!r}')
+
+
+def run_table_row(state, fixture, columns, cells):
+    if fixture != "board-exists":
+        raise ValueError(f'unsupported fixture {fixture!r}')
+    if len(columns) != len(cells):
+        raise ValueError("fixture row shape does not match header")
+
+    row = {}
+    for index, column in enumerate(columns):
+        row[column] = cells[index]
+
+    if "board" not in row or "exists" not in row:
+        raise ValueError('fixture "board-exists" requires columns "board" and "exists"')
+
+    board_name = row["board"]
+    should_exist = parse_exists_value(row["exists"])
+    exists = board_name in state["boards"]
+    if should_exist and exists:
+        return []
+    if not should_exist and not exists:
+        return []
+
+    boards = "[" + ", ".join(json.dumps(item) for item in sorted(state["boards"])) + "]"
+    if should_exist:
+        raise ValueError(f'expected board {board_name!r} to exist; actual boards: {boards}')
+    raise ValueError(f'expected board {board_name!r} not to exist; actual boards: {boards}')
+
+
 def handle_describe():
     emit({
         "type": "capabilities",
         "blocks": ["run:board", "verify:board"],
-        "fixtures": [],
+        "fixtures": ["board-exists"],
     })
 
 
 def handle_run_case(state, case):
-    label = default_label(case["id"], case["block"])
+    label = default_label(case)
     emit({
         "type": "caseStarted",
         "id": case["id"],
