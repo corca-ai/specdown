@@ -75,6 +75,34 @@ func (n CodeBlockNode) Markdown() string {
 	return n.Raw
 }
 
+type AlloyModelNode struct {
+	Model       string
+	Source      string
+	Raw         string
+	HeadingPath []string
+}
+
+func (AlloyModelNode) isNode() {}
+
+func (n AlloyModelNode) Markdown() string {
+	return n.Raw
+}
+
+type AlloyRefNode struct {
+	Model       string
+	Assertion   string
+	Scope       string
+	Raw         string
+	HeadingPath []string
+	ID          *SpecID
+}
+
+func (AlloyRefNode) isNode() {}
+
+func (n AlloyRefNode) Markdown() string {
+	return n.Raw
+}
+
 type TableRowNode struct {
 	Cells []string
 	Raw   string

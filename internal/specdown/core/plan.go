@@ -28,8 +28,10 @@ type CaseSpec struct {
 }
 
 type DocumentPlan struct {
-	Document Document
-	Cases    []CaseSpec
+	Document    Document
+	Cases       []CaseSpec
+	AlloyModels []AlloyModelSpec
+	AlloyChecks []AlloyCheckSpec
 }
 
 type Plan struct {
@@ -67,6 +69,10 @@ func CompileDocuments(docs []Document) (Plan, error) {
 
 func CompileDocument(doc Document) (DocumentPlan, error) {
 	cases := executableCases(doc)
+	alloyModels, alloyChecks, err := compileAlloy(doc)
+	if err != nil {
+		return DocumentPlan{}, err
+	}
 	bindings := make([]bindingDefinition, 0)
 
 	for i := range cases {
@@ -88,8 +94,10 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 	}
 
 	return DocumentPlan{
-		Document: doc,
-		Cases:    cases,
+		Document:    doc,
+		Cases:       cases,
+		AlloyModels: alloyModels,
+		AlloyChecks: alloyChecks,
 	}, nil
 }
 

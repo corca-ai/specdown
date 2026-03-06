@@ -97,3 +97,71 @@ func TestParseDocumentRejectsUnsupportedReservedBlock(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
+
+func TestParseDocumentSupportsAlloyModelBlocksAndReferences(t *testing.T) {
+	doc, err := ParseDocument("pocket-board.spec.md", strings.Join([]string{
+		"# Pocket Board",
+		"",
+		"## 형식 규칙",
+		"",
+		"```alloy:model(board)",
+		"module board",
+		"",
+		"sig Card {}",
+		"```",
+		"",
+		"```alloy:model(board)",
+		"assert cardExists { some Card }",
+		"```",
+		"",
+		"<!-- alloy:ref(board#cardExists, scope=5) -->",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse document: %v", err)
+	}
+
+	var (
+		models []AlloyModelNode
+		refs   []AlloyRefNode
+	)
+	for _, node := range doc.Nodes {
+		switch current := node.(type) {
+		case AlloyModelNode:
+			models = append(models, current)
+		case AlloyRefNode:
+			refs = append(refs, current)
+		}
+	}
+
+	if len(models) != 2 {
+		t.Fatalf("expected 2 alloy model blocks, got %d", len(models))
+	}
+	if models[0].Model != "board" || models[1].Model != "board" {
+		t.Fatalf("unexpected models %#v", models)
+	}
+	if len(refs) != 1 {
+		t.Fatalf("expected 1 alloy ref, got %d", len(refs))
+	}
+	if refs[0].ID == nil || refs[0].ID.Ordinal != 1 {
+		t.Fatalf("unexpected alloy ref id %#v", refs[0].ID)
+	}
+	if refs[0].Assertion != "cardExists" || refs[0].Scope != "5" {
+		t.Fatalf("unexpected alloy ref %#v", refs[0])
+	}
+}
+
+func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+		"# Bad",
+		"",
+		"<!-- alloy:ref(board#cardExists) -->",
+		"",
+	}, "\n"))
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "invalid alloy reference directive") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}

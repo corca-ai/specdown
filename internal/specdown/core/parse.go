@@ -32,6 +32,25 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 	for i := 0; i < len(lines); {
 		line := lines[i]
 
+		if ref, ok, err := parseAlloyRefDirective(line); err != nil {
+			return Document{}, fmt.Errorf("%s: %w", relativePath, err)
+		} else if ok {
+			if fixture != "" {
+				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+			}
+			ordinal++
+			ref.Raw = line
+			ref.HeadingPath = append([]string(nil), headingPath...)
+			ref.ID = &SpecID{
+				File:        relativePath,
+				HeadingPath: append([]string(nil), headingPath...),
+				Ordinal:     ordinal,
+			}
+			nodes = append(nodes, ref)
+			i++
+			continue
+		}
+
 		if nextFixture, ok := parseFixtureDirective(line); ok {
 			if fixture != "" {
 				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
@@ -46,6 +65,31 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
 			}
 			info := parseFenceInfo(line)
+
+			if modelName, ok := parseAlloyModelInfo(info); ok {
+				end := -1
+				for j := i + 1; j < len(lines); j++ {
+					if isFenceEnd(lines[j]) {
+						end = j
+						break
+					}
+				}
+				if end == -1 {
+					return Document{}, fmt.Errorf("%s: unclosed fenced code block", relativePath)
+				}
+
+				raw := strings.Join(lines[i:end+1], "")
+				source := strings.Join(lines[i+1:end], "")
+				nodes = append(nodes, AlloyModelNode{
+					Model:       modelName,
+					Source:      strings.TrimSuffix(source, "\n"),
+					Raw:         raw,
+					HeadingPath: append([]string(nil), headingPath...),
+				})
+				i = end + 1
+				continue
+			}
+
 			block, err := parseBlockSpec(info)
 			if err != nil {
 				return Document{}, fmt.Errorf("%s: %w", relativePath, err)
@@ -113,6 +157,11 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		start := i
 		for i < len(lines) && !isFenceStart(lines[i]) {
 			if _, _, ok := parseHeading(lines[i]); ok {
+				break
+			}
+			if _, ok, err := parseAlloyRefDirective(lines[i]); err != nil {
+				return Document{}, fmt.Errorf("%s: %w", relativePath, err)
+			} else if ok {
 				break
 			}
 			if _, ok := parseFixtureDirective(lines[i]); ok {
@@ -211,6 +260,8 @@ func parseFenceInfo(line string) string {
 }
 
 var fixtureDirectivePattern = regexp.MustCompile(`^\s*<!--\s*fixture:([A-Za-z0-9_-]+)\s*-->\s*$`)
+var alloyModelInfoPattern = regexp.MustCompile(`^alloy:model\(([A-Za-z_][A-Za-z0-9_-]*)\)$`)
+var alloyRefDirectivePattern = regexp.MustCompile(`^\s*<!--\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*-->\s*$`)
 
 func parseFixtureDirective(line string) (string, bool) {
 	matches := fixtureDirectivePattern.FindStringSubmatch(line)
@@ -218,6 +269,37 @@ func parseFixtureDirective(line string) (string, bool) {
 		return "", false
 	}
 	return matches[1], true
+}
+
+func parseAlloyModelInfo(info string) (string, bool) {
+	matches := alloyModelInfoPattern.FindStringSubmatch(strings.TrimSpace(info))
+	if matches == nil {
+		return "", false
+	}
+	return matches[1], true
+}
+
+func parseAlloyRefDirective(line string) (AlloyRefNode, bool, error) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "<!--") || !strings.Contains(trimmed, "alloy:ref(") {
+		return AlloyRefNode{}, false, nil
+	}
+
+	matches := alloyRefDirectivePattern.FindStringSubmatch(trimmed)
+	if matches == nil {
+		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q", trimmed)
+	}
+
+	scope := strings.TrimSpace(matches[3])
+	if scope == "" {
+		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q", trimmed)
+	}
+
+	return AlloyRefNode{
+		Model:     matches[1],
+		Assertion: matches[2],
+		Scope:     scope,
+	}, true, nil
 }
 
 func isTableStart(lines []string, index int) bool {
