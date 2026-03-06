@@ -491,7 +491,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --rule: #d8d0bd;
       --pass-ink: #1f5e2e;
       --fail-ink: #7a2618;
-      --accent: #a34b2a;
+      --accent: #355c7a;
       --code-bg: #f4ecdc;
       --note-bg: #fbf7ef;
       --fail-bg: #fff5f2;
