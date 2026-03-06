@@ -15,39 +15,49 @@ import (
 )
 
 type reportView struct {
+	Title string
+	Meta  template.HTML
 	Specs []specView
 }
 
 type specView struct {
 	Title    string
+	Anchor   string
+	Status   string
 	Headings []tocItemView
 	Body     template.HTML
 }
 
 type tocItemView struct {
-	Text   string
-	Anchor string
-	Level  int
-	Status string
+	Text     string
+	Anchor   string
+	Level    int
+	Status   string
+	Children []tocItemView
 }
 
-func Write(report core.Report, outPath string) error {
+func Write(report core.Report, title string, outPath string) error {
+	if title == "" {
+		title = "Specification"
+	}
 	specs := make([]specView, 0, len(report.Results))
-	meta := buildMeta(report)
 	for _, result := range report.Results {
-		body, err := renderDocument(result, meta)
+		body, err := renderDocument(result)
 		if err != nil {
 			return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 		}
 		specs = append(specs, specView{
 			Title:    result.Document.Title,
+			Anchor:   core.HeadingAnchor(result.Document.RelativeTo, []string{result.Document.Title}),
+			Status:   specStatusClass(result),
 			Headings: collectHeadings(result),
 			Body:     template.HTML(body),
 		})
-		meta = "" // only inject meta after first spec's h1
 	}
 
 	view := reportView{
+		Title: title,
+		Meta:  template.HTML(buildMeta(report)),
 		Specs: specs,
 	}
 
@@ -69,7 +79,7 @@ func Write(report core.Report, outPath string) error {
 
 func collectHeadings(result core.DocumentResult) []tocItemView {
 	statuses := collectHeadingStatuses(result)
-	items := make([]tocItemView, 0)
+	var roots []tocItemView
 	for _, node := range result.Document.Nodes {
 		heading, ok := node.(core.HeadingNode)
 		if !ok {
@@ -78,14 +88,33 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 		if len(heading.HeadingPath) == 0 || heading.Level == 1 {
 			continue
 		}
-		items = append(items, tocItemView{
+		item := tocItemView{
 			Text:   heading.Text,
 			Anchor: core.HeadingAnchor(result.Document.RelativeTo, heading.HeadingPath),
 			Level:  heading.Level,
 			Status: tocStatusClass(statuses[headingPathKey(heading.HeadingPath)]),
-		})
+		}
+		if heading.Level == 2 {
+			roots = append(roots, item)
+		} else if len(roots) > 0 {
+			roots[len(roots)-1].Children = append(roots[len(roots)-1].Children, item)
+		}
 	}
-	return items
+	return roots
+}
+
+func specStatusClass(result core.DocumentResult) string {
+	for _, item := range result.Cases {
+		if item.Status == core.StatusFailed {
+			return "failed"
+		}
+	}
+	for _, item := range result.AlloyChecks {
+		if item.Status == core.StatusFailed {
+			return "failed"
+		}
+	}
+	return ""
 }
 
 func tocStatusClass(status core.Status) string {
@@ -140,7 +169,7 @@ func buildMeta(report core.Report) string {
 	return b.String()
 }
 
-func renderDocument(result core.DocumentResult, meta string) (string, error) {
+func renderDocument(result core.DocumentResult) (string, error) {
 	caseResults := make(map[string]core.CaseResult, len(result.Cases))
 	for _, item := range result.Cases {
 		caseResults[item.ID.Key()] = item
@@ -170,10 +199,6 @@ func renderDocument(result core.DocumentResult, meta string) (string, error) {
 				return "", err
 			}
 			out.WriteString(html)
-			if current.Level == 1 && meta != "" {
-				out.WriteString(meta)
-				meta = ""
-			}
 		case core.ProseNode:
 			html, err := markdownToHTML(current.Markdown())
 			if err != nil {
@@ -272,12 +297,22 @@ func renderHeading(node core.HeadingNode, documentPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(node.HeadingPath) == 0 {
-		return html, nil
+	rendered := node.Level + 1
+	if rendered > 6 {
+		rendered = 6
 	}
 	openTag := fmt.Sprintf("<h%d>", node.Level)
-	replacement := fmt.Sprintf("<h%d id=\"%s\">", node.Level, template.HTMLEscapeString(core.HeadingAnchor(documentPath, node.HeadingPath)))
-	return strings.Replace(html, openTag, replacement, 1), nil
+	closeTag := fmt.Sprintf("</h%d>", node.Level)
+	var replacement string
+	if len(node.HeadingPath) > 0 {
+		replacement = fmt.Sprintf("<h%d id=\"%s\">", rendered, template.HTMLEscapeString(core.HeadingAnchor(documentPath, node.HeadingPath)))
+	} else {
+		replacement = fmt.Sprintf("<h%d>", rendered)
+	}
+	closeReplacement := fmt.Sprintf("</h%d>", rendered)
+	result := strings.Replace(html, openTag, replacement, 1)
+	result = strings.Replace(result, closeTag, closeReplacement, 1)
+	return result, nil
 }
 
 func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (string, error) {
@@ -498,7 +533,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       line-height: 1.45;
     }
 
-    .toc-inner { padding: 1.1rem 0 0; }
+    .toc-inner { padding: 1.1rem 0 0 0.85rem; }
 
     .toc-title {
       margin: 0 0 0.75rem;
@@ -515,9 +550,12 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .toc-spec-title {
+      display: block;
       margin: 0 0 0.35rem;
       font-weight: 600;
       color: var(--ink);
+      text-decoration: none;
+      position: relative;
     }
 
     .toc-list {
@@ -528,8 +566,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .toc-item {
       margin: 0.1rem 0;
-      &:has(> .toc-level-1) { margin-top: 0.6rem; }
-      &:has(> .toc-level-2) { margin-top: 0.4rem; }
       &:first-child { margin-top: 0; }
     }
 
@@ -542,31 +578,52 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
       &:hover { color: var(--ink); }
       &.active { color: var(--ink); font-weight: 600; }
-
-      &.failed::before {
-        content: "";
-        position: absolute;
-        left: -0.75rem;
-        top: 0.42rem;
-        width: 0.42rem;
-        height: 0.42rem;
-        border-radius: 999px;
-        background: var(--fail-mark);
-      }
     }
 
-    .toc-level-1 {
-      font-weight: 600;
-      color: var(--ink);
+    :is(.toc-spec-title, .toc-link).failed::before {
+      content: "";
+      position: absolute;
+      left: -0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0.38rem;
+      height: 0.38rem;
+      border-radius: 999px;
+      background: var(--fail-mark);
     }
 
-    .toc-level-2 { padding-left: 0.7rem; }
-    .toc-level-3 { padding-left: 1.4rem; }
-    .toc-level-4 { padding-left: 2.1rem; }
+    .toc-level-4 { padding-left: 0.7rem; }
     .toc-level-5,
-    .toc-level-6 { padding-left: 2.8rem; }
+    .toc-level-6 { padding-left: 1.4rem; }
+
+    .toc-list {
+      display: none;
+    }
+
+    .toc-spec.expanded > .toc-list {
+      display: block;
+    }
+
+    .toc-children {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 0 0.85rem;
+      display: none;
+    }
+
+    .toc-item.expanded > .toc-children {
+      display: block;
+    }
 
     .content { min-width: 0; }
+
+    .report-title {
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+      font-size: 2.8rem;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      margin: 0 0 0.4rem;
+    }
 
     .content-meta {
       margin: 0 0 1.5rem;
@@ -600,7 +657,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
       & :first-child { margin-top: 0; }
 
-      & :is(h1, h2, h3, h4, h5, h6) {
+      & :is(h2, h3, h4, h5, h6) {
         font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
         line-height: 1.15;
         text-wrap: balance;
@@ -610,10 +667,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.06);
       }
 
-      & h1 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: 0; z-index: 14; }
-      & h2 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: calc(4.5rem - 1px); z-index: 13; }
-      & h3 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: calc(7.8rem - 1px); z-index: 12; }
-      & :is(h4, h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: calc(10.4rem - 1px); z-index: 11; }
+      & h2 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: 0; z-index: 14; }
+      & h3 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: calc(4.5rem - 1px); z-index: 13; }
+      & h4 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: calc(7.8rem - 1px); z-index: 12; }
+      & :is(h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: calc(10.4rem - 1px); z-index: 11; }
     }
 
     .status {
@@ -801,11 +858,20 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
           <p class="toc-title">Contents</p>
           {{ range .Specs }}
           <section class="toc-spec">
-            <p class="toc-spec-title">{{ .Title }}</p>
+            <a class="toc-spec-title {{ .Status }}" href="#{{ .Anchor }}">{{ .Title }}</a>
             <ul class="toc-list">
               {{ range .Headings }}
-              <li class="toc-item">
+              <li class="toc-item" data-anchor="{{ .Anchor }}">
                 <a class="toc-link toc-level-{{ .Level }} {{ .Status }}" href="#{{ .Anchor }}">{{ .Text }}</a>
+                {{ if .Children }}
+                <ul class="toc-children">
+                  {{ range .Children }}
+                  <li class="toc-item">
+                    <a class="toc-link toc-level-{{ .Level }} {{ .Status }}" href="#{{ .Anchor }}">{{ .Text }}</a>
+                  </li>
+                  {{ end }}
+                </ul>
+                {{ end }}
               </li>
               {{ end }}
             </ul>
@@ -815,6 +881,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       </aside>
 
       <div class="content">
+        <h1 class="report-title">{{ .Title }}</h1>
+        {{ .Meta }}
         {{ range .Specs }}
         <article class="spec">
           <section class="spec-body">{{ .Body }}</section>
@@ -825,10 +893,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   </main>
 <script>
 (() => {
-  const links = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
-  if (!links.length) return;
+  const allLinks = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
+  if (!allLinks.length) return;
 
-  const items = links
+  const allItems = allLinks
     .map((link) => {
       const id = decodeURIComponent(link.getAttribute('href').slice(1));
       const heading = document.getElementById(id);
@@ -837,16 +905,41 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     })
     .filter(Boolean);
 
-  if (!items.length) return;
+  if (!allItems.length) return;
+
+  // Spec sections in the ToC
+  const specSections = Array.from(document.querySelectorAll('.toc-spec'));
+  const specEntries = specSections
+    .map((section) => {
+      const firstAnchor = section.querySelector('.toc-item[data-anchor]');
+      if (!firstAnchor) return null;
+      const heading = document.getElementById(firstAnchor.getAttribute('data-anchor'));
+      if (!heading) return null;
+      return { section, heading };
+    })
+    .filter(Boolean);
+
+  // H2 items are direct children of .toc-list with data-anchor
+  const h2Items = Array.from(document.querySelectorAll('.toc-list > .toc-item[data-anchor]'));
+
+  const h2Entries = h2Items
+    .map((li) => {
+      const anchor = li.getAttribute('data-anchor');
+      const heading = document.getElementById(anchor);
+      if (!heading) return null;
+      return { li, heading };
+    })
+    .filter(Boolean);
 
   let frame = 0;
 
   const update = () => {
     frame = 0;
     const offset = window.scrollY + Math.min(window.innerHeight * 0.22, 180);
-    let active = items[0];
 
-    for (const item of items) {
+    // Find active link among all links (H2 + H3+)
+    let active = allItems[0];
+    for (const item of allItems) {
       if (item.heading.offsetTop <= offset) {
         active = item;
         continue;
@@ -854,8 +947,36 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       break;
     }
 
-    for (const item of items) {
+    for (const item of allItems) {
       item.link.classList.toggle('active', item === active);
+    }
+
+    // Find active spec section
+    let activeSpec = specEntries[0];
+    for (const entry of specEntries) {
+      if (entry.heading.offsetTop <= offset) {
+        activeSpec = entry;
+        continue;
+      }
+      break;
+    }
+
+    for (const entry of specEntries) {
+      entry.section.classList.toggle('expanded', entry === activeSpec);
+    }
+
+    // Find active H2 section and expand it
+    let activeH2 = h2Entries[0];
+    for (const entry of h2Entries) {
+      if (entry.heading.offsetTop <= offset) {
+        activeH2 = entry;
+        continue;
+      }
+      break;
+    }
+
+    for (const entry of h2Entries) {
+      entry.li.classList.toggle('expanded', entry === activeH2);
     }
   };
 

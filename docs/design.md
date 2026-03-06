@@ -232,6 +232,7 @@ Example:
 
 ```json
 {
+  "title": "Project Spec",
   "include": ["specs/**/*.spec.md"],
   "adapters": [
     {

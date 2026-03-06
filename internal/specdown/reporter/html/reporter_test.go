@@ -148,7 +148,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outPath); err != nil {
+	if err := Write(report, "My Report", outPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -158,7 +158,10 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 
 	html := string(body)
-	if !strings.Contains(html, "<h1 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h1>") {
+	if !strings.Contains(html, "<h1 class=\"report-title\">My Report</h1>") {
+		t.Fatalf("expected h1 report title, got %q", html)
+	}
+	if !strings.Contains(html, "<h2 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h2>") {
 		t.Fatalf("expected markdown heading in html, got %q", html)
 	}
 	if !strings.Contains(html, "aria-label=\"Table of contents\"") {
@@ -167,7 +170,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "position: sticky;") {
 		t.Fatalf("expected sticky toc styles, got %q", html)
 	}
-	if strings.Contains(html, "<h1>report</h1>") {
+	if strings.Contains(html, "<h2>report</h2>") {
 		t.Fatalf("expected no report heading, got %q", html)
 	}
 	if strings.Contains(html, ">Failures<") {
@@ -182,7 +185,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "text-wrap: balance;") {
 		t.Fatalf("expected balanced heading wrap, got %q", html)
 	}
-	if !strings.Contains(html, "& h1 {") {
+	if !strings.Contains(html, "& h2 {") {
 		t.Fatalf("expected heading typography rules, got %q", html)
 	}
 	if !strings.Contains(html, "align-items: baseline;") {
@@ -190,6 +193,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, "toc-spec-title") {
 		t.Fatalf("expected spec title in toc, got %q", html)
+	}
+	if !strings.Contains(html, `<a class="toc-spec-title`) {
+		t.Fatalf("expected spec title to be a link, got %q", html)
 	}
 	if !strings.Contains(html, "classList.toggle('active'") {
 		t.Fatalf("expected active toc script, got %q", html)
@@ -285,7 +291,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, reportPath); err != nil {
+	if err := Write(report, "", reportPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -421,7 +427,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 		},
 	}
 
-	if err := Write(report, outPath); err != nil {
+	if err := Write(report, "", outPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 

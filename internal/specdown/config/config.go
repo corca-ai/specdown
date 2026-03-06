@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	Title     string          `json:"title"`
 	Include   []string        `json:"include"`
 	Adapters  []AdapterConfig `json:"adapters"`
 	Models    ModelConfig     `json:"models"`

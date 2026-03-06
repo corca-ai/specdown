@@ -6,6 +6,7 @@ Create a `specdown.json` in the project root.
 
 ```json
 {
+  "title": "My Project Spec",
   "include": ["specs/**/*.spec.md"],
   "adapters": [
     {
@@ -32,6 +33,7 @@ Create a `specdown.json` in the project root.
 
 | Field | Description |
 |-------|-------------|
+| `title` | Report title displayed as `<h1>`. Defaults to `"Specification"` |
 | `include` | Glob pattern for spec files |
 | `adapters` | List of adapters that handle executable blocks and fixtures |
 | `reporters` | Output generators. `html` and `json` builtins provided |
