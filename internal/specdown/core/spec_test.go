@@ -1,0 +1,46 @@
+package core
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestDiscoverFindsSpecDocuments(t *testing.T) {
+	root := t.TempDir()
+
+	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(specPath, []byte("# Pocket Board\n\nPlain prose only.\n"), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "specs", "notes.md"), []byte("# Ignore me\n"), 0o644); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+
+	docs, err := Discover(filepath.Join(root, "specs"))
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(docs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(docs))
+	}
+
+	if docs[0].Title != "Pocket Board" {
+		t.Fatalf("unexpected title: %q", docs[0].Title)
+	}
+	if docs[0].RelativeTo != "pocket-board.spec.md" {
+		t.Fatalf("unexpected relative path: %q", docs[0].RelativeTo)
+	}
+}
+
+func TestRunFailsWithoutSpecs(t *testing.T) {
+	root := t.TempDir()
+
+	_, err := Run(root)
+	if err == nil {
+		t.Fatal("expected error when no specs exist")
+	}
+}
