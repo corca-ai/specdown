@@ -39,6 +39,14 @@ board "${boardName}" should exist
 board "${boardName}-archive" should not exist
 ```
 
+### 생성한 보드의 보관 사본도 조회되어야 한다
+
+보드를 만들면 `${boardName}-archive` 이름의 보관 사본도 함께 조회 가능해야 한다.
+
+```verify:board
+board "${boardName}-archive" should exist
+```
+
 ### 보드 존재 규칙
 
 보드의 존재 여부는 표의 각 행에서 독립적으로 검증할 수 있어야 한다.
@@ -92,6 +100,15 @@ move-card "${boardName}" "${cardId}" doing
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | doing |
+
+##### 이동한 카드는 완료 후보 컬럼에서도 보일 수 있어야 한다
+
+작업 중인 카드는 동시에 `done` 후보 컬럼에서도 조회될 수 있어야 한다.
+
+<!-- fixture:card-column -->
+| board | card | column |
+| --- | --- | --- |
+| ${boardName} | ${cardId} | done |
 
 ## 형식 규칙
 
