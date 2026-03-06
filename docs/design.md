@@ -48,7 +48,7 @@
 
 1. 문서 포맷은 Markdown-first다. 산문은 보존되고, 실행 블록만 구조적으로 해석한다.
 2. 코어는 테스트 프레임워크나 제품 로직을 모른다. 모든 실행 의미는 adapter가 제공한다.
-3. Alloy는 `.als` 파일과 문서 임베딩 블록 둘 다 지원한다.
+3. Alloy는 문서 임베딩 블록을 중심으로 지원한다.
 4. 같은 `alloy:model(name)`를 여러 번 쓰면 문서 순서대로 하나의 logical model로 결합한다.
 5. HTML 리포트는 부가 기능이 아니라 1급 산출물이다.
 6. 표 기반 명세는 core 문법이고, 각 표의 실행 의미는 fixture adapter가 정의한다.
@@ -62,7 +62,7 @@
 ```text
 packages/
 ├── specdown-core/              # parser, AST, planning, event model
-├── specdown-cli/               # compile/run/report/check:model 진입점
+├── specdown-cli/               # run 진입점
 ├── specdown-adapter-protocol/  # adapter process contract + JSON schema
 ├── specdown-reporter-html/     # static HTML report renderer
 ├── specdown-alloy/             # embedded model extraction + Alloy runner
@@ -386,7 +386,6 @@ check privateIsolation for 5
 - 이후 fragment에 `module`이 다시 나오면 compile-time error다
 - 생성된 model에는 source mapping comment를 삽입한다
   - 예: `-- specdown-source: docs/foo.spec.md#Access/Isolation`
-- standalone `.als` 파일은 reusable model library 용도로 계속 지원한다
 
 ### 모델 참조
 
@@ -446,20 +445,14 @@ HTML 리포트는 v1의 핵심 deliverable이다.
 독립 팀이 구현할 CLI 표면은 다음 정도면 충분하다.
 
 ```bash
-specdown compile
 specdown run
-specdown report --format html
-specdown check:model
 ```
 
 의미:
 
-- `compile`: Markdown을 parse하고 execution plan과 model bundle을 생성
-- `run`: runtime adapter를 사용해 실행하고 event stream을 기록
-- `report`: recorded events로 report artifact 생성
-- `check:model`: embedded + standalone Alloy model을 검사
+- `run`: Markdown parse, adapter 실행, embedded Alloy 검사, model bundle 생성, report artifact 생성을 한 번에 수행한다
 
-MVP에서는 `specdown run`이 compile + execute + report를 한 번에 해도 된다.
+v1에서는 `specdown run`이 compile + execute + report를 한 번에 수행하는 기본 경로다.
 
 
 ## 구현 단계

@@ -25,11 +25,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
 			os.Exit(1)
 		}
-	case "check:model":
-		if err := checkModel(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
-			os.Exit(1)
-		}
 	default:
 		usage()
 		os.Exit(2)
@@ -73,47 +68,9 @@ func run(args []string) error {
 	return nil
 }
 
-func checkModel(args []string) error {
-	fs := flag.NewFlagSet("check:model", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-
-	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
-	outPath := fs.String("out", "", "Output HTML report path")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	cfg, configDir, err := config.Load(*configPath)
-	if err != nil {
-		return err
-	}
-
-	report, err := engine.CheckModels(configDir, cfg)
-	if err != nil {
-		return err
-	}
-
-	reportPath := resolveReportPath(configDir, cfg, *outPath)
-	if err := writeArtifacts(report, reportPath); err != nil {
-		return err
-	}
-
-	if report.Summary.SpecsFailed > 0 || report.Summary.AlloyChecksFailed > 0 {
-		fmt.Printf("FAIL %d spec(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.AlloyChecksFailed)
-		fmt.Printf("report: %s\n", reportPath)
-		return fmt.Errorf("model check failed")
-	}
-
-	fmt.Printf("PASS %d spec(s), %d alloy check(s)\n", report.Summary.SpecsPassed, report.Summary.AlloyChecksPassed)
-	fmt.Printf("report: %s\n", reportPath)
-	return nil
-}
-
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-out .artifacts/specdown/report.html]")
-	fmt.Fprintln(os.Stderr, "  specdown check:model [-config specdown.json] [-out .artifacts/specdown/report.html]")
 }
 
 func writeArtifacts(report core.Report, reportPath string) error {
