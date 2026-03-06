@@ -34,6 +34,7 @@ type tocItemView struct {
 	Text   string
 	Anchor string
 	Level  int
+	Status string
 }
 
 type failureView struct {
@@ -55,7 +56,7 @@ func Write(report core.Report, outPath string) error {
 			Title:    result.Document.Title,
 			Path:     result.Document.RelativeTo,
 			Status:   string(result.Status),
-			Headings: collectHeadings(result.Document),
+			Headings: collectHeadings(result),
 			Body:     template.HTML(body),
 		})
 
@@ -107,9 +108,10 @@ func Write(report core.Report, outPath string) error {
 	return nil
 }
 
-func collectHeadings(doc core.Document) []tocItemView {
+func collectHeadings(result core.DocumentResult) []tocItemView {
+	statuses := collectHeadingStatuses(result)
 	items := make([]tocItemView, 0)
-	for _, node := range doc.Nodes {
+	for _, node := range result.Document.Nodes {
 		heading, ok := node.(core.HeadingNode)
 		if !ok {
 			continue
@@ -119,11 +121,40 @@ func collectHeadings(doc core.Document) []tocItemView {
 		}
 		items = append(items, tocItemView{
 			Text:   heading.Text,
-			Anchor: core.HeadingAnchor(doc.RelativeTo, heading.HeadingPath),
+			Anchor: core.HeadingAnchor(result.Document.RelativeTo, heading.HeadingPath),
 			Level:  heading.Level,
+			Status: string(statuses[headingPathKey(heading.HeadingPath)]),
 		})
 	}
 	return items
+}
+
+func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
+	statuses := make(map[string]core.Status)
+	mark := func(path []string, status core.Status) {
+		for i := 1; i <= len(path); i++ {
+			key := headingPathKey(path[:i])
+			current := statuses[key]
+			if current == core.StatusFailed {
+				continue
+			}
+			if status == core.StatusFailed || current == "" {
+				statuses[key] = status
+			}
+		}
+	}
+
+	for _, item := range result.Cases {
+		mark(item.ID.HeadingPath, item.Status)
+	}
+	for _, item := range result.AlloyChecks {
+		mark(item.ID.HeadingPath, item.Status)
+	}
+	return statuses
+}
+
+func headingPathKey(path []string) string {
+	return strings.Join(path, "\x00")
 }
 
 func renderDocument(result core.DocumentResult, outPath string) (string, error) {
@@ -539,8 +570,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --ink: #1f1f1b;
       --muted: #5b594f;
       --rule: #d8d0bd;
-      --pass-ink: #1f5e2e;
-      --fail-ink: #7a2618;
+      --pass-ink: #0f7a37;
+      --pass-mark: #19a34a;
+      --fail-ink: #a1261a;
+      --fail-mark: #d63b2d;
       --accent: #355c7a;
       --code-bg: #f4ecdc;
       --note-bg: #fbf7ef;
@@ -602,6 +635,27 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       margin: 0 0 0.35rem;
       font-weight: 600;
       color: var(--ink);
+      padding-left: 0.95rem;
+      position: relative;
+    }
+
+    .toc-spec-title::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.32rem;
+      width: 0.42rem;
+      height: 0.42rem;
+      border-radius: 999px;
+      background: #c9c0ab;
+    }
+
+    .toc-spec-title.passed::before {
+      background: var(--pass-mark);
+    }
+
+    .toc-spec-title.failed::before {
+      background: var(--fail-mark);
     }
 
     .toc-spec-path {
@@ -625,11 +679,31 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       display: block;
       text-decoration: none;
       color: var(--muted);
-      padding-left: 0;
+      padding-left: 0.95rem;
+      position: relative;
     }
 
     .toc-link:hover {
       color: var(--ink);
+    }
+
+    .toc-link::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.42rem;
+      width: 0.42rem;
+      height: 0.42rem;
+      border-radius: 999px;
+      background: #c9c0ab;
+    }
+
+    .toc-link.passed::before {
+      background: var(--pass-mark);
+    }
+
+    .toc-link.failed::before {
+      background: var(--fail-mark);
     }
 
     .toc-level-1 {
@@ -729,18 +803,29 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .spec {
+      position: relative;
       margin: 0;
-      padding: 2rem 0 0 0.9rem;
+      padding: 2rem 0 0 1rem;
       border-top: 1px solid var(--rule);
-      border-left: 2px solid var(--rule);
     }
 
-    .spec.passed {
-      border-left-color: #9ab9a0;
+    .spec::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 2.05rem;
+      width: 0.28rem;
+      height: 1.25rem;
+      border-radius: 999px;
+      background: #c9c0ab;
     }
 
-    .spec.failed {
-      border-left-color: #d9a597;
+    .spec.passed::before {
+      background: var(--pass-mark);
+    }
+
+    .spec.failed::before {
+      background: var(--fail-mark);
     }
 
     .spec-header {
@@ -784,37 +869,65 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-block {
+      position: relative;
       margin: 1.35rem 0;
       padding: 0.15rem 0 0.2rem 1rem;
-      border-left: 3px solid var(--rule);
       background: transparent;
       scroll-margin-top: 1.5rem;
     }
 
+    .exec-block::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.15rem;
+      width: 0.28rem;
+      height: 1.15rem;
+      border-radius: 999px;
+      background: #c9c0ab;
+    }
+
     .exec-block.passed {
-      border-left-color: #94b79a;
       background: linear-gradient(90deg, #f4faf5 0%, transparent 18rem);
     }
 
+    .exec-block.passed::before {
+      background: var(--pass-mark);
+    }
+
     .exec-block.failed {
-      border-left-color: #d9a597;
       background: linear-gradient(90deg, var(--fail-bg) 0%, transparent 20rem);
     }
 
+    .exec-block.failed::before {
+      background: var(--fail-mark);
+    }
+
     .exec-table-block {
+      position: relative;
       margin: 1.35rem 0;
       padding: 0.15rem 0 0.2rem 1rem;
-      border-left: 3px solid var(--rule);
       background: transparent;
       overflow-x: auto;
     }
 
-    .exec-table-block.passed {
-      border-left-color: #94b79a;
+    .exec-table-block::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.15rem;
+      width: 0.28rem;
+      height: 1.15rem;
+      border-radius: 999px;
+      background: #c9c0ab;
     }
 
-    .exec-table-block.failed {
-      border-left-color: #d9a597;
+    .exec-table-block.passed::before {
+      background: var(--pass-mark);
+    }
+
+    .exec-table-block.failed::before {
+      background: var(--fail-mark);
     }
 
     .exec-table-header {
@@ -853,11 +966,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-table tbody tr.passed td:first-child {
-      box-shadow: inset 3px 0 0 #94b79a;
+      box-shadow: inset 4px 0 0 var(--pass-mark);
     }
 
     .exec-table tbody tr.failed td:first-child {
-      box-shadow: inset 3px 0 0 #d9a597;
+      box-shadow: inset 4px 0 0 var(--fail-mark);
     }
 
     .cell-template {
@@ -987,12 +1100,12 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
           <p class="toc-title">Contents</p>
           {{ range .Specs }}
           <section class="toc-spec">
-            <p class="toc-spec-title">{{ .Title }}</p>
+            <p class="toc-spec-title {{ .Status }}">{{ .Title }}</p>
             <p class="toc-spec-path">{{ .Path }}</p>
             <ul class="toc-list">
               {{ range .Headings }}
               <li class="toc-item">
-                <a class="toc-link toc-level-{{ .Level }}" href="#{{ .Anchor }}">{{ .Text }}</a>
+                <a class="toc-link toc-level-{{ .Level }} {{ .Status }}" href="#{{ .Anchor }}">{{ .Text }}</a>
               </li>
               {{ end }}
             </ul>
