@@ -830,15 +830,26 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-table tbody td:first-child {
-      box-shadow: inset 3px 0 0 transparent;
+      position: relative;
     }
 
-    .exec-table tbody tr.passed td:first-child {
-      box-shadow: inset 4px 0 0 var(--pass-mark);
+    .exec-table tbody tr.passed td:first-child::before,
+    .exec-table tbody tr.failed td:first-child::before {
+      content: "";
+      position: absolute;
+      left: -1rem;
+      top: 0.72rem;
+      width: 0.28rem;
+      height: 1.16em;
+      border-radius: 999px;
     }
 
-    .exec-table tbody tr.failed td:first-child {
-      box-shadow: inset 4px 0 0 var(--fail-mark);
+    .exec-table tbody tr.passed td:first-child::before {
+      background: var(--pass-mark);
+    }
+
+    .exec-table tbody tr.failed td:first-child::before {
+      background: var(--fail-mark);
     }
 
     .cell-template {
