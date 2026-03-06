@@ -47,7 +47,7 @@ func Write(report core.Report, outPath string) error {
 	specs := make([]specView, 0, len(report.Results))
 	failures := make([]failureView, 0)
 	for _, result := range report.Results {
-		body, err := renderDocument(result, outPath)
+		body, err := renderDocument(result)
 		if err != nil {
 			return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 		}
@@ -160,7 +160,7 @@ func headingPathKey(path []string) string {
 	return strings.Join(path, "\x00")
 }
 
-func renderDocument(result core.DocumentResult, outPath string) (string, error) {
+func renderDocument(result core.DocumentResult) (string, error) {
 	caseResults := make(map[string]core.CaseResult, len(result.Cases))
 	for _, item := range result.Cases {
 		caseResults[item.ID.Key()] = item
@@ -198,7 +198,7 @@ func renderDocument(result core.DocumentResult, outPath string) (string, error) 
 			}
 			out.WriteString(rendered)
 		case core.AlloyRefNode:
-			rendered, err := renderAlloyRef(current, alloyResults, outPath)
+			rendered, err := renderAlloyRef(current, alloyResults)
 			if err != nil {
 				return "", err
 			}
@@ -399,7 +399,7 @@ func renderAlloyModel(node core.AlloyModelNode) (string, error) {
 	return out.String(), nil
 }
 
-func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult, outPath string) (string, error) {
+func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
 	if node.ID == nil {
 		return "", fmt.Errorf("alloy ref is missing an id")
 	}
@@ -435,19 +435,6 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	out.WriteString(`</code> checked at scope <code>`)
 	out.WriteString(template.HTMLEscapeString(result.Scope))
 	out.WriteString(`</code></p>`)
-	if result.SourceRef != "" {
-		out.WriteString(`<p class="exec-note">source ref: `)
-		out.WriteString(renderSourceRefLink(result.SourceRef))
-		out.WriteString(`</p>`)
-	}
-	if result.BundleLine > 0 {
-		out.WriteString(`<p class="exec-note">bundle line: <code>`)
-		out.WriteString(template.HTMLEscapeString(fmt.Sprintf("%d", result.BundleLine)))
-		out.WriteString(`</code></p>`)
-	}
-	renderArtifactLink(&out, "bundle artifact", result.BundlePath, outPath)
-	renderArtifactLink(&out, "source map", result.SourceMapPath, outPath)
-	renderArtifactLink(&out, "counterexample", result.CounterexamplePath, outPath)
 	if result.Message != "" {
 		out.WriteString(`<p class="exec-message">`)
 		out.WriteString(template.HTMLEscapeString(result.Message))
@@ -458,26 +445,6 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	}
 	out.WriteString(`</section>`)
 	return out.String(), nil
-}
-
-func renderArtifactLink(out *strings.Builder, label string, assetPath string, reportPath string) {
-	if assetPath == "" {
-		return
-	}
-	out.WriteString(`<p class="exec-note">`)
-	out.WriteString(template.HTMLEscapeString(label))
-	out.WriteString(`: `)
-	href := relativeAssetHref(reportPath, assetPath)
-	if href != "" {
-		out.WriteString(`<a href="`)
-		out.WriteString(template.HTMLEscapeString(href))
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(assetPath))
-		out.WriteString(`</a>`)
-	} else {
-		out.WriteString(template.HTMLEscapeString(assetPath))
-	}
-	out.WriteString(`</p>`)
 }
 
 func renderFailureDiff(expected string, actual string, compact bool) string {
@@ -499,49 +466,6 @@ func renderFailureDiff(expected string, actual string, compact bool) string {
 	}
 	out.WriteString(`</dl>`)
 	return out.String()
-}
-
-func relativeAssetHref(reportPath string, assetPath string) string {
-	if reportPath == "" || assetPath == "" {
-		return ""
-	}
-	relative, err := filepath.Rel(filepath.Dir(reportPath), assetPath)
-	if err != nil {
-		return ""
-	}
-	return filepath.ToSlash(relative)
-}
-
-func renderSourceRefLink(sourceRef string) string {
-	file, headingPath, ok := parseSourceRef(sourceRef)
-	if !ok {
-		return `<code>` + template.HTMLEscapeString(sourceRef) + `</code>`
-	}
-	anchor := core.HeadingAnchor(file, headingPath)
-	var out strings.Builder
-	out.WriteString(`<a href="#`)
-	out.WriteString(template.HTMLEscapeString(anchor))
-	out.WriteString(`"><code>`)
-	out.WriteString(template.HTMLEscapeString(sourceRef))
-	out.WriteString(`</code></a>`)
-	return out.String()
-}
-
-func parseSourceRef(sourceRef string) (string, []string, bool) {
-	parts := strings.SplitN(sourceRef, "#", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", nil, false
-	}
-	rawPath := strings.Split(parts[1], "/")
-	headingPath := make([]string, 0, len(rawPath))
-	for _, part := range rawPath {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			return "", nil, false
-		}
-		headingPath = append(headingPath, trimmed)
-	}
-	return parts[0], headingPath, true
 }
 
 func markdownToHTML(source string) (string, error) {
@@ -612,8 +536,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .toc-inner {
-      padding: 0.25rem 0 0.25rem 0.9rem;
-      border-left: 1px solid var(--rule);
+      padding: 0.25rem 0;
     }
 
     .toc-title {
@@ -661,10 +584,16 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       text-decoration: none;
       color: var(--muted);
       position: relative;
+      transition: color 120ms ease;
     }
 
     .toc-link:hover {
       color: var(--ink);
+    }
+
+    .toc-link.active {
+      color: var(--ink);
+      font-weight: 600;
     }
 
     .toc-link.failed {
@@ -1155,6 +1084,52 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       </div>
     </div>
   </main>
+<script>
+(() => {
+  const links = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
+  if (!links.length) return;
+
+  const items = links
+    .map((link) => {
+      const id = decodeURIComponent(link.getAttribute('href').slice(1));
+      const heading = document.getElementById(id);
+      if (!heading) return null;
+      return { link, heading };
+    })
+    .filter(Boolean);
+
+  if (!items.length) return;
+
+  let frame = 0;
+
+  const update = () => {
+    frame = 0;
+    const offset = window.scrollY + Math.min(window.innerHeight * 0.22, 180);
+    let active = items[0];
+
+    for (const item of items) {
+      if (item.heading.offsetTop <= offset) {
+        active = item;
+        continue;
+      }
+      break;
+    }
+
+    for (const item of items) {
+      item.link.classList.toggle('active', item === active);
+    }
+  };
+
+  const schedule = () => {
+    if (frame) return;
+    frame = window.requestAnimationFrame(update);
+  };
+
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  update();
+})();
+</script>
 </body>
 </html>
 `))

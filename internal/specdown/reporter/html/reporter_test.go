@@ -167,6 +167,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "position: sticky;") {
 		t.Fatalf("expected sticky toc styles, got %q", html)
 	}
+	if strings.Contains(html, "border-left: 1px solid var(--rule);") {
+		t.Fatalf("expected no left rule in toc, got %q", html)
+	}
 	if !strings.Contains(html, "font-family: \"Avenir Next\", \"Helvetica Neue\", \"Segoe UI\", sans-serif;") {
 		t.Fatalf("expected sans body typography, got %q", html)
 	}
@@ -178,6 +181,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board\"") {
 		t.Fatalf("expected heading link in toc, got %q", html)
+	}
+	if !strings.Contains(html, "classList.toggle('active'") {
+		t.Fatalf("expected active toc script, got %q", html)
 	}
 	if strings.Contains(html, "class=\"toc-link toc-level-1 failed\"") {
 		t.Fatalf("expected no propagated status on parent heading, got %q", html)
@@ -217,28 +223,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 }
 
-func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
+func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	outDir := t.TempDir()
 	reportPath := filepath.Join(outDir, "report.html")
-	bundlePath := filepath.Join(outDir, "alloy", "board.als")
-	sourceMapPath := bundlePath + ".map.json"
-	counterexamplePath := filepath.Join(outDir, "counterexamples", "case-board.json")
-
-	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil {
-		t.Fatalf("mkdir bundle: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(counterexamplePath), 0o755); err != nil {
-		t.Fatalf("mkdir counterexample: %v", err)
-	}
-	if err := os.WriteFile(bundlePath, []byte("module board\n"), 0o644); err != nil {
-		t.Fatalf("write bundle: %v", err)
-	}
-	if err := os.WriteFile(sourceMapPath, []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write source map: %v", err)
-	}
-	if err := os.WriteFile(counterexamplePath, []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write counterexample: %v", err)
-	}
 
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
@@ -282,19 +269,16 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 							HeadingPath: []string{"Pocket Board", "형식 규칙"},
 							Ordinal:     1,
 						},
-						Model:              "board",
-						Assertion:          "cardShape",
-						Scope:              "5",
-						Label:              "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
-						Status:             core.StatusFailed,
-						Message:            "found counterexample for assertion \"cardShape\" at scope 5",
-						Expected:           "assertion \"cardShape\" holds for scope 5",
-						Actual:             "counterexample found",
-						BundlePath:         bundlePath,
-						SourceMapPath:      sourceMapPath,
-						SourceRef:          "specs/pocket-board.spec.md#Pocket Board/형식 규칙",
-						BundleLine:         7,
-						CounterexamplePath: counterexamplePath,
+						Model:      "board",
+						Assertion:  "cardShape",
+						Scope:      "5",
+						Label:      "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+						Status:     core.StatusFailed,
+						Message:    "found counterexample for assertion \"cardShape\" at scope 5",
+						Expected:   "assertion \"cardShape\" holds for scope 5",
+						Actual:     "counterexample found",
+						SourceRef:  "specs/pocket-board.spec.md#Pocket Board/형식 규칙",
+						BundleLine: 7,
 					},
 				},
 			},
@@ -320,20 +304,11 @@ func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
 	if !strings.Contains(html, "alloy:ref(board#cardShape, scope=5)") {
 		t.Fatalf("expected alloy ref label, got %q", html)
 	}
-	if !strings.Contains(html, "bundle artifact") {
-		t.Fatalf("expected bundle artifact note, got %q", html)
+	if strings.Contains(html, "bundle artifact") || strings.Contains(html, "source map") {
+		t.Fatalf("expected no artifact metadata, got %q", html)
 	}
-	if !strings.Contains(html, "source map") {
-		t.Fatalf("expected source map note, got %q", html)
-	}
-	if !strings.Contains(html, "counterexample") {
-		t.Fatalf("expected counterexample note, got %q", html)
-	}
-	if !strings.Contains(html, "source ref") || !strings.Contains(html, "bundle line") {
-		t.Fatalf("expected structured source location, got %q", html)
-	}
-	if !strings.Contains(html, "href=\"#section-specs-pocket-board-spec-md-pocket-board-형식-규칙\"") {
-		t.Fatalf("expected source ref anchor link, got %q", html)
+	if strings.Contains(html, "source ref") || strings.Contains(html, "bundle line") {
+		t.Fatalf("expected no source metadata, got %q", html)
 	}
 	if !strings.Contains(html, "class=\"toc-link toc-level-2 failed\"") {
 		t.Fatalf("expected failed alloy heading in toc, got %q", html)
