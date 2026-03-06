@@ -25,7 +25,6 @@ type reportView struct {
 type specView struct {
 	Title    string
 	Path     string
-	Status   string
 	Headings []tocItemView
 	Body     template.HTML
 }
@@ -55,7 +54,6 @@ func Write(report core.Report, outPath string) error {
 		specs = append(specs, specView{
 			Title:    result.Document.Title,
 			Path:     result.Document.RelativeTo,
-			Status:   string(result.Status),
 			Headings: collectHeadings(result),
 			Body:     template.HTML(body),
 		})
@@ -132,15 +130,13 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
 	statuses := make(map[string]core.Status)
 	mark := func(path []string, status core.Status) {
-		for i := 1; i <= len(path); i++ {
-			key := headingPathKey(path[:i])
-			current := statuses[key]
-			if current == core.StatusFailed {
-				continue
-			}
-			if status == core.StatusFailed || current == "" {
-				statuses[key] = status
-			}
+		key := headingPathKey(path)
+		current := statuses[key]
+		if current == core.StatusFailed {
+			return
+		}
+		if status == core.StatusFailed || current == "" {
+			statuses[key] = status
 		}
 	}
 
@@ -634,27 +630,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       margin: 0 0 0.35rem;
       font-weight: 600;
       color: var(--ink);
-      padding-left: 0.95rem;
-      position: relative;
-    }
-
-    .toc-spec-title::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0.32rem;
-      width: 0.42rem;
-      height: 0.42rem;
-      border-radius: 999px;
-      background: #c9c0ab;
-    }
-
-    .toc-spec-title.passed::before {
-      background: var(--pass-mark);
-    }
-
-    .toc-spec-title.failed::before {
-      background: var(--fail-mark);
     }
 
     .toc-spec-path {
@@ -806,29 +781,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .spec {
-      position: relative;
       margin: 0;
-      padding: 2rem 0 0 1rem;
+      padding: 2rem 0 0 0;
       border-top: 1px solid var(--rule);
-    }
-
-    .spec::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 2.05rem;
-      width: 0.28rem;
-      height: 1.25rem;
-      border-radius: 999px;
-      background: #c9c0ab;
-    }
-
-    .spec.passed::before {
-      background: var(--pass-mark);
-    }
-
-    .spec.failed::before {
-      background: var(--fail-mark);
     }
 
     .spec-header {
@@ -1152,7 +1107,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
           <p class="toc-title">Contents</p>
           {{ range .Specs }}
           <section class="toc-spec">
-            <p class="toc-spec-title {{ .Status }}">{{ .Title }}</p>
+            <p class="toc-spec-title">{{ .Title }}</p>
             <p class="toc-spec-path">{{ .Path }}</p>
             <ul class="toc-list">
               {{ range .Headings }}
@@ -1188,9 +1143,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         </section>
 
         {{ range .Specs }}
-        <article class="spec {{ .Status }}">
+        <article class="spec">
           <header class="spec-header">
-            <p class="spec-meta"><span class="spec-path">{{ .Path }}</span> · <span class="status {{ .Status }}">{{ .Status }}</span></p>
+            <p class="spec-meta"><span class="spec-path">{{ .Path }}</span></p>
           </header>
           <section class="spec-body">{{ .Body }}</section>
         </article>
