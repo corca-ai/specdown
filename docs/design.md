@@ -244,6 +244,10 @@ canonical config는 특정 언어 runtime에 종속되면 안 된다.
     {
       "builtin": "html",
       "outFile": ".artifacts/specdown/report.html"
+    },
+    {
+      "builtin": "json",
+      "outFile": ".artifacts/specdown/report.json"
     }
   ],
   "models": {
@@ -257,6 +261,22 @@ v1에서는 `specdown.json` 하나면 충분하다.
 
 
 ## 문서 문법
+
+### Frontmatter
+
+spec 파일 상단에 선택적으로 YAML 형식의 frontmatter를 둘 수 있다.
+
+```markdown
+---
+timeout: 5000
+---
+```
+
+| 키 | 의미 |
+|----|------|
+| `timeout` | adapter 케이스별 실행 제한 시간 (밀리초). 0이면 무제한 |
+
+frontmatter가 없으면 기본값(무제한)이 적용된다.
 
 ### 구조 매핑
 

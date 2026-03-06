@@ -14,12 +14,20 @@ nix-shell -p go
 go build -o ~/.local/bin/specdown ./cmd/specdown
 ```
 
+릴리스 빌드에서는 `ldflags`로 버전을 주입한다.
+
+```sh
+go build -trimpath -ldflags="-s -w -X main.version=v0.4.0" -o specdown ./cmd/specdown
+```
+
 ## Run
 
 프로젝트 루트에서 실행한다. `specdown.json`을 설정으로 읽는다.
 
 ```sh
 specdown run
+specdown version          # 빌드 버전 출력
+specdown alloy dump       # Alloy 모델 .als 파일만 생성
 ```
 
 리포트는 `.artifacts/specdown/report.html`에 생성된다.
