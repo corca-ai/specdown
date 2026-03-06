@@ -18,7 +18,6 @@ type reportView struct {
 	GeneratedAt string
 	PassedCount int
 	FailedCount int
-	Failures    []failureView
 	Specs       []specView
 }
 
@@ -36,16 +35,8 @@ type tocItemView struct {
 	Status string
 }
 
-type failureView struct {
-	DocumentTitle string
-	Label         string
-	Message       string
-	Anchor        string
-}
-
 func Write(report core.Report, outPath string) error {
 	specs := make([]specView, 0, len(report.Results))
-	failures := make([]failureView, 0)
 	for _, result := range report.Results {
 		body, err := renderDocument(result)
 		if err != nil {
@@ -57,36 +48,12 @@ func Write(report core.Report, outPath string) error {
 			Headings: collectHeadings(result),
 			Body:     template.HTML(body),
 		})
-
-		for _, item := range result.Cases {
-			if item.Status != core.StatusFailed {
-				continue
-			}
-			failures = append(failures, failureView{
-				DocumentTitle: result.Document.Title,
-				Label:         item.Label,
-				Message:       item.Message,
-				Anchor:        item.ID.Anchor(),
-			})
-		}
-		for _, item := range result.AlloyChecks {
-			if item.Status != core.StatusFailed {
-				continue
-			}
-			failures = append(failures, failureView{
-				DocumentTitle: result.Document.Title,
-				Label:         item.Label,
-				Message:       item.Message,
-				Anchor:        item.ID.Anchor(),
-			})
-		}
 	}
 
 	view := reportView{
 		GeneratedAt: report.GeneratedAt.Format(time.RFC3339),
 		PassedCount: report.Summary.CasesPassed + report.Summary.AlloyChecksPassed,
 		FailedCount: report.Summary.CasesFailed + report.Summary.AlloyChecksFailed,
-		Failures:    failures,
 		Specs:       specs,
 	}
 
@@ -604,67 +571,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .hero {
-      margin-bottom: 2.25rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--rule);
-    }
-
-    .hero h1 {
-      margin: 0 0 0.35rem;
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
-      font-size: 1.15rem;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-wrap: balance;
-      text-transform: uppercase;
+      margin-bottom: 1rem;
     }
 
     .meta {
       color: var(--muted);
       margin: 0;
+      font-size: 0.82rem;
       line-height: 1.65;
     }
 
     .summary {
       margin-top: 0.2rem;
-    }
-
-    .failures {
-      margin-top: 1.25rem;
-      padding-left: 1rem;
-      border-left: 2px solid var(--rule);
-    }
-
-    .failures h2 {
-      margin: 0 0 0.75rem;
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
-      font-size: 1.3rem;
-      font-weight: 600;
-      text-wrap: balance;
-    }
-
-    .failure-list {
-      margin: 0;
-      padding-left: 1.2rem;
-    }
-
-    .failure-list li {
-      margin: 0 0 0.8rem;
-    }
-
-    .failure-link {
-      font-weight: 600;
-      text-decoration: none;
-      color: var(--ink);
-    }
-
-    .failure-link:hover {
-      text-decoration: underline;
-    }
-
-    .failure-message {
-      margin: 0.2rem 0 0;
-      color: var(--muted);
     }
 
     .pill {
@@ -691,24 +609,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .spec {
       margin: 0;
       padding: 2rem 0 0 0;
-      border-top: 1px solid var(--rule);
-    }
-
-    .spec-header {
-      margin-bottom: 1rem;
-    }
-
-    .spec-meta {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.95rem;
-      line-height: 1.5;
-    }
-
-    .spec-path {
-      color: var(--muted);
-      font-family: "SFMono-Regular", Menlo, monospace;
-      font-size: 0.9rem;
     }
 
     .spec-body {
@@ -1007,7 +907,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       .toc-inner {
         padding-left: 0;
         border-left: 0;
-        border-bottom: 1px solid var(--rule);
         padding-bottom: 1rem;
       }
     }
@@ -1037,30 +936,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
       <div class="content">
         <section class="hero">
-          <h1>report</h1>
           <div class="summary">
             <p class="meta">Generated at {{ .GeneratedAt }}<span class="pill pass">pass {{ .PassedCount }}</span><span class="pill fail">fail {{ .FailedCount }}</span></p>
           </div>
-          {{ if .Failures }}
-          <section class="failures">
-            <h2>Failures</h2>
-            <ul class="failure-list">
-              {{ range .Failures }}
-              <li>
-                <a class="failure-link" href="#{{ .Anchor }}">{{ .DocumentTitle }}: {{ .Label }}</a>
-                <p class="failure-message">{{ .Message }}</p>
-              </li>
-              {{ end }}
-            </ul>
-          </section>
-          {{ end }}
         </section>
 
         {{ range .Specs }}
         <article class="spec">
-          <header class="spec-header">
-            <p class="spec-meta"><span class="spec-path">{{ .Path }}</span></p>
-          </header>
           <section class="spec-body">{{ .Body }}</section>
         </article>
         {{ end }}

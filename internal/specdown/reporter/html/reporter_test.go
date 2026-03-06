@@ -167,6 +167,12 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "position: sticky;") {
 		t.Fatalf("expected sticky toc styles, got %q", html)
 	}
+	if strings.Contains(html, "<h1>report</h1>") {
+		t.Fatalf("expected no report heading, got %q", html)
+	}
+	if strings.Contains(html, ">Failures<") {
+		t.Fatalf("expected no failure summary section, got %q", html)
+	}
 	if strings.Contains(html, "border-left: 1px solid var(--rule);") {
 		t.Fatalf("expected no left rule in toc, got %q", html)
 	}
@@ -217,9 +223,6 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, "<dt>actual</dt><dd>boards: [&#34;board-1&#34;]</dd>") {
 		t.Fatalf("expected structured actual diff, got %q", html)
-	}
-	if !strings.Contains(html, "fixture:board-exists @ 표 기반 확인 row 2") {
-		t.Fatalf("expected failure label, got %q", html)
 	}
 	if !strings.Contains(html, "id=\"case-specs-pocket-board-spec-md-pocket-board-변수-흐름-표-기반-확인-4\"") {
 		t.Fatalf("expected failure anchor link, got %q", html)
