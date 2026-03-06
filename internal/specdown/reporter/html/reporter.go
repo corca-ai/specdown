@@ -799,69 +799,31 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-block {
-      position: relative;
       margin: 1.35rem 0;
       padding: 0.15rem 0 0.2rem 1rem;
       background: transparent;
       scroll-margin-top: 1.5rem;
     }
 
-    .exec-block::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0.15rem;
-      width: 0.28rem;
-      height: 1.15rem;
-      border-radius: 999px;
-      background: #c9c0ab;
-    }
-
     .exec-block.passed {
       background: transparent;
-    }
-
-    .exec-block.passed::before {
-      background: var(--pass-mark);
     }
 
     .exec-block.failed {
       background: transparent;
     }
 
-    .exec-block.failed::before {
-      background: var(--fail-mark);
-    }
-
     .exec-table-block {
-      position: relative;
       margin: 1.35rem 0;
       padding: 0.15rem 0 0.2rem 1rem;
       background: transparent;
       overflow-x: auto;
     }
 
-    .exec-table-block::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0.15rem;
-      width: 0.28rem;
-      height: 1.15rem;
-      border-radius: 999px;
-      background: #c9c0ab;
-    }
-
-    .exec-table-block.passed::before {
-      background: var(--pass-mark);
-    }
-
-    .exec-table-block.failed::before {
-      background: var(--fail-mark);
-    }
-
     .exec-table-header {
       margin-bottom: 0.55rem;
+      position: relative;
+      line-height: 1.2;
     }
 
     .exec-table {
@@ -959,6 +921,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       align-items: baseline;
       gap: 0.6rem 1rem;
       margin-bottom: 0.55rem;
+      position: relative;
+      line-height: 1.2;
     }
 
     .exec-labels {
@@ -967,11 +931,34 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       gap: 0.25rem 0.8rem;
     }
 
+    .exec-header::before,
+    .exec-table-header::before {
+      content: "";
+      position: absolute;
+      left: -1rem;
+      top: 0.08em;
+      width: 0.28rem;
+      height: 1.16em;
+      border-radius: 999px;
+      background: #c9c0ab;
+    }
+
+    .exec-block.passed > .exec-header::before,
+    .exec-table-block.passed > .exec-table-header::before {
+      background: var(--pass-mark);
+    }
+
+    .exec-block.failed > .exec-header::before,
+    .exec-table-block.failed > .exec-table-header::before {
+      background: var(--fail-mark);
+    }
+
     .exec-kind {
       font-weight: 600;
       color: var(--accent);
       font-family: "SFMono-Regular", Menlo, Consolas, monospace;
       font-size: 0.92rem;
+      line-height: 1.2;
     }
 
     .exec-source {
