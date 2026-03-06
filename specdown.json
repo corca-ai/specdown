@@ -1,0 +1,21 @@
+{
+  "include": [
+    "specs/**/*.spec.md"
+  ],
+  "adapters": [
+    {
+      "name": "pocket-board",
+      "command": [
+        "python3",
+        "./tools/pocket_board_adapter.py"
+      ],
+      "protocol": "specdown-adapter/v1"
+    }
+  ],
+  "reporters": [
+    {
+      "builtin": "html",
+      "outFile": ".artifacts/specdown/report.html"
+    }
+  ]
+}

@@ -50,8 +50,7 @@ The current implementation already does all of the following:
 
 - finds this `.spec.md` file
 - parses the document into headings, prose, and fenced code blocks
-- executes the supported `run:board` block
-- verifies board state with `verify:board`
+- dispatches `run:board` and `verify:board` through an external adapter command from `specdown.json`
 - renders the document and block status into an HTML report
 - shows failed cases in a summary section with links to the failing block
 - returns a failing run result when one of the executable cases fails

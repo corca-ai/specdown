@@ -36,11 +36,14 @@ func TestDiscoverFindsSpecDocuments(t *testing.T) {
 	}
 }
 
-func TestRunFailsWithoutSpecs(t *testing.T) {
+func TestDiscoverReturnsNoSpecsWhenDirectoryIsEmpty(t *testing.T) {
 	root := t.TempDir()
 
-	_, err := Run(root)
-	if err == nil {
-		t.Fatal("expected error when no specs exist")
+	docs, err := Discover(root)
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	if len(docs) != 0 {
+		t.Fatalf("expected no docs, got %d", len(docs))
 	}
 }

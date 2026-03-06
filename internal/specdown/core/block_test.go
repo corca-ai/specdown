@@ -20,6 +20,32 @@ func TestParseBlockSpecSupportsRunAndVerifyBoard(t *testing.T) {
 	}
 }
 
+func TestParseBlockSpecSupportsGenericRunVerifyAndTestBlocks(t *testing.T) {
+	runBlock, err := parseBlockSpec("run:shell")
+	if err != nil {
+		t.Fatalf("parse generic run block: %v", err)
+	}
+	if runBlock.Kind != BlockKindRun || runBlock.Target != "shell" {
+		t.Fatalf("unexpected generic run block %#v", runBlock)
+	}
+
+	verifyBlock, err := parseBlockSpec("verify:http")
+	if err != nil {
+		t.Fatalf("parse generic verify block: %v", err)
+	}
+	if verifyBlock.Kind != BlockKindVerify || verifyBlock.Target != "http" {
+		t.Fatalf("unexpected generic verify block %#v", verifyBlock)
+	}
+
+	testBlock, err := parseBlockSpec("test:webapp")
+	if err != nil {
+		t.Fatalf("parse test block: %v", err)
+	}
+	if testBlock.Kind != BlockKindTest || testBlock.Target != "webapp" {
+		t.Fatalf("unexpected test block %#v", testBlock)
+	}
+}
+
 func TestParseBlockSpecLeavesPlainCodeBlocksNonExecutable(t *testing.T) {
 	block, err := parseBlockSpec("go")
 	if err != nil {
@@ -31,7 +57,7 @@ func TestParseBlockSpecLeavesPlainCodeBlocksNonExecutable(t *testing.T) {
 }
 
 func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
-	cases := []string{"run:shell", "verify:http", "test:webapp", "expect", "alloy:model(board)"}
+	cases := []string{"run:", "verify:", "test:", "expect", "alloy:model(board)"}
 	for _, input := range cases {
 		if _, err := parseBlockSpec(input); err == nil {
 			t.Fatalf("expected parse error for %q", input)

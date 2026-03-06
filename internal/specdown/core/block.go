@@ -11,6 +11,7 @@ const (
 	BlockKindNone   BlockKind = ""
 	BlockKindRun    BlockKind = "run"
 	BlockKindVerify BlockKind = "verify"
+	BlockKindTest   BlockKind = "test"
 )
 
 type BlockSpec struct {
@@ -33,26 +34,28 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		return BlockSpec{}, nil
 	}
 
-	switch trimmed {
-	case "run:board":
-		return BlockSpec{Raw: trimmed, Kind: BlockKindRun, Target: "board"}, nil
-	case "verify:board":
-		return BlockSpec{Raw: trimmed, Kind: BlockKindVerify, Target: "board"}, nil
-	}
-
 	if trimmed == "expect" || strings.HasPrefix(trimmed, "alloy:") {
 		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
 	}
 
 	parts := strings.SplitN(trimmed, ":", 2)
-	kind := BlockKind(parts[0])
-	switch kind {
-	case BlockKindRun, BlockKindVerify:
-		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
+	if len(parts) != 2 {
+		return BlockSpec{Raw: trimmed}, nil
 	}
 
-	if kind == "test" {
-		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
+	kind := BlockKind(parts[0])
+	target := strings.TrimSpace(parts[1])
+	switch kind {
+	case BlockKindRun, BlockKindVerify:
+		if target == "" {
+			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
+		}
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target}, nil
+	case BlockKindTest:
+		if target == "" {
+			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
+		}
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target}, nil
 	}
 
 	return BlockSpec{Raw: trimmed}, nil

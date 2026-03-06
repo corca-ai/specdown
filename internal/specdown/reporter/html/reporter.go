@@ -425,7 +425,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <main>
     <section class="hero">
       <h1>specdown report</h1>
-      <p class="meta">Phase 3 run. Documents are parsed into headings, prose, and fenced code blocks. Supported executable and verification blocks run against shared document state, failures are summarized, and block status is annotated inline.</p>
+      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, and fenced code blocks. Supported executable and verification blocks are delegated to external adapter commands, failures are summarized, and block status is annotated inline.</p>
       <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
         <span class="pill">specs {{ .Summary.SpecsTotal }}</span>

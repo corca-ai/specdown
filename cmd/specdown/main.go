@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
-	"specdown/internal/specdown/core"
+	"specdown/internal/specdown/config"
+	"specdown/internal/specdown/engine"
 	htmlreport "specdown/internal/specdown/reporter/html"
 )
 
@@ -31,34 +33,56 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
+	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
 	specRoot := fs.String("spec-root", "specs", "Directory containing .spec.md files")
-	outPath := fs.String("out", ".artifacts/specdown/report.html", "Output HTML report path")
+	outPath := fs.String("out", "", "Output HTML report path")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	report, err := core.Run(*specRoot)
+	cfg, configDir, err := config.Load(*configPath)
 	if err != nil {
 		return err
 	}
 
-	if err := htmlreport.Write(report, *outPath); err != nil {
+	report, err := engine.Run(resolvePath(configDir, *specRoot), cfg, configDir)
+	if err != nil {
+		return err
+	}
+
+	reportPath := *outPath
+	if reportPath == "" {
+		reportPath = cfg.HTMLReportOutFile()
+	}
+	if reportPath == "" {
+		reportPath = ".artifacts/specdown/report.html"
+	}
+	reportPath = resolvePath(configDir, reportPath)
+
+	if err := htmlreport.Write(report, reportPath); err != nil {
 		return err
 	}
 
 	if report.Summary.SpecsFailed > 0 || report.Summary.CasesFailed > 0 {
 		fmt.Printf("FAIL %d spec(s), %d case(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed)
-		fmt.Printf("report: %s\n", *outPath)
+		fmt.Printf("report: %s\n", reportPath)
 		return fmt.Errorf("spec run failed")
 	}
 
 	fmt.Printf("PASS %d spec(s), %d case(s)\n", report.Summary.SpecsPassed, report.Summary.CasesPassed)
-	fmt.Printf("report: %s\n", *outPath)
+	fmt.Printf("report: %s\n", reportPath)
 	return nil
 }
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  specdown run [-spec-root specs] [-out .artifacts/specdown/report.html]")
+	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-spec-root specs] [-out .artifacts/specdown/report.html]")
+}
+
+func resolvePath(baseDir string, value string) string {
+	if filepath.IsAbs(value) {
+		return value
+	}
+	return filepath.Clean(filepath.Join(baseDir, value))
 }

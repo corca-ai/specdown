@@ -61,7 +61,7 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 }
 
 func TestParseDocumentRejectsUnsupportedReservedBlock(t *testing.T) {
-	_, err := ParseDocument("bad.spec.md", "```run:shell\necho hi\n```\n")
+	_, err := ParseDocument("bad.spec.md", "```expect\n${value} matches /x/\n```\n")
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
