@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"specdown/internal/specdown/alloy"
 	"specdown/internal/specdown/adapterhost"
 	"specdown/internal/specdown/config"
 	"specdown/internal/specdown/core"
@@ -28,6 +29,11 @@ type scopedBinding struct {
 }
 
 func Run(baseDir string, cfg config.Config) (core.Report, error) {
+	host := adapterhost.Host{BaseDir: baseDir}
+	return runWithDependencies(baseDir, cfg, host, alloy.Runner{BaseDir: baseDir})
+}
+
+func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Host, alloyRunner alloy.DocumentRunner) (core.Report, error) {
 	docs, err := core.Discover(baseDir, cfg.Include)
 	if err != nil {
 		return core.Report{}, err
@@ -40,8 +46,6 @@ func Run(baseDir string, cfg config.Config) (core.Report, error) {
 	if err != nil {
 		return core.Report{}, err
 	}
-
-	host := adapterhost.Host{BaseDir: baseDir}
 	registry, err := describeAdapters(host, cfg.Adapters)
 	if err != nil {
 		return core.Report{}, err
@@ -50,7 +54,7 @@ func Run(baseDir string, cfg config.Config) (core.Report, error) {
 	results := make([]core.DocumentResult, 0, len(plan.Documents))
 	summary := core.Summary{SpecsTotal: len(plan.Documents)}
 	for _, docPlan := range plan.Documents {
-		result, err := runDocument(docPlan, registry, host)
+		result, err := runDocument(docPlan, registry, host, alloyRunner)
 		if err != nil {
 			return core.Report{}, err
 		}
@@ -114,8 +118,8 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (describedAdapter, e
 	}
 }
 
-func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host) (core.DocumentResult, error) {
-	if len(plan.Cases) == 0 {
+func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner alloy.DocumentRunner) (core.DocumentResult, error) {
+	if len(plan.Cases) == 0 && len(plan.AlloyChecks) == 0 {
 		return core.DocumentResult{
 			Document: plan.Document,
 			Status:   core.StatusPassed,
@@ -171,10 +175,22 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		return core.DocumentResult{}, err
 	}
 
+	alloyResults, err := alloyRunner.RunDocument(plan)
+	if err != nil {
+		return core.DocumentResult{}, err
+	}
+	for _, result := range alloyResults {
+		if result.Status == core.StatusFailed {
+			status = core.StatusFailed
+			break
+		}
+	}
+
 	return core.DocumentResult{
-		Document: plan.Document,
-		Status:   status,
-		Cases:    cases,
+		Document:    plan.Document,
+		Status:      status,
+		Cases:       cases,
+		AlloyChecks: alloyResults,
 	}, nil
 }
 
@@ -356,6 +372,15 @@ func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 			summary.CasesPassed++
 		} else {
 			summary.CasesFailed++
+		}
+	}
+
+	summary.AlloyChecksTotal += len(result.AlloyChecks)
+	for _, item := range result.AlloyChecks {
+		if item.Status == core.StatusPassed {
+			summary.AlloyChecksPassed++
+		} else {
+			summary.AlloyChecksFailed++
 		}
 	}
 }

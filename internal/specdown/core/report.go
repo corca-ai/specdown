@@ -45,19 +45,37 @@ type CaseResult struct {
 	Events         []Event
 }
 
+type AlloyCheckResult struct {
+	ID                 SpecID
+	Model              string
+	Assertion          string
+	Scope              string
+	Label              string
+	Status             Status
+	Message            string
+	Expected           string
+	Actual             string
+	BundlePath         string
+	CounterexamplePath string
+}
+
 type DocumentResult struct {
-	Document Document
-	Status   Status
-	Cases    []CaseResult
+	Document    Document
+	Status      Status
+	Cases       []CaseResult
+	AlloyChecks []AlloyCheckResult
 }
 
 type Summary struct {
-	SpecsTotal  int
-	SpecsPassed int
-	SpecsFailed int
-	CasesTotal  int
-	CasesPassed int
-	CasesFailed int
+	SpecsTotal        int
+	SpecsPassed       int
+	SpecsFailed       int
+	CasesTotal        int
+	CasesPassed       int
+	CasesFailed       int
+	AlloyChecksTotal  int
+	AlloyChecksPassed int
+	AlloyChecksFailed int
 }
 
 type Report struct {

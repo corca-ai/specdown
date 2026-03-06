@@ -45,9 +45,6 @@ func Load(path string) (Config, string, error) {
 	if len(cfg.Include) == 0 {
 		return Config{}, "", fmt.Errorf("config must define at least one include pattern")
 	}
-	if len(cfg.Adapters) == 0 {
-		return Config{}, "", fmt.Errorf("config must define at least one adapter")
-	}
 	seen := make(map[string]struct{}, len(cfg.Adapters))
 	for _, adapter := range cfg.Adapters {
 		if adapter.Name == "" {

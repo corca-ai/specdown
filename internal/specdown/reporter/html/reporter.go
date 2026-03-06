@@ -39,7 +39,7 @@ func Write(report core.Report, outPath string) error {
 	specs := make([]specView, 0, len(report.Results))
 	failures := make([]failureView, 0)
 	for _, result := range report.Results {
-		body, err := renderDocument(result)
+		body, err := renderDocument(result, outPath)
 		if err != nil {
 			return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 		}
@@ -51,6 +51,17 @@ func Write(report core.Report, outPath string) error {
 		})
 
 		for _, item := range result.Cases {
+			if item.Status != core.StatusFailed {
+				continue
+			}
+			failures = append(failures, failureView{
+				DocumentTitle: result.Document.Title,
+				Label:         item.Label,
+				Message:       item.Message,
+				Anchor:        item.ID.Anchor(),
+			})
+		}
+		for _, item := range result.AlloyChecks {
 			if item.Status != core.StatusFailed {
 				continue
 			}
@@ -86,10 +97,14 @@ func Write(report core.Report, outPath string) error {
 	return nil
 }
 
-func renderDocument(result core.DocumentResult) (string, error) {
+func renderDocument(result core.DocumentResult, outPath string) (string, error) {
 	caseResults := make(map[string]core.CaseResult, len(result.Cases))
 	for _, item := range result.Cases {
 		caseResults[item.ID.Key()] = item
+	}
+	alloyResults := make(map[string]core.AlloyCheckResult, len(result.AlloyChecks))
+	for _, item := range result.AlloyChecks {
+		alloyResults[item.ID.Key()] = item
 	}
 
 	var out strings.Builder
@@ -109,6 +124,18 @@ func renderDocument(result core.DocumentResult) (string, error) {
 			out.WriteString(html)
 		case core.CodeBlockNode:
 			rendered, err := renderCodeBlock(current, caseResults)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(rendered)
+		case core.AlloyModelNode:
+			rendered, err := renderAlloyModel(current)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(rendered)
+		case core.AlloyRefNode:
+			rendered, err := renderAlloyRef(current, alloyResults, outPath)
 			if err != nil {
 				return "", err
 			}
@@ -184,7 +211,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		out.WriteString(`</p>`)
 	}
 	if result.Expected != "" || result.Actual != "" {
-		out.WriteString(renderFailureDiff(result))
+		out.WriteString(renderFailureDiff(result.Expected, result.Actual, false))
 	}
 	out.WriteString(`</section>`)
 	return out.String(), nil
@@ -248,18 +275,7 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 			out.WriteString(`</div>`)
 		}
 		if result.Expected != "" || result.Actual != "" {
-			out.WriteString(`<dl class="failure-diff compact">`)
-			if result.Expected != "" {
-				out.WriteString(`<dt>expected</dt><dd>`)
-				out.WriteString(template.HTMLEscapeString(result.Expected))
-				out.WriteString(`</dd>`)
-			}
-			if result.Actual != "" {
-				out.WriteString(`<dt>actual</dt><dd>`)
-				out.WriteString(template.HTMLEscapeString(result.Actual))
-				out.WriteString(`</dd>`)
-			}
-			out.WriteString(`</dl>`)
+			out.WriteString(renderFailureDiff(result.Expected, result.Actual, true))
 		}
 		out.WriteString(`</td></tr>`)
 	}
@@ -267,21 +283,123 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 	return out.String(), nil
 }
 
-func renderFailureDiff(result core.CaseResult) string {
+func renderAlloyModel(node core.AlloyModelNode) (string, error) {
 	var out strings.Builder
-	out.WriteString(`<dl class="failure-diff">`)
-	if result.Expected != "" {
+	out.WriteString(`<section class="exec-block alloy-model">`)
+	out.WriteString(`<div class="exec-header">`)
+	out.WriteString(`<div class="exec-labels">`)
+	out.WriteString(`<span class="exec-kind">`)
+	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
+	out.WriteString(`</span>`)
+	out.WriteString(`</div>`)
+	out.WriteString(`</div>`)
+	out.WriteString(`<pre class="exec-source"><code>`)
+	out.WriteString(template.HTMLEscapeString(node.Source))
+	out.WriteString(`</code></pre>`)
+	out.WriteString(`</section>`)
+	return out.String(), nil
+}
+
+func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult, outPath string) (string, error) {
+	if node.ID == nil {
+		return "", fmt.Errorf("alloy ref is missing an id")
+	}
+
+	result, ok := alloyResults[node.ID.Key()]
+	if !ok {
+		return "", fmt.Errorf("missing alloy result for %s", node.ID.Key())
+	}
+
+	var out strings.Builder
+	out.WriteString(`<section class="exec-block alloy-ref `)
+	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	out.WriteString(`" id="`)
+	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
+	out.WriteString(`">`)
+	out.WriteString(`<div class="exec-header">`)
+	out.WriteString(`<div class="exec-labels">`)
+	out.WriteString(`<span class="exec-kind">`)
+	out.WriteString(template.HTMLEscapeString("alloy:ref(" + node.Model + "#" + node.Assertion + ", scope=" + node.Scope + ")"))
+	out.WriteString(`</span>`)
+	out.WriteString(`<span class="exec-id">`)
+	out.WriteString(template.HTMLEscapeString(formatSpecID(*node.ID)))
+	out.WriteString(`</span>`)
+	out.WriteString(`</div>`)
+	out.WriteString(`<span class="status `)
+	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	out.WriteString(`">`)
+	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	out.WriteString(`</span>`)
+	out.WriteString(`</div>`)
+	out.WriteString(`<p class="exec-note">assertion <code>`)
+	out.WriteString(template.HTMLEscapeString(result.Assertion))
+	out.WriteString(`</code> checked at scope <code>`)
+	out.WriteString(template.HTMLEscapeString(result.Scope))
+	out.WriteString(`</code></p>`)
+	renderArtifactLink(&out, "bundle artifact", result.BundlePath, outPath)
+	renderArtifactLink(&out, "counterexample", result.CounterexamplePath, outPath)
+	if result.Message != "" {
+		out.WriteString(`<p class="exec-message">`)
+		out.WriteString(template.HTMLEscapeString(result.Message))
+		out.WriteString(`</p>`)
+	}
+	if result.Expected != "" || result.Actual != "" {
+		out.WriteString(renderFailureDiff(result.Expected, result.Actual, false))
+	}
+	out.WriteString(`</section>`)
+	return out.String(), nil
+}
+
+func renderArtifactLink(out *strings.Builder, label string, assetPath string, reportPath string) {
+	if assetPath == "" {
+		return
+	}
+	out.WriteString(`<p class="exec-note">`)
+	out.WriteString(template.HTMLEscapeString(label))
+	out.WriteString(`: `)
+	href := relativeAssetHref(reportPath, assetPath)
+	if href != "" {
+		out.WriteString(`<a href="`)
+		out.WriteString(template.HTMLEscapeString(href))
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(assetPath))
+		out.WriteString(`</a>`)
+	} else {
+		out.WriteString(template.HTMLEscapeString(assetPath))
+	}
+	out.WriteString(`</p>`)
+}
+
+func renderFailureDiff(expected string, actual string, compact bool) string {
+	var out strings.Builder
+	out.WriteString(`<dl class="failure-diff`)
+	if compact {
+		out.WriteString(` compact`)
+	}
+	out.WriteString(`">`)
+	if expected != "" {
 		out.WriteString(`<dt>expected</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(result.Expected))
+		out.WriteString(template.HTMLEscapeString(expected))
 		out.WriteString(`</dd>`)
 	}
-	if result.Actual != "" {
+	if actual != "" {
 		out.WriteString(`<dt>actual</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(result.Actual))
+		out.WriteString(template.HTMLEscapeString(actual))
 		out.WriteString(`</dd>`)
 	}
 	out.WriteString(`</dl>`)
 	return out.String()
+}
+
+func relativeAssetHref(reportPath string, assetPath string) string {
+	if reportPath == "" || assetPath == "" {
+		return ""
+	}
+	relative, err := filepath.Rel(filepath.Dir(reportPath), assetPath)
+	if err != nil {
+		return ""
+	}
+	return filepath.ToSlash(relative)
 }
 
 func markdownToHTML(source string) (string, error) {
@@ -651,7 +769,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <main>
     <section class="hero">
       <h1>specdown report</h1>
-      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, fenced code blocks, and fixture tables. Cases execute in document order through external adapter sessions, captured bindings flow into later blocks and rows, failures are summarized, and status is annotated inline.</p>
+      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, executable blocks, fixture tables, Alloy model fragments, and Alloy references. Adapter cases execute in document order, embedded Alloy bundles are checked alongside them, failures are summarized, and status is annotated inline.</p>
       <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
         <span class="pill">specs {{ .Summary.SpecsTotal }}</span>
@@ -660,10 +778,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         <span class="pill">cases {{ .Summary.CasesTotal }}</span>
         <span class="pill pass">case pass {{ .Summary.CasesPassed }}</span>
         <span class="pill fail">case fail {{ .Summary.CasesFailed }}</span>
+        <span class="pill">alloy {{ .Summary.AlloyChecksTotal }}</span>
+        <span class="pill pass">alloy pass {{ .Summary.AlloyChecksPassed }}</span>
+        <span class="pill fail">alloy fail {{ .Summary.AlloyChecksFailed }}</span>
       </div>
       {{ if .Failures }}
       <section class="failures">
-        <h2>Failed cases</h2>
+        <h2>Failed checks</h2>
         <ul class="failure-list">
           {{ range .Failures }}
           <li>

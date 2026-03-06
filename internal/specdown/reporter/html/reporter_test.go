@@ -192,3 +192,106 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 		t.Fatalf("expected failure anchor link, got %q", html)
 	}
 }
+
+func TestWriteRendersAlloyReferencesAndArtifacts(t *testing.T) {
+	outDir := t.TempDir()
+	reportPath := filepath.Join(outDir, "report.html")
+	bundlePath := filepath.Join(outDir, "alloy", "board.als")
+	counterexamplePath := filepath.Join(outDir, "counterexamples", "case-board.json")
+
+	if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(counterexamplePath), 0o755); err != nil {
+		t.Fatalf("mkdir counterexample: %v", err)
+	}
+	if err := os.WriteFile(bundlePath, []byte("module board\n"), 0o644); err != nil {
+		t.Fatalf("write bundle: %v", err)
+	}
+	if err := os.WriteFile(counterexamplePath, []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write counterexample: %v", err)
+	}
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary: core.Summary{
+			SpecsTotal:        1,
+			SpecsFailed:       1,
+			AlloyChecksTotal:  1,
+			AlloyChecksFailed: 1,
+		},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusFailed,
+				Document: core.Document{
+					Title:      "Pocket Board",
+					RelativeTo: "specs/pocket-board.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n"},
+						core.AlloyModelNode{
+							Model:  "board",
+							Source: "module board\n\nsig Card {}",
+							Raw:    "```alloy:model(board)\nmodule board\n\nsig Card {}\n```\n",
+						},
+						core.AlloyRefNode{
+							Model:     "board",
+							Assertion: "cardShape",
+							Scope:     "5",
+							Raw:       "<!-- alloy:ref(board#cardShape, scope=5) -->\n",
+							ID: &core.SpecID{
+								File:        "specs/pocket-board.spec.md",
+								HeadingPath: []string{"Pocket Board", "형식 규칙"},
+								Ordinal:     1,
+							},
+						},
+					},
+				},
+				AlloyChecks: []core.AlloyCheckResult{
+					{
+						ID: core.SpecID{
+							File:        "specs/pocket-board.spec.md",
+							HeadingPath: []string{"Pocket Board", "형식 규칙"},
+							Ordinal:     1,
+						},
+						Model:              "board",
+						Assertion:          "cardShape",
+						Scope:              "5",
+						Label:              "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+						Status:             core.StatusFailed,
+						Message:            "found counterexample for assertion \"cardShape\" at scope 5",
+						Expected:           "assertion \"cardShape\" holds for scope 5",
+						Actual:             "counterexample found",
+						BundlePath:         bundlePath,
+						CounterexamplePath: counterexamplePath,
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, reportPath); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+
+	html := string(body)
+	if !strings.Contains(html, "alloy fail 1") {
+		t.Fatalf("expected alloy summary, got %q", html)
+	}
+	if !strings.Contains(html, "alloy:model(board)") {
+		t.Fatalf("expected alloy model label, got %q", html)
+	}
+	if !strings.Contains(html, "alloy:ref(board#cardShape, scope=5)") {
+		t.Fatalf("expected alloy ref label, got %q", html)
+	}
+	if !strings.Contains(html, "bundle artifact") {
+		t.Fatalf("expected bundle artifact note, got %q", html)
+	}
+	if !strings.Contains(html, "counterexample") {
+		t.Fatalf("expected counterexample note, got %q", html)
+	}
+}

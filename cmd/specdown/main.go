@@ -64,12 +64,12 @@ func run(args []string) error {
 	}
 
 	if report.Summary.SpecsFailed > 0 || report.Summary.CasesFailed > 0 {
-		fmt.Printf("FAIL %d spec(s), %d case(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed)
+		fmt.Printf("FAIL %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, report.Summary.AlloyChecksFailed)
 		fmt.Printf("report: %s\n", reportPath)
 		return fmt.Errorf("spec run failed")
 	}
 
-	fmt.Printf("PASS %d spec(s), %d case(s)\n", report.Summary.SpecsPassed, report.Summary.CasesPassed)
+	fmt.Printf("PASS %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsPassed, report.Summary.CasesPassed, report.Summary.AlloyChecksPassed)
 	fmt.Printf("report: %s\n", reportPath)
 	return nil
 }

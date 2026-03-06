@@ -47,3 +47,28 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
 		t.Fatalf("unexpected report output %q", got)
 	}
 }
+
+func TestLoadConfigAllowsAlloyOnlyProjectWithoutAdapters(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "specdown.json")
+	body := `{
+  "include": ["specs/**/*.spec.md"],
+  "reporters": [
+    {
+      "builtin": "html",
+      "outFile": ".artifacts/specdown/report.html"
+    }
+  ]
+}`
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, _, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if len(cfg.Adapters) != 0 {
+		t.Fatalf("unexpected adapters %#v", cfg.Adapters)
+	}
+}

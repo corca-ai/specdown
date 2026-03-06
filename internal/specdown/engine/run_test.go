@@ -9,8 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"specdown/internal/specdown/adapterhost"
 	"specdown/internal/specdown/adapterprotocol"
 	"specdown/internal/specdown/config"
+	"specdown/internal/specdown/core"
 )
 
 func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
@@ -222,6 +224,68 @@ func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no adapter supports fixture") {
 		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := strings.Join([]string{
+		"# Pocket Board",
+		"",
+		"## 보드 생성",
+		"",
+		"```run:board -> $boardName",
+		"create-board",
+		"```",
+		"",
+		"## 형식 규칙",
+		"",
+		"```alloy:model(board)",
+		"module board",
+		"",
+		"sig Card {}",
+		"assert cardShape { some Card }",
+		"```",
+		"",
+		"<!-- alloy:ref(board#cardShape, scope=5) -->",
+		"",
+	}, "\n")
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	report, err := runWithDependencies(root, config.Config{
+		Include:  []string{"specs/**/*.spec.md"},
+		Adapters: helperAdapterConfig().Adapters,
+	}, adapterhost.Host{BaseDir: root}, fakeAlloyRunner{
+		results: map[string]core.AlloyCheckResult{
+			"specs/pocket-board.spec.md|Pocket Board|형식 규칙|2": {
+				ID: core.SpecID{
+					File:        "specs/pocket-board.spec.md",
+					HeadingPath: []string{"Pocket Board", "형식 규칙"},
+					Ordinal:     2,
+				},
+				Model:     "board",
+				Assertion: "cardShape",
+				Scope:     "5",
+				Label:     "alloy:ref(board#cardShape, scope=5) @ 형식 규칙",
+				Status:    core.StatusPassed,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if report.Summary.SpecsPassed != 1 || report.Summary.CasesPassed != 1 || report.Summary.AlloyChecksPassed != 1 {
+		t.Fatalf("unexpected summary %+v", report.Summary)
+	}
+	if got := report.Results[0].AlloyChecks[0].Label; got != "alloy:ref(board#cardShape, scope=5) @ 형식 규칙" {
+		t.Fatalf("unexpected alloy label %q", got)
 	}
 }
 
@@ -628,4 +692,27 @@ func parseHelperExists(value string) bool {
 	default:
 		return false
 	}
+}
+
+type fakeAlloyRunner struct {
+	results map[string]core.AlloyCheckResult
+}
+
+func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, error) {
+	results := make([]core.AlloyCheckResult, 0, len(plan.AlloyChecks))
+	for _, check := range plan.AlloyChecks {
+		result, ok := f.results[check.ID.Key()]
+		if !ok {
+			result = core.AlloyCheckResult{
+				ID:        check.ID,
+				Model:     check.Model,
+				Assertion: check.Assertion,
+				Scope:     check.Scope,
+				Label:     "alloy:ref(" + check.Model + "#" + check.Assertion + ", scope=" + check.Scope + ")",
+				Status:    core.StatusPassed,
+			}
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }
