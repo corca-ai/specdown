@@ -30,8 +30,10 @@
 
 - `specdown-core`
 - `specdown-cli`
+- `specdown-adapter-protocol`
 - `specdown-reporter-html`
 - `specdown-alloy`
+- `specdown-adapter-shell`
 - `specdown-adapter-vitest`
 - `specdown-adapter-coop`
 

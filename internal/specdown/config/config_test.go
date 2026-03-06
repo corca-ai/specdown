@@ -10,6 +10,7 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")
 	body := `{
+  "include": ["specs/**/*.spec.md"],
   "adapters": [
     {
       "name": "project",
@@ -38,6 +39,9 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
 	}
 	if len(cfg.Adapters) != 1 || cfg.Adapters[0].Name != "project" {
 		t.Fatalf("unexpected adapters %#v", cfg.Adapters)
+	}
+	if len(cfg.Include) != 1 || cfg.Include[0] != "specs/**/*.spec.md" {
+		t.Fatalf("unexpected include %#v", cfg.Include)
 	}
 	if got := cfg.HTMLReportOutFile(); got != ".artifacts/specdown/report.html" {
 		t.Fatalf("unexpected report output %q", got)

@@ -3,7 +3,6 @@ package core
 import (
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 )
 
@@ -15,9 +14,9 @@ const (
 )
 
 type SpecID struct {
-	File        string
-	HeadingPath []string
-	Ordinal     int
+	File        string   `json:"file"`
+	HeadingPath []string `json:"headingPath"`
+	Ordinal     int      `json:"ordinal"`
 }
 
 func (id SpecID) Key() string {
@@ -34,21 +33,6 @@ func (id SpecID) Anchor() string {
 	parts = append(parts, id.HeadingPath...)
 	parts = append(parts, strconv.Itoa(id.Ordinal))
 	return "case-" + slug(strings.Join(parts, "-"))
-}
-
-type EventType string
-
-const (
-	EventCaseStarted EventType = "caseStarted"
-	EventCasePassed  EventType = "casePassed"
-	EventCaseFailed  EventType = "caseFailed"
-)
-
-type Event struct {
-	Type    EventType
-	ID      SpecID
-	Label   string
-	Message string
 }
 
 type Node interface {
@@ -92,43 +76,10 @@ func (n CodeBlockNode) Markdown() string {
 }
 
 type Document struct {
-	Path       string
 	RelativeTo string
 	Title      string
 	Markdown   string
 	Nodes      []Node
-}
-
-type CaseResult struct {
-	ID      SpecID
-	Info    string
-	Label   string
-	Source  string
-	Status  Status
-	Message string
-	Events  []Event
-}
-
-type DocumentResult struct {
-	Document Document
-	Status   Status
-	Cases    []CaseResult
-}
-
-type Summary struct {
-	SpecsTotal  int
-	SpecsPassed int
-	SpecsFailed int
-	CasesTotal  int
-	CasesPassed int
-	CasesFailed int
-}
-
-type Report struct {
-	SpecRoot    string
-	GeneratedAt time.Time
-	Results     []DocumentResult
-	Summary     Summary
 }
 
 func slug(input string) string {

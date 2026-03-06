@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"specdown/internal/specdown/adapterprotocol"
 )
 
 type Config struct {
@@ -40,15 +42,26 @@ func Load(path string) (Config, string, error) {
 		return Config{}, "", fmt.Errorf("parse config: %w", err)
 	}
 
+	if len(cfg.Include) == 0 {
+		return Config{}, "", fmt.Errorf("config must define at least one include pattern")
+	}
 	if len(cfg.Adapters) == 0 {
 		return Config{}, "", fmt.Errorf("config must define at least one adapter")
 	}
+	seen := make(map[string]struct{}, len(cfg.Adapters))
 	for _, adapter := range cfg.Adapters {
 		if adapter.Name == "" {
 			return Config{}, "", fmt.Errorf("adapter name must not be empty")
 		}
+		if _, ok := seen[adapter.Name]; ok {
+			return Config{}, "", fmt.Errorf("adapter %q is defined more than once", adapter.Name)
+		}
+		seen[adapter.Name] = struct{}{}
 		if len(adapter.Command) == 0 {
 			return Config{}, "", fmt.Errorf("adapter %q must define a command", adapter.Name)
+		}
+		if adapter.Protocol != adapterprotocol.Version {
+			return Config{}, "", fmt.Errorf("adapter %q must use protocol %q", adapter.Name, adapterprotocol.Version)
 		}
 	}
 

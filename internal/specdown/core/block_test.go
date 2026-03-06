@@ -20,6 +20,19 @@ func TestParseBlockSpecSupportsRunAndVerifyBoard(t *testing.T) {
 	}
 }
 
+func TestParseBlockSpecSupportsCaptureNames(t *testing.T) {
+	block, err := parseBlockSpec("run:board -> $boardName, $boardAlias")
+	if err != nil {
+		t.Fatalf("parse captured block: %v", err)
+	}
+	if block.Descriptor() != "run:board" {
+		t.Fatalf("unexpected descriptor %q", block.Descriptor())
+	}
+	if len(block.CaptureNames) != 2 || block.CaptureNames[0] != "boardName" || block.CaptureNames[1] != "boardAlias" {
+		t.Fatalf("unexpected captures %#v", block.CaptureNames)
+	}
+}
+
 func TestParseBlockSpecSupportsGenericRunVerifyAndTestBlocks(t *testing.T) {
 	runBlock, err := parseBlockSpec("run:shell")
 	if err != nil {
@@ -57,7 +70,7 @@ func TestParseBlockSpecLeavesPlainCodeBlocksNonExecutable(t *testing.T) {
 }
 
 func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
-	cases := []string{"run:", "verify:", "test:", "expect", "alloy:model(board)"}
+	cases := []string{"run:", "verify:", "test:", "run:board ->", "run:board -> boardName", "expect", "alloy:model(board)"}
 	for _, input := range cases {
 		if _, err := parseBlockSpec(input); err == nil {
 			t.Fatalf("expected parse error for %q", input)

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -23,10 +24,24 @@ type Capabilities struct {
 	Fixtures []string
 }
 
+type Session struct {
+	adapter     config.AdapterConfig
+	cmd         *exec.Cmd
+	stdin       io.WriteCloser
+	scanner     *bufio.Scanner
+	encoder     *json.Encoder
+	stderr      *bytes.Buffer
+	waited      bool
+	closed      bool
+	stdinClosed bool
+}
+
 func (h Host) Describe(adapter config.AdapterConfig) (Capabilities, error) {
-	responses, err := h.request(adapter, adapterprotocol.Request{
-		Type: "describe",
-	})
+	request := adapterprotocol.Request{
+		Type:     "describe",
+		Protocol: adapterprotocol.Version,
+	}
+	responses, err := h.request(adapter, request)
 	if err != nil {
 		return Capabilities{}, err
 	}
@@ -39,55 +54,8 @@ func (h Host) Describe(adapter config.AdapterConfig) (Capabilities, error) {
 	}, nil
 }
 
-func (h Host) RunCases(adapter config.AdapterConfig, cases []core.CodeBlockNode) (map[string]core.CaseResult, error) {
-	requestCases := make([]adapterprotocol.Case, 0, len(cases))
-	results := make(map[string]core.CaseResult, len(cases))
-	for _, node := range cases {
-		if node.ID == nil {
-			return nil, fmt.Errorf("adapter %q received non-executable block", adapter.Name)
-		}
-		requestCases = append(requestCases, adapterprotocol.Case{
-			Kind:   "code",
-			Info:   node.Block.String(),
-			Source: node.Source,
-			ID:     *node.ID,
-		})
-		results[node.ID.Key()] = core.CaseResult{
-			ID:     *node.ID,
-			Info:   node.Block.String(),
-			Label:  defaultLabel(node),
-			Source: node.Source,
-		}
-	}
-
-	responses, err := h.request(adapter, adapterprotocol.Request{
-		Type:  "run",
-		Cases: requestCases,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	terminal := make(map[string]bool, len(cases))
-	for _, response := range responses {
-		if err := applyResponse(results, terminal, response); err != nil {
-			return nil, fmt.Errorf("adapter %q: %w", adapter.Name, err)
-		}
-	}
-
-	for _, node := range cases {
-		key := node.ID.Key()
-		if !terminal[key] {
-			return nil, fmt.Errorf("adapter %q did not emit a terminal result for %s", adapter.Name, key)
-		}
-	}
-
-	return results, nil
-}
-
-func (h Host) request(adapter config.AdapterConfig, request adapterprotocol.Request) ([]adapterprotocol.Response, error) {
+func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
 	command := resolveCommand(h.BaseDir, adapter.Command)
-
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = h.BaseDir
 
@@ -101,46 +69,146 @@ func (h Host) request(adapter config.AdapterConfig, request adapterprotocol.Requ
 		return nil, fmt.Errorf("prepare stdin for adapter %q: %w", adapter.Name, err)
 	}
 
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start adapter %q: %w", adapter.Name, err)
 	}
 
-	encoder := json.NewEncoder(stdin)
-	if err := encoder.Encode(request); err != nil {
-		stdin.Close()
-		return nil, fmt.Errorf("write request to adapter %q: %w", adapter.Name, err)
-	}
-	if err := stdin.Close(); err != nil {
-		return nil, fmt.Errorf("close stdin for adapter %q: %w", adapter.Name, err)
-	}
-
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 
+	return &Session{
+		adapter: adapter,
+		cmd:     cmd,
+		stdin:   stdin,
+		scanner: scanner,
+		encoder: json.NewEncoder(stdin),
+		stderr:  stderr,
+	}, nil
+}
+
+func (s *Session) RunCase(specCase core.CaseSpec, renderedSource string, visibleBindings []core.Binding) (core.CaseResult, error) {
+	result := core.CaseResult{
+		ID:             specCase.ID,
+		Block:          specCase.Block.Descriptor(),
+		Label:          defaultLabel(specCase),
+		Template:       specCase.Source,
+		RenderedSource: renderedSource,
+	}
+
+	request := adapterprotocol.Request{
+		Type:     "runCase",
+		Protocol: adapterprotocol.Version,
+		Case: &adapterprotocol.Case{
+			ID:           protocolID(specCase.ID),
+			Block:        specCase.Block.Descriptor(),
+			Source:       renderedSource,
+			CaptureNames: append([]string(nil), specCase.Block.CaptureNames...),
+			Bindings:     protocolBindings(visibleBindings),
+		},
+	}
+	if err := s.encoder.Encode(request); err != nil {
+		return core.CaseResult{}, fmt.Errorf("write request to adapter %q: %w", s.adapter.Name, err)
+	}
+
+	for {
+		response, err := s.readResponse()
+		if err != nil {
+			return core.CaseResult{}, err
+		}
+		if err := applyResponse(&result, response); err != nil {
+			return core.CaseResult{}, fmt.Errorf("adapter %q: %w", s.adapter.Name, err)
+		}
+		if result.Status == core.StatusPassed || result.Status == core.StatusFailed {
+			return result, nil
+		}
+	}
+}
+
+func (s *Session) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+
+	if !s.stdinClosed {
+		if err := s.stdin.Close(); err != nil {
+			return fmt.Errorf("close stdin for adapter %q: %w", s.adapter.Name, err)
+		}
+		s.stdinClosed = true
+	}
+	if s.waited {
+		return nil
+	}
+	return s.wait()
+}
+
+func (h Host) request(adapter config.AdapterConfig, request adapterprotocol.Request) ([]adapterprotocol.Response, error) {
+	session, err := h.StartSession(adapter)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := session.encoder.Encode(request); err != nil {
+		session.Close()
+		return nil, fmt.Errorf("write request to adapter %q: %w", adapter.Name, err)
+	}
+	if err := session.stdin.Close(); err != nil {
+		session.Close()
+		return nil, fmt.Errorf("close stdin for adapter %q: %w", adapter.Name, err)
+	}
+	session.stdinClosed = true
+
 	var responses []adapterprotocol.Response
-	for scanner.Scan() {
-		var response adapterprotocol.Response
-		if err := json.Unmarshal(scanner.Bytes(), &response); err != nil {
-			return nil, fmt.Errorf("decode adapter %q response: %w", adapter.Name, err)
+	for {
+		response, err := session.readResponse()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			session.Close()
+			return nil, err
 		}
 		responses = append(responses, response)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read adapter %q response: %w", adapter.Name, err)
+	if err := session.Close(); err != nil {
+		return nil, err
 	}
+	return responses, nil
+}
 
-	if err := cmd.Wait(); err != nil {
-		message := strings.TrimSpace(stderr.String())
+func (s *Session) readResponse() (adapterprotocol.Response, error) {
+	if s.scanner.Scan() {
+		var response adapterprotocol.Response
+		if err := json.Unmarshal(s.scanner.Bytes(), &response); err != nil {
+			return adapterprotocol.Response{}, fmt.Errorf("decode adapter %q response: %w", s.adapter.Name, err)
+		}
+		return response, nil
+	}
+	if err := s.scanner.Err(); err != nil {
+		return adapterprotocol.Response{}, fmt.Errorf("read adapter %q response: %w", s.adapter.Name, err)
+	}
+	if err := s.wait(); err != nil {
+		return adapterprotocol.Response{}, err
+	}
+	return adapterprotocol.Response{}, io.EOF
+}
+
+func (s *Session) wait() error {
+	if s.waited {
+		return nil
+	}
+	s.waited = true
+	if err := s.cmd.Wait(); err != nil {
+		message := strings.TrimSpace(s.stderr.String())
 		if message == "" {
 			message = err.Error()
 		}
-		return nil, fmt.Errorf("adapter %q infrastructure failure: %s", adapter.Name, message)
+		return fmt.Errorf("adapter %q infrastructure failure: %s", s.adapter.Name, message)
 	}
-
-	return responses, nil
+	return nil
 }
 
 func resolveCommand(baseDir string, command []string) []string {
@@ -162,11 +230,9 @@ func resolveCommand(baseDir string, command []string) []string {
 	return resolved
 }
 
-func applyResponse(results map[string]core.CaseResult, terminal map[string]bool, response adapterprotocol.Response) error {
-	switch response.Type {
-	case "caseStarted":
-		result, key, err := resultFor(results, response)
-		if err != nil {
+func applyResponse(result *core.CaseResult, response adapterprotocol.Response) error {
+	if response.Type == "caseStarted" {
+		if err := expectResponseID(result.ID, response); err != nil {
 			return err
 		}
 		if response.Label != "" {
@@ -177,28 +243,28 @@ func applyResponse(results map[string]core.CaseResult, terminal map[string]bool,
 			ID:    result.ID,
 			Label: result.Label,
 		})
-		results[key] = result
 		return nil
+	}
+
+	switch response.Type {
 	case "casePassed":
-		result, key, err := resultFor(results, response)
-		if err != nil {
+		if err := expectResponseID(result.ID, response); err != nil {
 			return err
 		}
 		if response.Label != "" {
 			result.Label = response.Label
 		}
 		result.Status = core.StatusPassed
+		result.Bindings = coreBindings(response.Bindings)
 		result.Events = append(result.Events, core.Event{
-			Type:  core.EventCasePassed,
-			ID:    result.ID,
-			Label: result.Label,
+			Type:     core.EventCasePassed,
+			ID:       result.ID,
+			Label:    result.Label,
+			Bindings: result.Bindings,
 		})
-		results[key] = result
-		terminal[key] = true
 		return nil
 	case "caseFailed":
-		result, key, err := resultFor(results, response)
-		if err != nil {
+		if err := expectResponseID(result.ID, response); err != nil {
 			return err
 		}
 		if response.Label != "" {
@@ -212,29 +278,63 @@ func applyResponse(results map[string]core.CaseResult, terminal map[string]bool,
 			Label:   result.Label,
 			Message: result.Message,
 		})
-		results[key] = result
-		terminal[key] = true
 		return nil
 	default:
 		return fmt.Errorf("unexpected response type %q", response.Type)
 	}
 }
 
-func resultFor(results map[string]core.CaseResult, response adapterprotocol.Response) (core.CaseResult, string, error) {
+func expectResponseID(expected core.SpecID, response adapterprotocol.Response) error {
 	if response.ID == nil {
-		return core.CaseResult{}, "", fmt.Errorf("response %q missing case id", response.Type)
+		return fmt.Errorf("response %q missing case id", response.Type)
 	}
-	key := response.ID.Key()
-	result, ok := results[key]
-	if !ok {
-		return core.CaseResult{}, "", fmt.Errorf("response %q referenced unknown case %s", response.Type, key)
+	if coreID(*response.ID).Key() != expected.Key() {
+		return fmt.Errorf("response %q referenced unexpected case %s", response.Type, coreID(*response.ID).Key())
 	}
-	return result, key, nil
+	return nil
 }
 
-func defaultLabel(node core.CodeBlockNode) string {
-	if node.ID == nil || len(node.ID.HeadingPath) == 0 {
-		return node.Block.String()
+func defaultLabel(specCase core.CaseSpec) string {
+	if len(specCase.ID.HeadingPath) == 0 {
+		return specCase.Block.Descriptor()
 	}
-	return node.Block.String() + " @ " + node.ID.HeadingPath[len(node.ID.HeadingPath)-1]
+	return specCase.Block.Descriptor() + " @ " + specCase.ID.HeadingPath[len(specCase.ID.HeadingPath)-1]
+}
+
+func protocolID(id core.SpecID) adapterprotocol.SpecID {
+	return adapterprotocol.SpecID{
+		File:        id.File,
+		HeadingPath: append([]string(nil), id.HeadingPath...),
+		Ordinal:     id.Ordinal,
+	}
+}
+
+func coreID(id adapterprotocol.SpecID) core.SpecID {
+	return core.SpecID{
+		File:        id.File,
+		HeadingPath: append([]string(nil), id.HeadingPath...),
+		Ordinal:     id.Ordinal,
+	}
+}
+
+func protocolBindings(bindings []core.Binding) []adapterprotocol.Binding {
+	items := make([]adapterprotocol.Binding, 0, len(bindings))
+	for _, binding := range bindings {
+		items = append(items, adapterprotocol.Binding{
+			Name:  binding.Name,
+			Value: binding.Value,
+		})
+	}
+	return items
+}
+
+func coreBindings(bindings []adapterprotocol.Binding) []core.Binding {
+	items := make([]core.Binding, 0, len(bindings))
+	for _, binding := range bindings {
+		items = append(items, core.Binding{
+			Name:  binding.Name,
+			Value: binding.Value,
+		})
+	}
+	return items
 }

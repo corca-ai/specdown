@@ -13,8 +13,8 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		"",
 		"## First Executable Check",
 		"",
-		"```run:board",
-		"create-board \"demo\"",
+		"```run:board -> $boardName",
+		"create-board",
 		"```",
 		"",
 		"## Verify Created Board",
@@ -45,6 +45,9 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	}
 	if blocks[0].Block.Kind != BlockKindRun || blocks[1].Block.Kind != BlockKindVerify {
 		t.Fatalf("unexpected block kinds %#v", blocks)
+	}
+	if len(blocks[0].Block.CaptureNames) != 1 || blocks[0].Block.CaptureNames[0] != "boardName" {
+		t.Fatalf("unexpected capture names %#v", blocks[0].Block.CaptureNames)
 	}
 	if blocks[0].ID == nil || blocks[1].ID == nil {
 		t.Fatal("expected executable ids")

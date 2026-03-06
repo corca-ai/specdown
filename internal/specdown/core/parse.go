@@ -2,56 +2,19 @@ package core
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
-func Discover(specRoot string) ([]Document, error) {
-	root, err := filepath.Abs(specRoot)
+func readDocument(baseDir string, relativePath string) (Document, error) {
+	fullPath := filepath.Join(baseDir, filepath.FromSlash(relativePath))
+	body, err := os.ReadFile(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve spec root: %w", err)
+		return Document{}, fmt.Errorf("read %s: %w", fullPath, err)
 	}
-
-	var docs []Document
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(d.Name(), ".spec.md") {
-			return nil
-		}
-
-		doc, err := readDocument(root, path)
-		if err != nil {
-			return err
-		}
-		docs = append(docs, doc)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("discover specs: %w", err)
-	}
-
-	return docs, nil
-}
-
-func readDocument(root string, path string) (Document, error) {
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return Document{}, fmt.Errorf("read %s: %w", path, err)
-	}
-
-	relPath, err := filepath.Rel(root, path)
-	if err != nil {
-		return Document{}, fmt.Errorf("relative path for %s: %w", path, err)
-	}
-
-	return ParseDocument(filepath.ToSlash(relPath), string(body))
+	return ParseDocument(relativePath, string(body))
 }
 
 func ParseDocument(relativePath string, markdown string) (Document, error) {
@@ -144,6 +107,40 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		Markdown:   markdown,
 		Nodes:      nodes,
 	}, nil
+}
+
+func walkFiles(baseDir string, visit func(relativePath string) error) error {
+	root, err := filepath.Abs(baseDir)
+	if err != nil {
+		return fmt.Errorf("resolve base dir: %w", err)
+	}
+
+	var files []string
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relativePath, err := filepath.Rel(root, path)
+		if err != nil {
+			return fmt.Errorf("relative path for %s: %w", path, err)
+		}
+		files = append(files, filepath.ToSlash(relativePath))
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("discover specs: %w", err)
+	}
+
+	sort.Strings(files)
+	for _, relativePath := range files {
+		if err := visit(relativePath); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func splitLines(markdown string) []string {

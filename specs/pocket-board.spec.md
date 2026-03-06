@@ -45,12 +45,15 @@ They will be turned into richer executable checks in later phases.
 ## Phase Status
 
 Phase 0, Phase 1, Phase 2, and Phase 3 are complete in this repository.
+The current repository also supports the first variable capture and substitution flow.
 
 The current implementation already does all of the following:
 
 - finds this `.spec.md` file
 - parses the document into headings, prose, and fenced code blocks
 - dispatches `run:board` and `verify:board` through an external adapter command from `specdown.json`
+- preserves adapter state across executable blocks in document order
+- captures values from `run:*` blocks and substitutes `${name}` in later blocks within the same heading subtree
 - renders the document and block status into an HTML report
 - shows failed cases in a summary section with links to the failing block
 - returns a failing run result when one of the executable cases fails
@@ -60,35 +63,35 @@ The current implementation already does all of the following:
 This same document should be extended, not replaced.
 Later phases can add fixtures, variables, and formal model fragments on top of the current foundation.
 
-## First Executable Check
+## Variable Flow
 
-The first executable behavior is intentionally tiny.
-The system should be able to create a board named `demo`.
+The first executable behavior now also captures a value.
+The adapter should generate a board name, create that board, and bind the result to `$boardName`.
 
-```run:board
-create-board "demo"
+```run:board -> $boardName
+create-board
 ```
 
-If this block executes successfully, `specdown` should emit a passing case result and show that result inline in the HTML report.
+If this block executes successfully, `specdown` should emit a passing case result, record the captured binding, and show that result inline in the HTML report.
 
-## Verify Created Board
+### Verify Created Board
 
 Phase 3 adds the first assertion block.
-After the previous command runs, the board named `demo` should exist.
+After the previous command runs, the captured board name should resolve inside a later verification block.
 
 ```verify:board
-board "demo" should exist
+board "${boardName}" should exist
 ```
 
 This block should pass and confirms that verification can read the state created by earlier `run:board` blocks.
 
-## Missing Boards Fail Verification
+### Missing Boards Fail Verification
 
 Verification failures should be reported differently from command failures.
-If a board does not exist, the assertion should fail with an expected-versus-actual style message.
+If a derived board name does not exist, the assertion should fail with an expected-versus-actual style message.
 
 ```verify:board
-board "archive" should exist
+board "${boardName}-archive" should exist
 ```
 
 This block is intentionally failing.

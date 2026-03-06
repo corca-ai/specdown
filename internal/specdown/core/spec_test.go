@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestDiscoverFindsSpecDocuments(t *testing.T) {
+func TestDiscoverFindsSpecDocumentsFromIncludePatterns(t *testing.T) {
 	root := t.TempDir()
 
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
@@ -20,7 +20,7 @@ func TestDiscoverFindsSpecDocuments(t *testing.T) {
 		t.Fatalf("write note: %v", err)
 	}
 
-	docs, err := Discover(filepath.Join(root, "specs"))
+	docs, err := Discover(root, []string{"specs/**/*.spec.md"})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -31,15 +31,15 @@ func TestDiscoverFindsSpecDocuments(t *testing.T) {
 	if docs[0].Title != "Pocket Board" {
 		t.Fatalf("unexpected title: %q", docs[0].Title)
 	}
-	if docs[0].RelativeTo != "pocket-board.spec.md" {
+	if docs[0].RelativeTo != "specs/pocket-board.spec.md" {
 		t.Fatalf("unexpected relative path: %q", docs[0].RelativeTo)
 	}
 }
 
-func TestDiscoverReturnsNoSpecsWhenDirectoryIsEmpty(t *testing.T) {
+func TestDiscoverReturnsNoSpecsWhenPatternsDoNotMatch(t *testing.T) {
 	root := t.TempDir()
 
-	docs, err := Discover(root)
+	docs, err := Discover(root, []string{"specs/**/*.spec.md"})
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}

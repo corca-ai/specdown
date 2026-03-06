@@ -148,6 +148,7 @@ adapter 경계는 in-process language API가 아니라 process protocol이어야
 - `specdown-cli`가 adapter process를 실행한다
 - stdin/stdout으로 NDJSON 메시지를 주고받는다
 - stdout에는 protocol message만 쓴다
+- 하나의 adapter process는 한 spec run 동안 여러 `runCase` 요청을 순서대로 처리할 수 있다
 - non-zero exit는 case failure가 아니라 adapter crash 또는 infrastructure failure로 본다
 
 전송되는 payload는 JSON-serializable shape여야 한다.
@@ -175,14 +176,29 @@ export type TableNode = {
   id: SpecId;
 };
 
+export type Binding = {
+  name: string;
+  value: string;
+};
+
 export type AdapterRequest =
-  | { type: "describe" }
-  | { type: "run"; cases: Array<CodeBlockNode | TableNode> };
+  | { type: "describe"; protocol: "specdown-adapter/v1" }
+  | {
+      type: "runCase";
+      protocol: "specdown-adapter/v1";
+      case: {
+        id: SpecId;
+        block: string;
+        source: string;
+        captureNames?: string[];
+        bindings?: Binding[];
+      };
+    };
 
 export type AdapterResponse =
   | { type: "capabilities"; blocks: string[]; fixtures: string[] }
   | { type: "caseStarted"; id: SpecId; label: string }
-  | { type: "casePassed"; id: SpecId; durationMs?: number }
+  | { type: "casePassed"; id: SpecId; durationMs?: number; bindings?: Binding[] }
   | { type: "caseFailed"; id: SpecId; message: string; details?: string }
   | { type: "modelCheckPassed"; model: string; assertion: string }
   | { type: "modelCheckFailed"; model: string; assertion: string; counterexamplePath?: string };
@@ -193,6 +209,8 @@ export type AdapterResponse =
 - core는 `CodeBlockNode`, `TableNode`, `SpecId`, event schema만 고정한다
 - adapter는 `describe`로 자신이 지원하는 block info와 fixture name을 광고한다
 - `specdown-cli`는 그 광고를 기준으로 어떤 adapter가 어떤 case를 처리할지 결정한다
+- 실행 중에는 문서 순서를 유지한 채 `runCase`를 순서대로 보낸다
+- adapter는 process-local state를 유지할 수 있고, `casePassed.bindings`로 값을 core에 돌려줄 수 있다
 - built-in adapter가 있더라도 같은 protocol contract를 따라야 한다
 - 언어별 helper SDK는 optional convenience일 뿐, architecture의 핵심이 아니다
 

@@ -139,7 +139,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<div class="exec-header">`)
 	out.WriteString(`<div class="exec-labels">`)
 	out.WriteString(`<span class="exec-kind">`)
-	out.WriteString(template.HTMLEscapeString(node.Block.String()))
+	out.WriteString(template.HTMLEscapeString(result.Block))
 	out.WriteString(`</span>`)
 	out.WriteString(`<span class="exec-id">`)
 	out.WriteString(template.HTMLEscapeString(formatSpecID(*node.ID)))
@@ -152,8 +152,26 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`</span>`)
 	out.WriteString(`</div>`)
 	out.WriteString(`<pre class="exec-source"><code>`)
-	out.WriteString(template.HTMLEscapeString(node.Source))
+	out.WriteString(template.HTMLEscapeString(result.Template))
 	out.WriteString(`</code></pre>`)
+	if result.RenderedSource != "" && result.RenderedSource != result.Template {
+		out.WriteString(`<p class="exec-note">resolved input</p>`)
+		out.WriteString(`<pre class="exec-source resolved"><code>`)
+		out.WriteString(template.HTMLEscapeString(result.RenderedSource))
+		out.WriteString(`</code></pre>`)
+	}
+	if len(result.Bindings) > 0 {
+		out.WriteString(`<p class="exec-note">captured bindings: `)
+		for i, binding := range result.Bindings {
+			if i > 0 {
+				out.WriteString(`, `)
+			}
+			out.WriteString(template.HTMLEscapeString(binding.Name))
+			out.WriteString(`=`)
+			out.WriteString(template.HTMLEscapeString(binding.Value))
+		}
+		out.WriteString(`</p>`)
+	}
 	if result.Message != "" {
 		out.WriteString(`<p class="exec-message">`)
 		out.WriteString(template.HTMLEscapeString(result.Message))
@@ -410,6 +428,17 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       overflow-x: auto;
     }
 
+    .exec-source.resolved {
+      margin-top: 0.4rem;
+      border: 1px solid var(--border);
+    }
+
+    .exec-note {
+      margin: 0.75rem 0 0.35rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
     .exec-message {
       margin: 0.75rem 0 0;
       color: var(--fail-ink);
@@ -425,7 +454,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <main>
     <section class="hero">
       <h1>specdown report</h1>
-      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, and fenced code blocks. Supported executable and verification blocks are delegated to external adapter commands, failures are summarized, and block status is annotated inline.</p>
+      <p class="meta">Adapter-hosted run. Documents are parsed into headings, prose, and fenced code blocks. Cases execute in document order through external adapter sessions, captured bindings flow into later blocks, failures are summarized, and block status is annotated inline.</p>
       <p class="meta">Generated at {{ .GeneratedAt }}</p>
       <div class="summary">
         <span class="pill">specs {{ .Summary.SpecsTotal }}</span>

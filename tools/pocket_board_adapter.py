@@ -16,6 +16,17 @@ def default_label(case_id, info):
     return info
 
 
+def binding_items(case):
+    return {item["name"]: item["value"] for item in case.get("bindings", [])}
+
+
+def render_arg(raw, bindings):
+    raw = raw.strip()
+    for name, value in bindings.items():
+        raw = raw.replace("${" + name + "}", value)
+    return raw
+
+
 def parse_single_arg(raw):
     raw = raw.strip()
     if not raw:
@@ -48,21 +59,35 @@ def parse_assertion(line):
 
 
 def run_case(state, case):
-    info = case["info"]
+    info = case["block"]
     source = case["source"]
+    capture_names = case.get("captureNames", [])
+    bindings = binding_items(case)
+    produced_bindings = []
 
     for raw_line in source.splitlines():
-        line = raw_line.strip()
+        line = render_arg(raw_line.strip(), bindings)
         if not line:
             continue
 
         if info == "run:board":
-            if not line.startswith("create-board"):
-                raise ValueError(f'unsupported board command {line!r}')
-            name = parse_single_arg(line[len("create-board"):])
+            if line == "create-board":
+                if not capture_names:
+                    raise ValueError("missing board name")
+                name = f"board-{state['next_board_id']}"
+                state["next_board_id"] += 1
+            else:
+                if not line.startswith("create-board"):
+                    raise ValueError(f'unsupported board command {line!r}')
+                name = parse_single_arg(line[len("create-board"):])
             if name in state["boards"]:
                 raise ValueError(f'board {name!r} already exists')
             state["boards"].add(name)
+            for capture_name in capture_names:
+                produced_bindings.append({
+                    "name": capture_name,
+                    "value": name,
+                })
             continue
 
         if info == "verify:board":
@@ -80,6 +105,8 @@ def run_case(state, case):
 
         raise ValueError(f'unsupported case info {info!r}')
 
+    return produced_bindings
+
 
 def handle_describe():
     emit({
@@ -89,48 +116,51 @@ def handle_describe():
     })
 
 
-def handle_run(cases):
-    state = {"boards": set()}
-    for case in cases:
-        label = default_label(case["id"], case["info"])
+def handle_run_case(state, case):
+    label = default_label(case["id"], case["block"])
+    emit({
+        "type": "caseStarted",
+        "id": case["id"],
+        "label": label,
+    })
+
+    try:
+        produced_bindings = run_case(state, case)
+    except ValueError as err:
         emit({
-            "type": "caseStarted",
+            "type": "caseFailed",
             "id": case["id"],
             "label": label,
+            "message": str(err),
         })
+        return
 
-        try:
-            run_case(state, case)
-        except ValueError as err:
-            emit({
-                "type": "caseFailed",
-                "id": case["id"],
-                "label": label,
-                "message": str(err),
-            })
-            continue
-
-        emit({
-            "type": "casePassed",
-            "id": case["id"],
-            "label": label,
-        })
+    emit({
+        "type": "casePassed",
+        "id": case["id"],
+        "label": label,
+        "bindings": produced_bindings,
+    })
 
 
 def main():
-    raw = sys.stdin.readline()
-    if not raw:
-        return
+    state = {
+        "boards": set(),
+        "next_board_id": 1,
+    }
 
-    request = json.loads(raw)
-    if request["type"] == "describe":
-        handle_describe()
-        return
-    if request["type"] == "run":
-        handle_run(request.get("cases", []))
-        return
+    for raw in sys.stdin:
+        if not raw.strip():
+            continue
+        request = json.loads(raw)
+        if request["type"] == "describe":
+            handle_describe()
+            continue
+        if request["type"] == "runCase":
+            handle_run_case(state, request["case"])
+            continue
 
-    raise SystemExit(f"unsupported request type {request['type']!r}")
+        raise SystemExit(f"unsupported request type {request['type']!r}")
 
 
 if __name__ == "__main__":

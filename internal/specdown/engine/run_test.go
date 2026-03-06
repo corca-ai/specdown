@@ -13,19 +13,18 @@ import (
 	"specdown/internal/specdown/config"
 )
 
-func TestRunUsesExternalAdapter(t *testing.T) {
+func TestRunUsesSessionAdapterAndVariableBindings(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	source := "# Pocket Board\n\n## Create Board\n\n```run:board\ncreate-board \"demo\"\n```\n\n## Verify Board\n\n```verify:board\nboard \"demo\" should exist\n```\n"
+	source := "# Pocket Board\n\n## Variable Flow\n\n```run:board -> $boardName\ncreate-board\n```\n\n### Verify Board\n\n```verify:board\nboard \"${boardName}\" should exist\n```\n"
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	cfg := helperAdapterConfig()
-	report, err := Run(filepath.Join(root, "specs"), cfg, root)
+	report, err := Run(root, helperAdapterConfig())
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -36,8 +35,11 @@ func TestRunUsesExternalAdapter(t *testing.T) {
 	if report.Summary.CasesPassed != 2 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if report.Results[0].Cases[1].Info != "verify:board" {
-		t.Fatalf("unexpected case %#v", report.Results[0].Cases[1])
+	if got := report.Results[0].Cases[0].Bindings; len(got) != 1 || got[0].Name != "boardName" || got[0].Value != "board-1" {
+		t.Fatalf("unexpected bindings %#v", got)
+	}
+	if got := report.Results[0].Cases[1].RenderedSource; got != "board \"board-1\" should exist" {
+		t.Fatalf("unexpected rendered source %q", got)
 	}
 }
 
@@ -47,13 +49,12 @@ func TestRunFailsWhenAdapterReportsVerificationFailure(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	source := "# Pocket Board\n\n## Create Board\n\n```run:board\ncreate-board \"demo\"\n```\n\n## Verify Missing Board\n\n```verify:board\nboard \"archive\" should exist\n```\n"
+	source := "# Pocket Board\n\n## Variable Flow\n\n```run:board -> $boardName\ncreate-board\n```\n\n### Verify Missing Board\n\n```verify:board\nboard \"${boardName}-archive\" should exist\n```\n"
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	cfg := helperAdapterConfig()
-	report, err := Run(filepath.Join(root, "specs"), cfg, root)
+	report, err := Run(root, helperAdapterConfig())
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -61,8 +62,32 @@ func TestRunFailsWhenAdapterReportsVerificationFailure(t *testing.T) {
 	if report.Summary.SpecsFailed != 1 || report.Summary.CasesFailed != 1 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].Cases[1].Message; got != "expected board \"archive\" to exist; actual boards: [\"demo\"]" {
+	if got := report.Results[0].Cases[1].Message; got != "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]" {
 		t.Fatalf("unexpected failure message %q", got)
+	}
+}
+
+func TestRunFailsWhenRuntimeBindingWasNotProduced(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := "# Pocket Board\n\n## Variable Flow\n\n```run:board -> $boardName\ncreate-board board-1\n```\n\n### Verify Board\n\n```verify:board\nboard \"${boardName}\" should exist\n```\n"
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	report, err := Run(root, helperNoBindingConfig())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if report.Summary.CasesFailed != 1 {
+		t.Fatalf("unexpected summary %+v", report.Summary)
+	}
+	if got := report.Results[0].Cases[1].Message; got != `missing runtime binding for "boardName"` {
+		t.Fatalf("unexpected message %q", got)
 	}
 }
 
@@ -77,8 +102,7 @@ func TestRunFailsWhenNoAdapterSupportsBlock(t *testing.T) {
 		t.Fatalf("write spec: %v", err)
 	}
 
-	cfg := helperAdapterConfig()
-	_, err := Run(filepath.Join(root, "specs"), cfg, root)
+	_, err := Run(root, helperAdapterConfig())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -94,6 +118,7 @@ func helperAdapterConfig() config.Config {
 	}
 
 	return config.Config{
+		Include: []string{"specs/**/*.spec.md"},
 		Adapters: []config.AdapterConfig{
 			{
 				Name:     "helper-board",
@@ -104,88 +129,139 @@ func helperAdapterConfig() config.Config {
 	}
 }
 
+func helperNoBindingConfig() config.Config {
+	executable, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+
+	return config.Config{
+		Include: []string{"specs/**/*.spec.md"},
+		Adapters: []config.AdapterConfig{
+			{
+				Name:     "helper-board",
+				Command:  []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board-no-bindings"},
+				Protocol: adapterprotocol.Version,
+			},
+		},
+	}
+}
+
 func TestHelperAdapterProcess(t *testing.T) {
-	if len(os.Args) < 2 || os.Args[len(os.Args)-1] != "board" {
+	if len(os.Args) < 2 {
 		return
 	}
 
+	mode := os.Args[len(os.Args)-1]
+	if mode != "board" && mode != "board-no-bindings" {
+		return
+	}
+
+	state := helperState{
+		boards:      make(map[string]struct{}),
+		nextBoardID: 1,
+		emitBinding: mode == "board",
+	}
+
 	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
-		os.Exit(0)
-	}
-
-	var request adapterprotocol.Request
-	if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
-		os.Exit(2)
-	}
-
 	encoder := json.NewEncoder(os.Stdout)
-	switch request.Type {
-	case "describe":
-		encoder.Encode(adapterprotocol.Response{
-			Type:     "capabilities",
-			Blocks:   []string{"run:board", "verify:board"},
-			Fixtures: []string{},
-		})
-	case "run":
-		boards := make(map[string]struct{})
-		for _, item := range request.Cases {
-			label := item.Info
-			if len(item.ID.HeadingPath) > 0 {
-				label += " @ " + item.ID.HeadingPath[len(item.ID.HeadingPath)-1]
-			}
-			encoder.Encode(adapterprotocol.Response{
-				Type:  "caseStarted",
-				ID:    &item.ID,
-				Label: label,
-			})
-
-			err := executeHelperBoardCase(boards, item)
-			if err != nil {
-				encoder.Encode(adapterprotocol.Response{
-					Type:    "caseFailed",
-					ID:      &item.ID,
-					Label:   label,
-					Message: err.Error(),
-				})
-				continue
-			}
-
-			encoder.Encode(adapterprotocol.Response{
-				Type:  "casePassed",
-				ID:    &item.ID,
-				Label: label,
-			})
+	for scanner.Scan() {
+		var request adapterprotocol.Request
+		if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
+			os.Exit(2)
 		}
-	default:
-		os.Exit(3)
+
+		switch request.Type {
+		case "describe":
+			encoder.Encode(adapterprotocol.Response{
+				Type:     "capabilities",
+				Blocks:   []string{"run:board", "verify:board"},
+				Fixtures: []string{},
+			})
+		case "runCase":
+			if request.Case == nil {
+				os.Exit(3)
+			}
+			runHelperCase(encoder, &state, *request.Case)
+		default:
+			os.Exit(4)
+		}
 	}
 	os.Exit(0)
 }
 
-func executeHelperBoardCase(boards map[string]struct{}, item adapterprotocol.Case) error {
-	switch item.Info {
+type helperState struct {
+	boards      map[string]struct{}
+	nextBoardID int
+	emitBinding bool
+}
+
+func runHelperCase(encoder *json.Encoder, state *helperState, item adapterprotocol.Case) {
+	label := item.Block
+	if len(item.ID.HeadingPath) > 0 {
+		label += " @ " + item.ID.HeadingPath[len(item.ID.HeadingPath)-1]
+	}
+	encoder.Encode(adapterprotocol.Response{
+		Type:  "caseStarted",
+		ID:    &item.ID,
+		Label: label,
+	})
+
+	bindings, err := executeHelperBoardCase(state, item)
+	if err != nil {
+		encoder.Encode(adapterprotocol.Response{
+			Type:    "caseFailed",
+			ID:      &item.ID,
+			Label:   label,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	encoder.Encode(adapterprotocol.Response{
+		Type:     "casePassed",
+		ID:       &item.ID,
+		Label:    label,
+		Bindings: bindings,
+	})
+}
+
+func executeHelperBoardCase(state *helperState, item adapterprotocol.Case) ([]adapterprotocol.Binding, error) {
+	switch item.Block {
 	case "run:board":
-		name, err := parseHelperCommandArg(strings.TrimSpace(strings.TrimPrefix(item.Source, "create-board")))
-		if err != nil {
-			return err
+		var name string
+		var err error
+		if strings.TrimSpace(item.Source) == "create-board" {
+			name = "board-" + strconv.Itoa(state.nextBoardID)
+			state.nextBoardID++
+		} else {
+			name, err = parseHelperCommandArg(strings.TrimSpace(strings.TrimPrefix(item.Source, "create-board")))
+			if err != nil {
+				return nil, err
+			}
 		}
-		if _, exists := boards[name]; exists {
-			return &helperError{message: "board " + strconvQuote(name) + " already exists"}
+		if _, exists := state.boards[name]; exists {
+			return nil, &helperError{message: "board " + strconvQuote(name) + " already exists"}
 		}
-		boards[name] = struct{}{}
-		return nil
+		state.boards[name] = struct{}{}
+		if !state.emitBinding || len(item.CaptureNames) == 0 {
+			return nil, nil
+		}
+		return []adapterprotocol.Binding{{
+			Name:  item.CaptureNames[0],
+			Value: name,
+		}}, nil
 	case "verify:board":
 		name, err := parseHelperVerifySource(item.Source)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if _, exists := boards[name]; exists {
-			return nil
+		if _, exists := state.boards[name]; exists {
+			return nil, nil
 		}
-		return &helperError{message: "expected board " + strconvQuote(name) + " to exist; actual boards: [\"demo\"]"}
+		return nil, &helperError{message: "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]"}
 	default:
-		return &helperError{message: "unsupported case " + item.Info}
+		return nil, &helperError{message: "unsupported case " + item.Block}
 	}
 }
 

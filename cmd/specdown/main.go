@@ -34,7 +34,6 @@ func run(args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
-	specRoot := fs.String("spec-root", "specs", "Directory containing .spec.md files")
 	outPath := fs.String("out", "", "Output HTML report path")
 
 	if err := fs.Parse(args); err != nil {
@@ -46,7 +45,7 @@ func run(args []string) error {
 		return err
 	}
 
-	report, err := engine.Run(resolvePath(configDir, *specRoot), cfg, configDir)
+	report, err := engine.Run(configDir, cfg)
 	if err != nil {
 		return err
 	}
@@ -77,7 +76,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-spec-root specs] [-out .artifacts/specdown/report.html]")
+	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-out .artifacts/specdown/report.html]")
 }
 
 func resolvePath(baseDir string, value string) string {
