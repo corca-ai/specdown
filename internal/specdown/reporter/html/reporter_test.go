@@ -140,6 +140,8 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 						RowNumber:     2,
 						Status:        core.StatusFailed,
 						Message:       "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]",
+						Expected:      "board \"board-1-archive\" exists",
+						Actual:        "boards: [\"board-1\"]",
 					},
 				},
 			},
@@ -176,6 +178,12 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, "expected board &#34;board-1-archive&#34; to exist; actual boards: [&#34;board-1&#34;]") {
 		t.Fatalf("expected failure message, got %q", html)
+	}
+	if !strings.Contains(html, "<dt>expected</dt><dd>board &#34;board-1-archive&#34; exists</dd>") {
+		t.Fatalf("expected structured expected diff, got %q", html)
+	}
+	if !strings.Contains(html, "<dt>actual</dt><dd>boards: [&#34;board-1&#34;]</dd>") {
+		t.Fatalf("expected structured actual diff, got %q", html)
 	}
 	if !strings.Contains(html, "fixture:board-exists @ 표 기반 확인 row 2") {
 		t.Fatalf("expected failure label, got %q", html)

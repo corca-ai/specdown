@@ -70,6 +70,12 @@ func TestRunUsesSessionAdapterVariableBindingsAndFixtureRows(t *testing.T) {
 	if got := report.Results[0].Cases[3].Message; got != "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]" {
 		t.Fatalf("unexpected failure message %q", got)
 	}
+	if got := report.Results[0].Cases[3].Expected; got != "board \"board-1-archive\" exists" {
+		t.Fatalf("unexpected expected diff %q", got)
+	}
+	if got := report.Results[0].Cases[3].Actual; got != "boards: [\"board-1\"]" {
+		t.Fatalf("unexpected actual diff %q", got)
+	}
 }
 
 func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
@@ -243,11 +249,17 @@ func runHelperCase(encoder *json.Encoder, state *helperState, item adapterprotoc
 
 	bindings, err := executeHelperBoardCase(state, item)
 	if err != nil {
+		helperErr, ok := err.(*helperError)
+		if !ok {
+			helperErr = &helperError{message: err.Error()}
+		}
 		encoder.Encode(adapterprotocol.Response{
-			Type:    "caseFailed",
-			ID:      &item.ID,
-			Label:   label,
-			Message: err.Error(),
+			Type:     "caseFailed",
+			ID:       &item.ID,
+			Label:    label,
+			Message:  helperErr.message,
+			Expected: helperErr.expected,
+			Actual:   helperErr.actual,
 		})
 		return
 	}
@@ -297,7 +309,7 @@ func executeHelperBoardCase(state *helperState, item adapterprotocol.Case) ([]ad
 		if _, exists := state.boards[name]; exists {
 			return nil, nil
 		}
-		return nil, &helperError{message: "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]"}
+		return nil, helperBoardExistsFailure(name, true)
 	default:
 		return nil, &helperError{message: "unsupported case " + item.Block}
 	}
@@ -319,15 +331,33 @@ func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]a
 	if _, exists := state.boards[name]; exists {
 		return nil, nil
 	}
-	return nil, &helperError{message: "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]"}
+	return nil, helperBoardExistsFailure(name, true)
 }
 
 type helperError struct {
-	message string
+	message  string
+	expected string
+	actual   string
 }
 
 func (e *helperError) Error() string {
 	return e.message
+}
+
+func helperBoardExistsFailure(name string, shouldExist bool) *helperError {
+	actual := "boards: [\"board-1\"]"
+	if shouldExist {
+		return &helperError{
+			message:  "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]",
+			expected: "board " + strconvQuote(name) + " exists",
+			actual:   actual,
+		}
+	}
+	return &helperError{
+		message:  "expected board " + strconvQuote(name) + " not to exist; actual boards: [\"board-1\"]",
+		expected: "board " + strconvQuote(name) + " absent",
+		actual:   actual,
+	}
 }
 
 func strconvQuote(value string) string {

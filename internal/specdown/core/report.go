@@ -20,6 +20,8 @@ type Event struct {
 	ID       SpecID
 	Label    string
 	Message  string
+	Expected string
+	Actual   string
 	Bindings []Binding
 }
 
@@ -37,6 +39,8 @@ type CaseResult struct {
 	RowNumber      int
 	Status         Status
 	Message        string
+	Expected       string
+	Actual         string
 	Bindings       []Binding
 	Events         []Event
 }

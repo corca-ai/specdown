@@ -203,7 +203,7 @@ export type AdapterResponse =
   | { type: "capabilities"; blocks: string[]; fixtures: string[] }
   | { type: "caseStarted"; id: SpecId; label: string }
   | { type: "casePassed"; id: SpecId; durationMs?: number; bindings?: Binding[] }
-  | { type: "caseFailed"; id: SpecId; message: string; details?: string }
+  | { type: "caseFailed"; id: SpecId; message: string; expected?: string; actual?: string; details?: string }
   | { type: "modelCheckPassed"; model: string; assertion: string }
   | { type: "modelCheckFailed"; model: string; assertion: string; counterexamplePath?: string };
 ```
@@ -215,6 +215,7 @@ export type AdapterResponse =
 - `specdown-cli`는 그 광고를 기준으로 어떤 adapter가 어떤 case를 처리할지 결정한다
 - 실행 중에는 문서 순서를 유지한 채 `runCase`를 순서대로 보낸다
 - adapter는 process-local state를 유지할 수 있고, `casePassed.bindings`로 값을 core에 돌려줄 수 있다
+- adapter failure는 가능하면 `message`뿐 아니라 `expected`와 `actual`도 구조화해서 보낸다
 - built-in adapter가 있더라도 같은 protocol contract를 따라야 한다
 - 언어별 helper SDK는 optional convenience일 뿐, architecture의 핵심이 아니다
 

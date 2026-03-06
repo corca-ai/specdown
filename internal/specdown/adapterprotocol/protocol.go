@@ -38,6 +38,8 @@ type Response struct {
 	ID         *SpecID   `json:"id,omitempty"`
 	Label      string    `json:"label,omitempty"`
 	Message    string    `json:"message,omitempty"`
+	Expected   string    `json:"expected,omitempty"`
+	Actual     string    `json:"actual,omitempty"`
 	Details    string    `json:"details,omitempty"`
 	DurationMs int64     `json:"durationMs,omitempty"`
 	Bindings   []Binding `json:"bindings,omitempty"`

@@ -183,6 +183,9 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		out.WriteString(template.HTMLEscapeString(result.Message))
 		out.WriteString(`</p>`)
 	}
+	if result.Expected != "" || result.Actual != "" {
+		out.WriteString(renderFailureDiff(result))
+	}
 	out.WriteString(`</section>`)
 	return out.String(), nil
 }
@@ -244,10 +247,41 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 			out.WriteString(template.HTMLEscapeString(result.Message))
 			out.WriteString(`</div>`)
 		}
+		if result.Expected != "" || result.Actual != "" {
+			out.WriteString(`<dl class="failure-diff compact">`)
+			if result.Expected != "" {
+				out.WriteString(`<dt>expected</dt><dd>`)
+				out.WriteString(template.HTMLEscapeString(result.Expected))
+				out.WriteString(`</dd>`)
+			}
+			if result.Actual != "" {
+				out.WriteString(`<dt>actual</dt><dd>`)
+				out.WriteString(template.HTMLEscapeString(result.Actual))
+				out.WriteString(`</dd>`)
+			}
+			out.WriteString(`</dl>`)
+		}
 		out.WriteString(`</td></tr>`)
 	}
 	out.WriteString(`</tbody></table></section>`)
 	return out.String(), nil
+}
+
+func renderFailureDiff(result core.CaseResult) string {
+	var out strings.Builder
+	out.WriteString(`<dl class="failure-diff">`)
+	if result.Expected != "" {
+		out.WriteString(`<dt>expected</dt><dd>`)
+		out.WriteString(template.HTMLEscapeString(result.Expected))
+		out.WriteString(`</dd>`)
+	}
+	if result.Actual != "" {
+		out.WriteString(`<dt>actual</dt><dd>`)
+		out.WriteString(template.HTMLEscapeString(result.Actual))
+		out.WriteString(`</dd>`)
+	}
+	out.WriteString(`</dl>`)
+	return out.String()
 }
 
 func markdownToHTML(source string) (string, error) {
@@ -530,6 +564,36 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       margin-top: 0.5rem;
       color: var(--fail-ink);
       font-weight: 700;
+    }
+
+    .failure-diff {
+      margin: 0.75rem 0 0;
+      padding: 0.75rem 0.85rem;
+      border-radius: 0.75rem;
+      background: #fff7f4;
+      border: 1px solid #efc7bf;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.35rem 0.75rem;
+    }
+
+    .failure-diff.compact {
+      margin-top: 0.75rem;
+      padding: 0.65rem 0.75rem;
+    }
+
+    .failure-diff dt {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .failure-diff dd {
+      margin: 0;
+      font-family: "SFMono-Regular", Menlo, monospace;
+      word-break: break-word;
     }
 
     .exec-header {
