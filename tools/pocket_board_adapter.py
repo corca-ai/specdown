@@ -11,22 +11,9 @@ def emit(payload):
 
 
 class SpecFailure(Exception):
-    def __init__(self, message, expected="", actual=""):
+    def __init__(self, message):
         super().__init__(message)
         self.message = message
-        self.expected = expected
-        self.actual = actual
-
-
-def default_label(case):
-    case_id = case["id"]
-    info = case.get("block", "")
-    if case.get("kind") == "tableRow":
-        return ""
-    heading_path = case_id.get("headingPath", [])
-    if heading_path:
-        return f"{info} @ {heading_path[-1]}"
-    return info
 
 
 def binding_items(case):
@@ -75,12 +62,10 @@ def board_exists_failure(board_name, should_exist, state):
     actual = ", ".join(names) if names else "(none)"
     if should_exist:
         return SpecFailure(
-            f'expected board {board_name!r} to exist',
-            actual=actual,
+            f'expected board {board_name!r} to exist; actual: {actual}',
         )
     return SpecFailure(
-        f'expected board {board_name!r} not to exist',
-        actual=actual,
+        f'expected board {board_name!r} not to exist; actual: {actual}',
     )
 
 
@@ -90,19 +75,16 @@ def card_exists_failure(board_name, card_name, should_exist, state):
     actual = ", ".join(names) if names else "(none)"
     if should_exist:
         return SpecFailure(
-            f'expected card {card_name!r} in board {board_name!r} to exist',
-            actual=actual,
+            f'expected card {card_name!r} in board {board_name!r} to exist; actual: {actual}',
         )
     return SpecFailure(
-        f'expected card {card_name!r} in board {board_name!r} not to exist',
-        actual=actual,
+        f'expected card {card_name!r} in board {board_name!r} not to exist; actual: {actual}',
     )
 
 
 def card_column_failure(board_name, card_name, column, actual_column):
     return SpecFailure(
         f'expected column {column!r}, got {actual_column!r}',
-        actual=actual_column,
     )
 
 
@@ -301,7 +283,7 @@ def run_verify(state, line):
     if line == "board list should contain at least one entry":
         if state["boards"]:
             return
-        raise SpecFailure("board list is empty", actual="(empty)")
+        raise SpecFailure("board list is empty")
 
     # board list should be sorted alphabetically
     if line == "board list should be sorted alphabetically":
@@ -309,8 +291,7 @@ def run_verify(state, line):
         if names == sorted(names):
             return
         raise SpecFailure(
-            "board list is not sorted",
-            actual=", ".join(names),
+            "board list is not sorted; actual: " + ", ".join(names),
         )
 
     # moving "cardId" to "column" should fail
@@ -353,8 +334,7 @@ def run_verify(state, line):
                 if card["title"] == expected_title:
                     return
                 raise SpecFailure(
-                    f'expected card {card_id!r} title to be {expected_title!r}',
-                    actual=card["title"],
+                    f'expected card {card_id!r} title to be {expected_title!r}; actual: {card["title"]!r}',
                 )
         raise SpecFailure(f'card {card_id!r} not found in any board')
 
@@ -425,43 +405,6 @@ def run_table_row(state, fixture, columns, cells):
     raise card_column_failure(board_name, card_name, expected_column, actual_column)
 
 
-def handle_describe():
-    emit({
-        "type": "capabilities",
-        "blocks": ["run:board", "verify:board"],
-        "fixtures": ["board-exists", "card-exists", "card-column"],
-    })
-
-
-def handle_run_case(state, case):
-    label = default_label(case)
-    emit({
-        "type": "caseStarted",
-        "id": case["id"],
-        "label": label,
-    })
-
-    try:
-        produced_bindings = run_case(state, case)
-    except SpecFailure as err:
-        emit({
-            "type": "caseFailed",
-            "id": case["id"],
-            "label": label,
-            "message": err.message,
-            "expected": err.expected,
-            "actual": err.actual,
-        })
-        return
-
-    emit({
-        "type": "casePassed",
-        "id": case["id"],
-        "label": label,
-        "bindings": produced_bindings,
-    })
-
-
 def main():
     state = {
         "boards": {},
@@ -473,12 +416,27 @@ def main():
         if not raw.strip():
             continue
         request = json.loads(raw)
-        if request["type"] == "describe":
-            handle_describe()
-            continue
+
         if request["type"] == "runCase":
-            handle_run_case(state, request["case"])
+            seq_id = request["id"]
+            case = request["case"]
+            try:
+                produced_bindings = run_case(state, case)
+            except SpecFailure as err:
+                emit({
+                    "id": seq_id,
+                    "type": "failed",
+                    "message": err.message,
+                })
+                continue
+
+            emit({
+                "id": seq_id,
+                "type": "passed",
+                "bindings": produced_bindings,
+            })
             continue
+
         if request["type"] in ("setup", "teardown"):
             continue
 

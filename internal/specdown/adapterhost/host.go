@@ -21,11 +21,6 @@ type Host struct {
 	BaseDir string
 }
 
-type Capabilities struct {
-	Blocks   []string
-	Fixtures []string
-}
-
 type Session struct {
 	adapter     config.AdapterConfig
 	cmd         *exec.Cmd
@@ -37,24 +32,7 @@ type Session struct {
 	closed      bool
 	stdinClosed bool
 	setupDone   bool
-}
-
-func (h Host) Describe(adapter config.AdapterConfig) (Capabilities, error) {
-	request := adapterprotocol.Request{
-		Type:     "describe",
-		Protocol: adapterprotocol.Version,
-	}
-	responses, err := h.request(adapter, request)
-	if err != nil {
-		return Capabilities{}, err
-	}
-	if len(responses) != 1 || responses[0].Type != "capabilities" {
-		return Capabilities{}, fmt.Errorf("adapter %q returned invalid describe response", adapter.Name)
-	}
-	return Capabilities{
-		Blocks:   responses[0].Blocks,
-		Fixtures: responses[0].Fixtures,
-	}, nil
+	nextID      int
 }
 
 func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
@@ -99,25 +77,19 @@ func (s *Session) Setup() error {
 	s.setupDone = true
 
 	request := adapterprotocol.Request{
-		Type:     "setup",
-		Protocol: adapterprotocol.Version,
+		Type: "setup",
 	}
 	if err := s.encoder.Encode(request); err != nil {
 		return fmt.Errorf("write setup to adapter %q: %w", s.adapter.Name, err)
 	}
-
-	// Read optional setupDone response; adapter may ignore setup
-	// We don't block — the adapter will respond inline with runCase
 	return nil
 }
 
 func (s *Session) Teardown() error {
 	request := adapterprotocol.Request{
-		Type:     "teardown",
-		Protocol: adapterprotocol.Version,
+		Type: "teardown",
 	}
 	if err := s.encoder.Encode(request); err != nil {
-		// Adapter may have already exited, that's fine
 		return nil
 	}
 	return nil
@@ -141,11 +113,20 @@ func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibl
 		result.RenderedCells = append([]string(nil), prepared.Cells...)
 	}
 
+	// Emit caseStarted internally
+	result.Events = append(result.Events, core.Event{
+		Type:  core.EventCaseStarted,
+		ID:    result.ID,
+		Label: result.Label,
+	})
+
+	s.nextID++
+	seqID := s.nextID
+
 	request := adapterprotocol.Request{
-		Type:     "runCase",
-		Protocol: adapterprotocol.Version,
+		Type: "runCase",
+		ID:   seqID,
 		Case: &adapterprotocol.Case{
-			ID:           protocolID(prepared.ID),
 			Kind:         string(prepared.Kind),
 			Block:        prepared.Block.Descriptor(),
 			Source:       prepared.Template,
@@ -163,21 +144,16 @@ func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibl
 	readResult := make(chan readResultMsg, 1)
 
 	go func() {
-		for {
-			response, err := s.readResponse()
-			if err != nil {
-				readResult <- readResultMsg{err: err}
-				return
-			}
-			if err := applyResponse(&result, response); err != nil {
-				readResult <- readResultMsg{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
-				return
-			}
-			if result.Status == core.StatusPassed || result.Status == core.StatusFailed {
-				readResult <- readResultMsg{result: result}
-				return
-			}
+		response, err := s.readResponse()
+		if err != nil {
+			readResult <- readResultMsg{err: err}
+			return
 		}
+		if err := applyResponse(&result, seqID, response); err != nil {
+			readResult <- readResultMsg{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
+			return
+		}
+		readResult <- readResultMsg{result: result}
 	}()
 
 	if timeoutMs > 0 {
@@ -218,40 +194,6 @@ func (s *Session) Close() error {
 		return nil
 	}
 	return s.wait()
-}
-
-func (h Host) request(adapter config.AdapterConfig, request adapterprotocol.Request) ([]adapterprotocol.Response, error) {
-	session, err := h.StartSession(adapter)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := session.encoder.Encode(request); err != nil {
-		session.Close()
-		return nil, fmt.Errorf("write request to adapter %q: %w", adapter.Name, err)
-	}
-	if err := session.stdin.Close(); err != nil {
-		session.Close()
-		return nil, fmt.Errorf("close stdin for adapter %q: %w", adapter.Name, err)
-	}
-	session.stdinClosed = true
-
-	var responses []adapterprotocol.Response
-	for {
-		response, err := session.readResponse()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			session.Close()
-			return nil, err
-		}
-		responses = append(responses, response)
-	}
-	if err := session.Close(); err != nil {
-		return nil, err
-	}
-	return responses, nil
 }
 
 func (s *Session) readResponse() (adapterprotocol.Response, error) {
@@ -305,33 +247,15 @@ func resolveCommand(baseDir string, command []string) []string {
 	return resolved
 }
 
-func applyResponse(result *core.CaseResult, response adapterprotocol.Response) error {
-	if response.Type == "caseStarted" {
-		if err := expectResponseID(result.ID, response); err != nil {
-			return err
-		}
-		if response.Label != "" {
-			result.Label = response.Label
-		}
-		result.Events = append(result.Events, core.Event{
-			Type:  core.EventCaseStarted,
-			ID:    result.ID,
-			Label: result.Label,
-		})
-		return nil
+func applyResponse(result *core.CaseResult, expectedID int, response adapterprotocol.Response) error {
+	if response.ID != expectedID {
+		return fmt.Errorf("response referenced unexpected case id %d (expected %d)", response.ID, expectedID)
 	}
 
 	switch response.Type {
-	case "casePassed":
-		if err := expectResponseID(result.ID, response); err != nil {
-			return err
-		}
-		if response.Label != "" {
-			result.Label = response.Label
-		}
+	case "passed":
 		result.Status = core.StatusPassed
 		result.Bindings = coreBindings(response.Bindings)
-		result.Stderr = response.Stderr
 		result.Events = append(result.Events, core.Event{
 			Type:     core.EventCasePassed,
 			ID:       result.ID,
@@ -339,40 +263,19 @@ func applyResponse(result *core.CaseResult, response adapterprotocol.Response) e
 			Bindings: result.Bindings,
 		})
 		return nil
-	case "caseFailed":
-		if err := expectResponseID(result.ID, response); err != nil {
-			return err
-		}
-		if response.Label != "" {
-			result.Label = response.Label
-		}
+	case "failed":
 		result.Status = core.StatusFailed
 		result.Message = response.Message
-		result.Expected = response.Expected
-		result.Actual = response.Actual
-		result.Stderr = response.Stderr
 		result.Events = append(result.Events, core.Event{
-			Type:     core.EventCaseFailed,
-			ID:       result.ID,
-			Label:    result.Label,
-			Message:  result.Message,
-			Expected: result.Expected,
-			Actual:   result.Actual,
+			Type:    core.EventCaseFailed,
+			ID:      result.ID,
+			Label:   result.Label,
+			Message: result.Message,
 		})
 		return nil
 	default:
 		return fmt.Errorf("unexpected response type %q", response.Type)
 	}
-}
-
-func expectResponseID(expected core.SpecID, response adapterprotocol.Response) error {
-	if response.ID == nil {
-		return fmt.Errorf("response %q missing case id", response.Type)
-	}
-	if coreID(*response.ID).Key() != expected.Key() {
-		return fmt.Errorf("response %q referenced unexpected case %s", response.Type, coreID(*response.ID).Key())
-	}
-	return nil
 }
 
 func defaultLabel(specCase core.CaseSpec) string {
@@ -384,22 +287,6 @@ func defaultLabel(specCase core.CaseSpec) string {
 		return label + " row " + fmt.Sprintf("%d", specCase.RowNumber)
 	}
 	return label
-}
-
-func protocolID(id core.SpecID) adapterprotocol.SpecID {
-	return adapterprotocol.SpecID{
-		File:        id.File,
-		HeadingPath: append([]string(nil), id.HeadingPath...),
-		Ordinal:     id.Ordinal,
-	}
-}
-
-func coreID(id adapterprotocol.SpecID) core.SpecID {
-	return core.SpecID{
-		File:        id.File,
-		HeadingPath: append([]string(nil), id.HeadingPath...),
-		Ordinal:     id.Ordinal,
-	}
 }
 
 func protocolBindings(bindings []core.Binding) []adapterprotocol.Binding {

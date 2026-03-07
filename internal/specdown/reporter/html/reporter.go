@@ -263,11 +263,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(source))
 	out.WriteString(`</code>`)
-	if result.Actual != "" {
-		out.WriteString(`<div class="cell-actual">`)
-		out.WriteString(template.HTMLEscapeString(result.Actual))
-		out.WriteString(`</div>`)
-	} else if result.Message != "" {
+	if result.Message != "" {
 		out.WriteString(`<div class="cell-actual">`)
 		out.WriteString(template.HTMLEscapeString(result.Message))
 		out.WriteString(`</div>`)
@@ -377,9 +373,9 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 			out.WriteString(`<div class="cell-template">`)
 			out.WriteString(template.HTMLEscapeString(cell))
 			out.WriteString(`</div>`)
-			if result.Status == core.StatusFailed && index == lastIndex && result.Actual != "" {
+			if result.Status == core.StatusFailed && index == lastIndex && result.Message != "" {
 				out.WriteString(`<div class="cell-actual">`)
-				out.WriteString(template.HTMLEscapeString(result.Actual))
+				out.WriteString(template.HTMLEscapeString(result.Message))
 				out.WriteString(`</div>`)
 			}
 			out.WriteString(`</td>`)
@@ -425,13 +421,10 @@ func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.All
 	out.WriteString(template.HTMLEscapeString(node.Source))
 	out.WriteString(`</code></pre>`)
 	if failedResult != nil {
-		actual := failedResult.Actual
-		if actual == "" {
-			actual = failedResult.Message
-		}
-		if actual != "" {
+		msg := failedResult.Message
+		if msg != "" {
 			out.WriteString(`<div class="cell-actual">`)
-			out.WriteString(template.HTMLEscapeString(actual))
+			out.WriteString(template.HTMLEscapeString(msg))
 			out.WriteString(`</div>`)
 		}
 	}
@@ -448,26 +441,6 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	return "", nil
 }
 
-func renderFailureDiff(expected string, actual string, compact bool) string {
-	var out strings.Builder
-	out.WriteString(`<dl class="failure-diff`)
-	if compact {
-		out.WriteString(` compact`)
-	}
-	out.WriteString(`">`)
-	if expected != "" {
-		out.WriteString(`<dt>expected</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(expected))
-		out.WriteString(`</dd>`)
-	}
-	if actual != "" {
-		out.WriteString(`<dt>actual</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(actual))
-		out.WriteString(`</dd>`)
-	}
-	out.WriteString(`</dl>`)
-	return out.String()
-}
 
 func markdownToHTML(source string) (string, error) {
 	var out bytes.Buffer

@@ -151,46 +151,23 @@ The default transport is fixed as follows.
 - `specdown-cli` sends `setup` before the first `runCase` and `teardown` after the last `runCase`
 - Adapters may ignore `setup`/`teardown` (no response required)
 - A non-zero exit indicates an adapter crash or infrastructure failure, not a case failure
+- Capabilities (blocks/fixtures) are declared in config, not negotiated at runtime
 
 Transmitted payloads must be JSON-serializable shapes.
 
 ```ts
-export type SpecId = {
-  file: string;
-  headingPath: string[];
-  ordinal: number;
-};
-
-export type CodeBlockNode = {
-  kind: "code";
-  info: string;
-  source: string;
-  id: SpecId;
-};
-
-export type TableNode = {
-  kind: "table";
-  fixture: string;
-  context: string | null;
-  columns: string[];
-  rows: string[][];
-  id: SpecId;
-};
-
 export type Binding = {
   name: string;
   value: string;
 };
 
 export type AdapterRequest =
-  | { type: "describe"; protocol: "specdown-adapter/v1" }
-  | { type: "setup"; protocol: "specdown-adapter/v1" }
-  | { type: "teardown"; protocol: "specdown-adapter/v1" }
+  | { type: "setup" }
+  | { type: "teardown" }
   | {
       type: "runCase";
-      protocol: "specdown-adapter/v1";
+      id: number;
       case: {
-        id: SpecId;
         kind: "code" | "tableRow";
         block?: string;
         source?: string;
@@ -203,22 +180,19 @@ export type AdapterRequest =
     };
 
 export type AdapterResponse =
-  | { type: "capabilities"; blocks: string[]; fixtures: string[] }
-  | { type: "caseStarted"; id: SpecId; label: string }
-  | { type: "casePassed"; id: SpecId; durationMs?: number; bindings?: Binding[]; stderr?: string }
-  | { type: "caseFailed"; id: SpecId; message: string; expected?: string; actual?: string; details?: string; stderr?: string }
-  | { type: "modelCheckPassed"; model: string; assertion: string }
-  | { type: "modelCheckFailed"; model: string; assertion: string; counterexamplePath?: string };
+  | { id: number; type: "passed"; bindings?: Binding[] }
+  | { id: number; type: "failed"; message: string };
 ```
 
 Key rules:
 
 - Core fixes only `CodeBlockNode`, `TableNode`, `SpecId`, and event schema
-- An adapter advertises the block info and fixture names it supports via `describe`
-- `specdown-cli` decides which adapter handles which case based on that advertisement
-- During execution, `runCase` requests are sent in document order
-- An adapter can maintain process-local state and return values to core via `casePassed.bindings`
-- On adapter failure, provide not just `message` but also structured `expected` and `actual` when possible
+- An adapter declares the block info and fixture names it supports in `specdown.json`
+- `specdown-cli` decides which adapter handles which case based on that declaration
+- During execution, `runCase` requests are sent in document order with integer correlation IDs
+- An adapter echoes the `id` back in every response
+- An adapter can maintain process-local state and return values to core via `passed.bindings`
+- On adapter failure, provide a `message` describing what went wrong
 - Built-in adapters must follow the same protocol contract
 - Language-specific helper SDKs are optional conveniences, not architectural essentials
 
@@ -238,7 +212,8 @@ Example:
     {
       "name": "project",
       "command": ["python3", "./tools/specdown_adapter.py"],
-      "protocol": "specdown-adapter/v1"
+      "blocks": ["run:myapp", "verify:myapp"],
+      "fixtures": ["user-exists"]
     }
   ],
   "reporters": [

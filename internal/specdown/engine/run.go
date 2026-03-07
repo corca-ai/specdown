@@ -14,20 +14,20 @@ import (
 	"specdown/internal/specdown/core"
 )
 
+// adapterEntry holds an adapter config for registry lookups.
+type adapterEntry struct {
+	Config config.AdapterConfig
+}
+
 type RunOptions struct {
 	Filter string
 	Jobs   int
 	DryRun bool
 }
 
-type describedAdapter struct {
-	Config       config.AdapterConfig
-	Capabilities adapterhost.Capabilities
-}
-
 type adapterRegistry struct {
-	blocks   map[string]describedAdapter
-	fixtures map[string]describedAdapter
+	blocks   map[string]adapterEntry
+	fixtures map[string]adapterEntry
 }
 
 type scopedBinding struct {
@@ -86,7 +86,7 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 		return dryRunReport(plan), nil
 	}
 
-	registry, err := describeAdapters(host, cfg.Adapters)
+	registry, err := buildRegistry(cfg.Adapters)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -218,52 +218,45 @@ func dryRunLabel(c core.CaseSpec) string {
 	return c.DisplayKind() + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
 }
 
-func describeAdapters(host adapterhost.Host, adapters []config.AdapterConfig) (adapterRegistry, error) {
+func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 	registry := adapterRegistry{
-		blocks:   make(map[string]describedAdapter),
-		fixtures: make(map[string]describedAdapter),
+		blocks:   make(map[string]adapterEntry),
+		fixtures: make(map[string]adapterEntry),
 	}
 	for _, adapter := range adapters {
-		caps, err := host.Describe(adapter)
-		if err != nil {
-			return adapterRegistry{}, err
-		}
-		described := describedAdapter{
-			Config:       adapter,
-			Capabilities: caps,
-		}
-		for _, block := range caps.Blocks {
+		entry := adapterEntry{Config: adapter}
+		for _, block := range adapter.Blocks {
 			if previous, exists := registry.blocks[block]; exists {
-				return adapterRegistry{}, fmt.Errorf("block %q is supported by both adapter %q and %q", block, previous.Config.Name, adapter.Name)
+				return adapterRegistry{}, fmt.Errorf("block %q is declared by both adapter %q and %q", block, previous.Config.Name, adapter.Name)
 			}
-			registry.blocks[block] = described
+			registry.blocks[block] = entry
 		}
-		for _, fixture := range caps.Fixtures {
+		for _, fixture := range adapter.Fixtures {
 			if previous, exists := registry.fixtures[fixture]; exists {
-				return adapterRegistry{}, fmt.Errorf("fixture %q is supported by both adapter %q and %q", fixture, previous.Config.Name, adapter.Name)
+				return adapterRegistry{}, fmt.Errorf("fixture %q is declared by both adapter %q and %q", fixture, previous.Config.Name, adapter.Name)
 			}
-			registry.fixtures[fixture] = described
+			registry.fixtures[fixture] = entry
 		}
 	}
 	return registry, nil
 }
 
-func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (describedAdapter, error) {
+func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error) {
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		adapter, ok := r.blocks[specCase.Block.Descriptor()]
+		entry, ok := r.blocks[specCase.Block.Descriptor()]
 		if !ok {
-			return describedAdapter{}, fmt.Errorf("no adapter supports block %q in %s", specCase.Block.Descriptor(), specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports block %q in %s", specCase.Block.Descriptor(), specCase.ID.Key())
 		}
-		return adapter, nil
+		return entry, nil
 	case core.CaseKindTableRow:
-		adapter, ok := r.fixtures[specCase.Fixture]
+		entry, ok := r.fixtures[specCase.Fixture]
 		if !ok {
-			return describedAdapter{}, fmt.Errorf("no adapter supports fixture %q in %s", specCase.Fixture, specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports fixture %q in %s", specCase.Fixture, specCase.ID.Key())
 		}
-		return adapter, nil
+		return entry, nil
 	default:
-		return describedAdapter{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
+		return adapterEntry{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
 	}
 }
 

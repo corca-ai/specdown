@@ -189,9 +189,6 @@ func printFailures(report core.Report) {
 			}
 			path := strings.Join(c.ID.HeadingPath, " > ")
 			msg := c.Message
-			if c.Actual != "" {
-				msg = c.Actual
-			}
 			fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]\n", path, c.Block+c.Fixture)
 			if msg != "" {
 				fmt.Fprintf(os.Stderr, "        %s\n", msg)
@@ -203,9 +200,6 @@ func printFailures(report core.Report) {
 			}
 			path := strings.Join(c.ID.HeadingPath, " > ")
 			msg := c.Message
-			if c.Actual != "" {
-				msg = c.Actual
-			}
 			fmt.Fprintf(os.Stderr, "  FAIL  %s  [alloy:%s#%s]\n", path, c.Model, c.Assertion)
 			if msg != "" {
 				fmt.Fprintf(os.Stderr, "        %s\n", msg)

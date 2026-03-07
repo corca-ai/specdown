@@ -149,12 +149,6 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 	if got := report.Results[0].Cases[2].Message; got != "expected card \"card-1\" in board \"board-1\" to be in column \"doing\"; actual column: \"todo\"" {
 		t.Fatalf("unexpected failure message %q", got)
 	}
-	if got := report.Results[0].Cases[2].Expected; got != "card \"card-1\" in board \"board-1\" at column \"doing\"" {
-		t.Fatalf("unexpected expected diff %q", got)
-	}
-	if got := report.Results[0].Cases[2].Actual; got != "column: \"todo\"" {
-		t.Fatalf("unexpected actual diff %q", got)
-	}
 }
 
 func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
@@ -483,7 +477,8 @@ func helperAdapterConfig() config.Config {
 			{
 				Name:     "helper-board",
 				Command:  []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board"},
-				Protocol: adapterprotocol.Version,
+				Blocks:   []string{"run:board", "verify:board"},
+				Fixtures: []string{"board-exists", "card-exists", "card-column"},
 			},
 		},
 	}
@@ -501,7 +496,8 @@ func helperNoBindingConfig() config.Config {
 			{
 				Name:     "helper-board",
 				Command:  []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board-no-bindings"},
-				Protocol: adapterprotocol.Version,
+				Blocks:   []string{"run:board", "verify:board"},
+				Fixtures: []string{"board-exists", "card-exists", "card-column"},
 			},
 		},
 	}
@@ -533,19 +529,13 @@ func TestHelperAdapterProcess(t *testing.T) {
 		}
 
 		switch request.Type {
-		case "describe":
-			encoder.Encode(adapterprotocol.Response{
-				Type:     "capabilities",
-				Blocks:   []string{"run:board", "verify:board"},
-				Fixtures: []string{"board-exists", "card-exists", "card-column"},
-			})
 		case "setup", "teardown":
 			// lifecycle hooks — no-op for helper adapter
 		case "runCase":
 			if request.Case == nil {
 				os.Exit(3)
 			}
-			runHelperCase(encoder, &state, *request.Case)
+			runHelperCase(encoder, &state, request.ID, *request.Case)
 		default:
 			os.Exit(4)
 		}
@@ -568,41 +558,20 @@ type helperCard struct {
 	column string
 }
 
-func runHelperCase(encoder *json.Encoder, state *helperState, item adapterprotocol.Case) {
-	label := item.Block
-	if item.Kind == "tableRow" {
-		label = "fixture:" + item.Fixture
-	}
-	if len(item.ID.HeadingPath) > 0 {
-		label += " @ " + item.ID.HeadingPath[len(item.ID.HeadingPath)-1]
-	}
-	encoder.Encode(adapterprotocol.Response{
-		Type:  "caseStarted",
-		ID:    &item.ID,
-		Label: label,
-	})
-
+func runHelperCase(encoder *json.Encoder, state *helperState, seqID int, item adapterprotocol.Case) {
 	bindings, err := executeHelperCase(state, item)
 	if err != nil {
-		helperErr, ok := err.(*helperError)
-		if !ok {
-			helperErr = &helperError{message: err.Error()}
-		}
 		encoder.Encode(adapterprotocol.Response{
-			Type:     "caseFailed",
-			ID:       &item.ID,
-			Label:    label,
-			Message:  helperErr.message,
-			Expected: helperErr.expected,
-			Actual:   helperErr.actual,
+			ID:      seqID,
+			Type:    "failed",
+			Message: err.Error(),
 		})
 		return
 	}
 
 	encoder.Encode(adapterprotocol.Response{
-		Type:     "casePassed",
-		ID:       &item.ID,
-		Label:    label,
+		ID:       seqID,
+		Type:     "passed",
 		Bindings: bindings,
 	})
 }
@@ -747,9 +716,7 @@ func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]a
 			return nil, nil
 		}
 		return nil, &helperError{
-			message:  "expected card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName) + " to be in column " + strconvQuote(expectedColumn) + "; actual column: " + strconvQuote(card.column),
-			expected: "card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName) + " at column " + strconvQuote(expectedColumn),
-			actual:   "column: " + strconvQuote(card.column),
+			message: "expected card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName) + " to be in column " + strconvQuote(expectedColumn) + "; actual column: " + strconvQuote(card.column),
 		}
 	default:
 		return nil, &helperError{message: "unsupported fixture " + strconvQuote(item.Fixture)}
@@ -757,9 +724,7 @@ func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]a
 }
 
 type helperError struct {
-	message  string
-	expected string
-	actual   string
+	message string
 }
 
 func (e *helperError) Error() string {
@@ -767,34 +732,24 @@ func (e *helperError) Error() string {
 }
 
 func helperBoardExistsFailure(name string, shouldExist bool) *helperError {
-	actual := "boards: [\"board-1\"]"
 	if shouldExist {
 		return &helperError{
-			message:  "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]",
-			expected: "board " + strconvQuote(name) + " exists",
-			actual:   actual,
+			message: "expected board " + strconvQuote(name) + " to exist; actual boards: [\"board-1\"]",
 		}
 	}
 	return &helperError{
-		message:  "expected board " + strconvQuote(name) + " not to exist; actual boards: [\"board-1\"]",
-		expected: "board " + strconvQuote(name) + " absent",
-		actual:   actual,
+		message: "expected board " + strconvQuote(name) + " not to exist; actual boards: [\"board-1\"]",
 	}
 }
 
 func helperCardExistsFailure(boardName string, cardName string, shouldExist bool) *helperError {
-	actual := "cards: [\"card-1\"]"
 	if shouldExist {
 		return &helperError{
-			message:  "expected card " + strconvQuote(cardName) + " to exist in board " + strconvQuote(boardName) + "; actual cards: [\"card-1\"]",
-			expected: "card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName) + " exists",
-			actual:   actual,
+			message: "expected card " + strconvQuote(cardName) + " to exist in board " + strconvQuote(boardName) + "; actual cards: [\"card-1\"]",
 		}
 	}
 	return &helperError{
-		message:  "expected card " + strconvQuote(cardName) + " not to exist in board " + strconvQuote(boardName) + "; actual cards: [\"card-1\"]",
-		expected: "card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName) + " absent",
-		actual:   actual,
+		message: "expected card " + strconvQuote(cardName) + " not to exist in board " + strconvQuote(boardName) + "; actual cards: [\"card-1\"]",
 	}
 }
 

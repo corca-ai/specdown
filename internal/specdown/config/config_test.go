@@ -16,7 +16,8 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
     {
       "name": "project",
       "command": ["python3", "./tools/adapter.py"],
-      "protocol": "specdown-adapter/v1"
+      "blocks": ["run:myapp", "verify:myapp"],
+      "fixtures": ["user-exists"]
     }
   ],
   "models": {

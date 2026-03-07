@@ -20,8 +20,6 @@ type Event struct {
 	ID       SpecID    `json:"id"`
 	Label    string    `json:"label,omitempty"`
 	Message  string    `json:"message,omitempty"`
-	Expected string    `json:"expected,omitempty"`
-	Actual   string    `json:"actual,omitempty"`
 	Bindings []Binding `json:"bindings,omitempty"`
 }
 
@@ -39,9 +37,6 @@ type CaseResult struct {
 	RowNumber      int       `json:"rowNumber,omitempty"`
 	Status         Status    `json:"status"`
 	Message        string    `json:"message,omitempty"`
-	Expected       string    `json:"expected,omitempty"`
-	Actual         string    `json:"actual,omitempty"`
-	Stderr         string    `json:"stderr,omitempty"`
 	Bindings       []Binding `json:"bindings,omitempty"`
 	Events         []Event   `json:"events,omitempty"`
 }

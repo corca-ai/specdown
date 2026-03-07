@@ -140,8 +140,6 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 						RowNumber:     2,
 						Status:        core.StatusFailed,
 						Message:       "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]",
-						Expected:      "board \"board-1-archive\" exists",
-						Actual:        "boards: [\"board-1\"]",
 					},
 				},
 			},
@@ -221,8 +219,8 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	if !strings.Contains(html, "board-1-archive") {
 		t.Fatalf("expected resolved table cell, got %q", html)
 	}
-	if !strings.Contains(html, `<div class="cell-actual">boards: [&#34;board-1&#34;]</div>`) {
-		t.Fatalf("expected cell-actual with failure detail, got %q", html)
+	if !strings.Contains(html, `<div class="cell-actual">expected board &#34;board-1-archive&#34; to exist; actual boards: [&#34;board-1&#34;]</div>`) {
+		t.Fatalf("expected cell-actual with failure message, got %q", html)
 	}
 	if !strings.Contains(html, "id=\"case-specs-pocket-board-spec-md-pocket-board-variable-flow-table-check-4\"") {
 		t.Fatalf("expected failure anchor link, got %q", html)
@@ -307,7 +305,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	if !strings.Contains(html, "alloy:model(board)") {
 		t.Fatalf("expected alloy model label, got %q", html)
 	}
-	if !strings.Contains(html, "counterexample found") {
+	if !strings.Contains(html, "found counterexample for assertion") {
 		t.Fatalf("expected alloy failure inline in model block, got %q", html)
 	}
 	if strings.Contains(html, "bundle artifact") || strings.Contains(html, "source map") {

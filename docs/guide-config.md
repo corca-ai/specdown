@@ -12,7 +12,8 @@ Create a `specdown.json` in the project root.
     {
       "name": "myapp",
       "command": ["python3", "./tools/myapp_adapter.py"],
-      "protocol": "specdown-adapter/v1"
+      "blocks": ["run:myapp", "verify:myapp"],
+      "fixtures": ["user-exists"]
     }
   ],
   "reporters": [

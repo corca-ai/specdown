@@ -10,12 +10,12 @@ specdown ──stdin──▸ adapter
 specdown ◂─stdout── adapter
 ```
 
-1. specdown sends a `describe` request
-2. The adapter responds with `capabilities`, listing supported blocks and fixtures
-3. specdown sends a `setup` request (no response required; may be ignored)
-4. specdown sends `runCase` requests in document order
-5. The adapter responds to each case with `caseStarted` → `casePassed` or `caseFailed`
-6. specdown sends a `teardown` request (no response required; may be ignored)
+1. specdown sends a `setup` request (no response required; may be ignored)
+2. specdown sends `runCase` requests in document order, each with an integer `id`
+3. The adapter responds to each case with `passed` or `failed`, echoing the `id`
+4. specdown sends a `teardown` request (no response required; may be ignored)
+
+Capabilities (which blocks and fixtures the adapter handles) are declared in `specdown.json`, not at runtime.
 
 ## Minimal Implementation
 
@@ -23,58 +23,70 @@ specdown ◂─stdout── adapter
 #!/usr/bin/env python3
 import json, sys
 
-def emit(payload):
-    sys.stdout.write(json.dumps(payload) + "\n")
-    sys.stdout.flush()
+for line in sys.stdin:
+    req = json.loads(line)
+    if req["type"] in ("setup", "teardown"):
+        continue
+    if req["type"] == "runCase":
+        result = handle(req["case"])
+        print(json.dumps({"id": req["id"], **result}))
 
-def main():
-    state = {}
-    for raw in sys.stdin:
-        if not raw.strip():
-            continue
-        req = json.loads(raw)
-
-        if req["type"] == "describe":
-            emit({
-                "type": "capabilities",
-                "blocks": ["run:myapp", "verify:myapp"],
-                "fixtures": ["user-exists"],
-            })
-            continue
-
-        if req["type"] in ("setup", "teardown"):
-            continue  # may be ignored
-
-        if req["type"] == "runCase":
-            case = req["case"]
-            emit({"type": "caseStarted", "id": case["id"], "label": ""})
-
-            try:
-                bindings = handle(state, case)
-                emit({
-                    "type": "casePassed",
-                    "id": case["id"],
-                    "bindings": bindings,
-                })
-            except Exception as e:
-                emit({
-                    "type": "caseFailed",
-                    "id": case["id"],
-                    "message": str(e),
-                    "actual": "",  # concise actual value
-                })
-
-def handle(state, case):
+def handle(case):
     # case["block"]  — "run:myapp", "verify:myapp", etc.
     # case["source"] — block body
     # case["fixture"] — fixture name (for table rows)
     # case["columns"], case["cells"] — table columns and cell values
     # case["bindings"] — variables captured from previous blocks
     # case["captureNames"] — list of variable names to capture
-    return []
+    try:
+        bindings = execute(case)
+        return {"type": "passed", "bindings": bindings}
+    except Exception as e:
+        return {"type": "failed", "message": str(e)}
+```
 
-if __name__ == "__main__":
-    main()
+## Request Format
+
+### runCase
+
+```json
+{
+  "type": "runCase",
+  "id": 1,
+  "case": {
+    "kind": "code",
+    "block": "run:myapp",
+    "source": "create-board",
+    "captureNames": ["boardName"],
+    "bindings": [{"name": "x", "value": "1"}]
+  }
+}
+```
+
+The integer `id` is a correlation ID assigned by specdown. The adapter must echo it back in the response.
+
+### setup / teardown
+
+```json
+{"type": "setup"}
+{"type": "teardown"}
+```
+
+No response required. The adapter may ignore these or use them for environment initialization and cleanup.
+
+## Response Format
+
+### Passed
+
+```json
+{"id": 1, "type": "passed"}
+{"id": 1, "type": "passed", "bindings": [{"name": "boardName", "value": "board-1"}]}
+```
+
+### Failed
+
+```json
+{"id": 1, "type": "failed", "message": "expected 3, got 4"}
 ```
 
 ## Case Types
@@ -92,7 +104,7 @@ if __name__ == "__main__":
 
 Variables in `source` are already substituted. The adapter can execute directly without additional substitution.
 
-If capture is needed, include `[{"name": "userId", "value": "42"}]` in `casePassed.bindings`.
+If capture is needed, include `[{"name": "userId", "value": "42"}]` in `passed.bindings`.
 
 ### Fixture Table Row
 
@@ -103,39 +115,6 @@ If capture is needed, include `[{"name": "userId", "value": "42"}]` in `casePass
 | `fixture` | Fixture name (`"user-exists"`) |
 | `columns` | `["name", "exists"]` |
 | `cells` | `["alice", "yes"]` — values with variables already substituted |
-
-## Failure Response
-
-Fill the `actual` field concisely in `caseFailed`.
-Since the spec body serves as the expected value in the report, providing only the actual value is sufficient.
-
-```json
-{
-  "type": "caseFailed",
-  "id": {"file": "...", "headingPath": [...], "ordinal": 1},
-  "message": "expected column 'done', got 'doing'",
-  "actual": "doing",
-  "stderr": "optional stderr output"
-}
-```
-
-If `actual` is present, it is displayed in the report. Otherwise, `message` is displayed.
-
-## Stderr
-
-Both `casePassed` and `caseFailed` can include an optional `stderr` field.
-If the adapter captures stderr output during execution, it can be included here and viewed in the report.
-
-## Setup / Teardown
-
-specdown sends a `setup` request before the first `runCase` and a `teardown` request after the last `runCase`.
-The adapter may ignore these or use them for test environment initialization and cleanup.
-No response is required.
-
-```json
-{"type": "setup", "protocol": "specdown-adapter/v1"}
-{"type": "teardown", "protocol": "specdown-adapter/v1"}
-```
 
 ## Timeout
 
@@ -149,14 +128,15 @@ For web server testing, know the server URL via environment variables or hardcod
 
 ## Registration
 
-Register the command in `specdown.json`.
+Declare the adapter command and its capabilities in `specdown.json`.
 
 ```json
 {
   "adapters": [{
     "name": "myapp",
     "command": ["python3", "./tools/myapp_adapter.py"],
-    "protocol": "specdown-adapter/v1"
+    "blocks": ["run:myapp", "verify:myapp"],
+    "fixtures": ["user-exists"]
   }]
 }
 ```

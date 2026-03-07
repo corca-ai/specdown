@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"specdown/internal/specdown/adapterprotocol"
 )
 
 type Config struct {
@@ -24,7 +22,8 @@ type ModelConfig struct {
 type AdapterConfig struct {
 	Name     string   `json:"name"`
 	Command  []string `json:"command"`
-	Protocol string   `json:"protocol"`
+	Blocks   []string `json:"blocks"`
+	Fixtures []string `json:"fixtures,omitempty"`
 }
 
 type Reporter struct {
@@ -63,8 +62,8 @@ func Load(path string) (Config, string, error) {
 		if len(adapter.Command) == 0 {
 			return Config{}, "", fmt.Errorf("adapter %q must define a command", adapter.Name)
 		}
-		if adapter.Protocol != adapterprotocol.Version {
-			return Config{}, "", fmt.Errorf("adapter %q must use protocol %q", adapter.Name, adapterprotocol.Version)
+		if len(adapter.Blocks) == 0 && len(adapter.Fixtures) == 0 {
+			return Config{}, "", fmt.Errorf("adapter %q must declare at least one block or fixture", adapter.Name)
 		}
 	}
 	if cfg.Models.Builtin != "" && cfg.Models.Builtin != "alloy" {

@@ -10,7 +10,15 @@
         "python3",
         "./tools/pocket_board_adapter.py"
       ],
-      "protocol": "specdown-adapter/v1"
+      "blocks": [
+        "run:board",
+        "verify:board"
+      ],
+      "fixtures": [
+        "board-exists",
+        "card-exists",
+        "card-column"
+      ]
     }
   ],
   "models": {
