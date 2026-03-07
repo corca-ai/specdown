@@ -37,12 +37,16 @@ type scopedBinding struct {
 }
 
 func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
+	title, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry)
+	if err != nil {
+		return core.Report{}, err
+	}
 	host := adapterhost.Host{BaseDir: baseDir}
-	return runWithDependencies(baseDir, cfg, host, alloy.Runner{BaseDir: baseDir}, opts)
+	return runWithDocs(title, docs, cfg, host, alloy.Runner{BaseDir: baseDir}, opts)
 }
 
 func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
-	docs, err := core.Discover(baseDir, cfg.Include)
+	_, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry)
 	if err != nil {
 		return nil, err
 	}
@@ -64,15 +68,7 @@ func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
 	return paths, nil
 }
 
-func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Host, alloyRunner alloy.DocumentRunner, opts RunOptions) (core.Report, error) {
-	docs, err := core.Discover(baseDir, cfg.Include)
-	if err != nil {
-		return core.Report{}, err
-	}
-	if len(docs) == 0 {
-		return core.Report{}, fmt.Errorf("no .spec.md files matched include patterns")
-	}
-
+func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner alloy.DocumentRunner, opts RunOptions) (core.Report, error) {
 	plan, err := core.CompileDocuments(docs)
 	if err != nil {
 		return core.Report{}, err
@@ -83,7 +79,9 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 	}
 
 	if opts.DryRun {
-		return dryRunReport(plan), nil
+		report := dryRunReport(plan)
+		report.Title = title
+		return report, nil
 	}
 
 	registry, err := buildRegistry(cfg.Adapters)
@@ -107,6 +105,7 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 	}
 
 	return core.Report{
+		Title:       title,
 		GeneratedAt: time.Now(),
 		Results:     results,
 		Summary:     summary,

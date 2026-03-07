@@ -38,7 +38,8 @@ type tocItemView struct {
 	Children []tocItemView
 }
 
-func Write(report core.Report, title string, outPath string) (err error) {
+func Write(report core.Report, outPath string) (err error) {
+	title := report.Title
 	if title == "" {
 		title = "Specification"
 	}

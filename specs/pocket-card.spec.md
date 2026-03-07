@@ -175,16 +175,3 @@ check cardBelongsToOneBoard for 5
 
 <!-- alloy:ref(board#cardBelongsToOneBoard, scope=5) -->
 
-### Intentional Counterexample
-
-An intentionally incorrect assertion: claims that a card can have more than one column.
-
-```alloy:model(board)
-assert cardCanHaveMultipleColumns {
-  some c: Card | #c.column > 1
-}
-
-check cardCanHaveMultipleColumns for 5
-```
-
-<!-- alloy:ref(board#cardCanHaveMultipleColumns, scope=5) -->

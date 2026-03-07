@@ -64,8 +64,7 @@ The canonical config must not depend on any specific language runtime.
 
 ```json
 {
-  "title": "Project Spec",
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "adapters": [
     {
       "name": "myapp",
@@ -82,17 +81,19 @@ The canonical config must not depend on any specific language runtime.
 }
 ```
 
+The report title is taken from the H1 heading in the entry file.
+The entry file lists spec documents as Markdown links; their order determines the table of contents.
+
 | Field | Description |
 |-------|-------------|
-| `title` | Report title displayed as `<h1>`. Defaults to `"Specification"` |
-| `include` | Glob patterns for spec files |
+| `entry` | Path to the entry Markdown file. Its H1 is the report title; links define spec order |
 | `adapters` | List of adapters that handle executable blocks and fixtures |
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification. Can be omitted if not used |
 
-### Missing include pattern
+### Missing entry
 
-A config file without `include` must be rejected.
+A config file without `entry` must be rejected.
 
 ```verify:shell
 mkdir -p .tmp-test
@@ -108,7 +109,7 @@ Two adapters with the same name must be rejected.
 mkdir -p .tmp-test
 cat <<'CFG' > .tmp-test/dup-adapter.json
 {
-  "include": ["*.spec.md"],
+  "entry": "index.spec.md",
   "adapters": [
     {"name": "a", "command": ["true"], "blocks": ["run:x"]},
     {"name": "a", "command": ["true"], "blocks": ["run:y"]}
@@ -150,8 +151,9 @@ timeout: 5000
 
 A simple command that completes well within the timeout.
 SPEC
+printf '# T\n\n- [Timeout](timeout.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/timeout-cfg.json
-{"include":["timeout.spec.md"],"adapters":[]}
+{"entry":"index.spec.md","adapters":[]}
 CFG
 specdown run -config .tmp-test/timeout-cfg.json -dry-run 2>&1
 ```
@@ -173,8 +175,9 @@ Some prose.
 
 More prose.
 SPEC
+printf '# T\n\n- [Valid](valid.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/valid-cfg.json
-{"include":["valid.spec.md"],"adapters":[]}
+{"entry":"index.spec.md","adapters":[]}
 CFG
 specdown run -config .tmp-test/valid-cfg.json -dry-run 2>&1
 ```
@@ -186,8 +189,9 @@ A spec with an unclosed fenced code block must be rejected at parse time.
 ```verify:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:shell\necho hello\n' > .tmp-test/unclosed.spec.md
+printf '# T\n\n- [Unclosed](unclosed.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/unclosed-cfg.json
-{"include":["unclosed.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
 CFG
 ! specdown run -config .tmp-test/unclosed-cfg.json 2>/dev/null
 ```
@@ -199,8 +203,9 @@ A fixture directive without parameters and not followed by a table must be rejec
 ```verify:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n<!-- fixture:x -->\n\nJust prose.\n' > .tmp-test/fnt.spec.md
+printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/fnt-cfg.json
-{"include":["fnt.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
 CFG
 ! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
 ```
@@ -217,8 +222,9 @@ Some prose.
 
 More prose.
 SPEC
+printf '# T\n\n- [FC](fixture-call.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/fixture-call-cfg.json
-{"include":["fixture-call.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":[],"fixtures":["check"]}]}
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"fixtures":["check"]}]}
 CFG
 specdown run -config .tmp-test/fixture-call-cfg.json -dry-run 2>&1
 ```
@@ -230,8 +236,9 @@ A setup or teardown directive not followed by a code block must be rejected.
 ```verify:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n<!-- setup:each -->\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
+printf '# T\n\n- [Hook](hook-bad.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/hook-bad-cfg.json
-{"include":["hook-bad.spec.md"],"adapters":[]}
+{"entry":"index.spec.md","adapters":[]}
 CFG
 ! specdown run -config .tmp-test/hook-bad-cfg.json 2>/dev/null
 ```
@@ -243,8 +250,9 @@ A setup or teardown directive followed by an executable code block must parse su
 ```run:shell
 mkdir -p .tmp-test
 printf '# Hook Test\n\n## Group\n\n<!-- setup:each -->\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
+printf '# T\n\n- [Hook](hook-good.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/hook-good-cfg.json
-{"include":["hook-good.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
 CFG
 specdown run -config .tmp-test/hook-good-cfg.json -dry-run 2>&1
 ```
@@ -311,8 +319,9 @@ Referencing a variable that was never captured must produce an error.
 ```verify:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:shell\necho \${missing}\n```\n' > .tmp-test/unresolved.spec.md
+printf '# T\n\n- [Unresolved](unresolved.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/unresolved-cfg.json
-{"include":["unresolved.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
 CFG
 specdown run -config .tmp-test/unresolved-cfg.json 2>&1 | grep -q "missing"
 ! specdown run -config .tmp-test/unresolved-cfg.json 2>/dev/null
@@ -493,8 +502,9 @@ cat <<'SPEC' > .tmp-test/report-test.spec.md
 
 A minimal spec for testing report generation.
 SPEC
+printf '# Report Test\n\n- [Report](report-test.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/report-test.json
-{"title":"Report Test","include":["report-test.spec.md"],"adapters":[]}
+{"entry":"index.spec.md","adapters":[]}
 CFG
 specdown run -config .tmp-test/report-test.json -out report.html 2>&1 || true
 ```
@@ -560,8 +570,9 @@ cat <<'SPEC' > .tmp-test/diag.spec.md
 | --- | --- |
 | a | b |
 SPEC
+printf '# T\n\n- [Diag](diag.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/diag.json
-{"include":["diag.spec.md"],"adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"}]}
+{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"}]}
 CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
 ```

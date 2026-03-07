@@ -80,6 +80,7 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
@@ -138,6 +139,7 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
@@ -185,6 +187,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	report, err := Run(root, helperNoBindingConfig(), RunOptions{})
 	if err != nil {
@@ -219,6 +222,7 @@ func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	_, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err == nil {
@@ -259,9 +263,14 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
-	report, err := runWithDependencies(root, config.Config{
-		Include:  []string{"specs/**/*.spec.md"},
+	title, docs, err := core.DiscoverFromEntry(root, "specs/index.spec.md")
+	if err != nil {
+		t.Fatalf("discover: %v", err)
+	}
+	report, err := runWithDocs(title, docs, config.Config{
+		Entry:    "specs/index.spec.md",
 		Adapters: helperAdapterConfig().Adapters,
 	}, adapterhost.Host{BaseDir: root}, fakeAlloyRunner{
 		results: map[string]core.AlloyCheckResult{
@@ -404,6 +413,7 @@ func TestRunWithFrontmatterTimeout(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -423,8 +433,9 @@ func TestRunDryRunSkipsExecution(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 	// DryRun should not launch any adapter — even with no adapter config
-	report, err := Run(root, config.Config{Include: []string{"specs/**/*.spec.md"}}, RunOptions{DryRun: true})
+	report, err := Run(root, config.Config{Entry: "specs/index.spec.md"}, RunOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -461,6 +472,7 @@ func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 	report, err := Run(root, helperAdapterConfig(), RunOptions{Filter: "Alpha"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -505,6 +517,7 @@ func TestRunExecutesSetupEachHooksAtSectionBoundaries(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
@@ -550,6 +563,7 @@ func TestRunExecutesSetupOnceHook(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
@@ -584,6 +598,7 @@ func TestRunFixtureCallWithParams(t *testing.T) {
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
+	writeEntryFile(t, root, specPath)
 
 	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
@@ -595,6 +610,24 @@ func TestRunFixtureCallWithParams(t *testing.T) {
 	}
 }
 
+func writeEntryFile(t *testing.T, root string, specFiles ...string) {
+	t.Helper()
+	specsDir := filepath.Join(root, "specs")
+	if err := os.MkdirAll(specsDir, 0o755); err != nil {
+		t.Fatalf("mkdir specs: %v", err)
+	}
+	var lines []string
+	lines = append(lines, "# Test Specs\n")
+	for _, f := range specFiles {
+		name := filepath.Base(f)
+		lines = append(lines, "- ["+name+"]("+name+")")
+	}
+	entry := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(specsDir, "index.spec.md"), []byte(entry), 0o644); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+}
+
 func helperAdapterConfig() config.Config {
 	executable, err := os.Executable()
 	if err != nil {
@@ -602,7 +635,7 @@ func helperAdapterConfig() config.Config {
 	}
 
 	return config.Config{
-		Include: []string{"specs/**/*.spec.md"},
+		Entry: "specs/index.spec.md",
 		Adapters: []config.AdapterConfig{
 			{
 				Name:     "helper-board",
@@ -621,7 +654,7 @@ func helperNoBindingConfig() config.Config {
 	}
 
 	return config.Config{
-		Include: []string{"specs/**/*.spec.md"},
+		Entry: "specs/index.spec.md",
 		Adapters: []config.AdapterConfig{
 			{
 				Name:     "helper-board",

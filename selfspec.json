@@ -1,6 +1,5 @@
 {
-  "title": "Specdown Self-Spec",
-  "include": ["selfspecs/**/*.spec.md"],
+  "entry": "selfspecs/index.spec.md",
   "adapters": [
     {
       "name": "shell",

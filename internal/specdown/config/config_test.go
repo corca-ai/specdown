@@ -11,7 +11,7 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")
 	body := `{
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "adapters": [
     {
       "name": "project",
@@ -45,8 +45,8 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
 	if len(cfg.Adapters) != 1 || cfg.Adapters[0].Name != "project" {
 		t.Fatalf("unexpected adapters %#v", cfg.Adapters)
 	}
-	if len(cfg.Include) != 1 || cfg.Include[0] != "specs/**/*.spec.md" {
-		t.Fatalf("unexpected include %#v", cfg.Include)
+	if cfg.Entry != "specs/index.spec.md" {
+		t.Fatalf("unexpected entry %q", cfg.Entry)
 	}
 	if cfg.Models.Builtin != "alloy" {
 		t.Fatalf("unexpected models %#v", cfg.Models)
@@ -60,7 +60,7 @@ func TestLoadConfigAllowsAlloyOnlyProjectWithoutAdapters(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")
 	body := `{
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "reporters": [
     {
       "builtin": "html",
@@ -85,7 +85,7 @@ func TestJSONReportOutFile(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")
 	body := `{
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "reporters": [
     {"builtin": "html", "outFile": "report.html"},
     {"builtin": "json", "outFile": "result.json"}
@@ -106,7 +106,7 @@ func TestJSONReportOutFile(t *testing.T) {
 func TestJSONReportOutFileReturnsEmptyWhenNotConfigured(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")
-	body := `{"include": ["specs/**/*.spec.md"], "reporters": [{"builtin": "html", "outFile": "r.html"}]}`
+	body := `{"entry": "specs/index.spec.md", "reporters": [{"builtin": "html", "outFile": "r.html"}]}`
 	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestLoadConfigRejectsUnknownModelBuiltin(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")
 	body := `{
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "models": {
     "builtin": "unknown"
   }

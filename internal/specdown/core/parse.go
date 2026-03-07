@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -346,40 +345,6 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		Nodes:       nodes,
 		Frontmatter: fm,
 	}, nil
-}
-
-func walkFiles(baseDir string, visit func(relativePath string) error) error {
-	root, err := filepath.Abs(baseDir)
-	if err != nil {
-		return fmt.Errorf("resolve base dir: %w", err)
-	}
-
-	var files []string
-	err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		relativePath, err := filepath.Rel(root, path)
-		if err != nil {
-			return fmt.Errorf("relative path for %s: %w", path, err)
-		}
-		files = append(files, filepath.ToSlash(relativePath))
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("discover specs: %w", err)
-	}
-
-	sort.Strings(files)
-	for _, relativePath := range files {
-		if err := visit(relativePath); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func splitLines(markdown string) []string {

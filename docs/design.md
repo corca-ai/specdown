@@ -207,8 +207,7 @@ Example:
 
 ```json
 {
-  "title": "Project Spec",
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "adapters": [
     {
       "name": "project",

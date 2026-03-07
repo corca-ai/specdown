@@ -32,8 +32,9 @@ fi
 # Also verify specdown dry-run can parse a spec with this block.
 mkdir -p .tmp-test
 tmpspec=".tmp-test/fixture-test-$$.spec.md"
+tmpentry=".tmp-test/fixture-test-$$-index.spec.md"
 tmpcfg=".tmp-test/fixture-test-$$.json"
-trap 'rm -f "$tmpspec" "$tmpcfg"' EXIT
+trap 'rm -f "$tmpspec" "$tmpentry" "$tmpcfg"' EXIT
 
 cat > "$tmpspec" <<SPEC
 # Test
@@ -43,8 +44,10 @@ echo hello
 \`\`\`
 SPEC
 
+printf '# T\n\n- [Test](%s)\n' "$(basename "$tmpspec")" > "$tmpentry"
+
 cat > "$tmpcfg" <<CFG
-{"include":["$(basename "$tmpspec")"],"adapters":[{"name":"t","command":["true"],"blocks":["${expected_kind}:${expected_target}"],"fixtures":[]}]}
+{"entry":"$(basename "$tmpentry")","adapters":[{"name":"t","command":["true"],"blocks":["${expected_kind}:${expected_target}"],"fixtures":[]}]}
 CFG
 
 specdown run -config "$tmpcfg" -dry-run >/dev/null 2>&1

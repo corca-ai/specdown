@@ -80,6 +80,7 @@ type Summary struct {
 }
 
 type Report struct {
+	Title       string           `json:"title"`
 	GeneratedAt time.Time        `json:"generatedAt"`
 	Results     []DocumentResult `json:"results"`
 	Summary     Summary          `json:"summary"`

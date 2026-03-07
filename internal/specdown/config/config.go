@@ -8,8 +8,7 @@ import (
 )
 
 type Config struct {
-	Title     string          `json:"title"`
-	Include   []string        `json:"include"`
+	Entry     string          `json:"entry"`
 	Adapters  []AdapterConfig `json:"adapters"`
 	Models    ModelConfig     `json:"models"`
 	Reporters []Reporter      `json:"reporters"`
@@ -47,8 +46,8 @@ func Load(path string) (Config, string, error) {
 		return Config{}, "", fmt.Errorf("parse config: %w", err)
 	}
 
-	if len(cfg.Include) == 0 {
-		return Config{}, "", fmt.Errorf("config must define at least one include pattern")
+	if cfg.Entry == "" {
+		return Config{}, "", fmt.Errorf("config must define an entry file")
 	}
 	if err := validateAdapters(cfg.Adapters); err != nil {
 		return Config{}, "", err

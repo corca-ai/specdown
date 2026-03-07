@@ -146,11 +146,11 @@ func buildMainTestReport() core.Report {
 	}
 }
 
-func writeAndReadReport(t *testing.T, report core.Report, title string) string {
+func writeAndReadReport(t *testing.T, report core.Report) string {
 	t.Helper()
 	outDir := t.TempDir()
 	outPath := filepath.Join(outDir, "report.html")
-	if err := Write(report, title, outPath); err != nil {
+	if err := Write(report, outPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 	body, err := os.ReadFile(outPath)
@@ -176,7 +176,8 @@ func assertNotContains(t *testing.T, html, substr, label string) {
 
 func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	report := buildMainTestReport()
-	html := writeAndReadReport(t, report, "My Report")
+	report.Title = "My Report"
+	html := writeAndReadReport(t, report)
 
 	t.Run("layout", func(t *testing.T) {
 		assertContains(t, html, "<h1 class=\"report-title\">My Report</h1>", "h1 report title")
@@ -280,7 +281,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, "", reportPath); err != nil {
+	if err := Write(report, reportPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -356,7 +357,7 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, "", reportPath); err != nil {
+	if err := Write(report, reportPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -423,7 +424,7 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, "", outPath); err != nil {
+	if err := Write(report, outPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -552,7 +553,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 		},
 	}
 
-	if err := Write(report, "", outPath); err != nil {
+	if err := Write(report, outPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 

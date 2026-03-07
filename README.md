@@ -26,20 +26,28 @@ go build -o specdown ./cmd/specdown
 
 ```json
 {
-  "include": ["specs/**/*.spec.md"],
+  "entry": "specs/index.spec.md",
   "adapters": [
     {
       "name": "myapp",
       "command": ["python3", "./tools/myapp_adapter.py"],
-      "protocol": "specdown-adapter/v1"
+      "blocks": ["run:myapp", "verify:myapp"]
     }
   ]
 }
 ```
 
-2. Write a spec in `specs/example.spec.md` (see [Self-Spec](selfspecs/specdown.spec.md) for syntax reference).
+2. Create an entry file at `specs/index.spec.md`:
 
-3. Run:
+```markdown
+# My Project Spec
+
+- [Example](example.spec.md)
+```
+
+3. Write a spec in `specs/example.spec.md` (see [Self-Spec](selfspecs/specdown.spec.md) for syntax reference).
+
+4. Run:
 
 ```sh
 specdown run

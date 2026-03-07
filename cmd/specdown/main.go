@@ -145,7 +145,7 @@ func usage() {
 }
 
 func writeArtifacts(report core.Report, reportPath string, cfg config.Config) error {
-	if err := htmlreport.Write(report, cfg.Title, reportPath); err != nil {
+	if err := htmlreport.Write(report, reportPath); err != nil {
 		return err
 	}
 	jsonPath := cfg.JSONReportOutFile()

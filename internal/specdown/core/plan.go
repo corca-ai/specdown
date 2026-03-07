@@ -2,9 +2,10 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -48,21 +49,60 @@ type Plan struct {
 	Documents []DocumentPlan
 }
 
-func Discover(baseDir string, include []string) ([]Document, error) {
-	matches, err := discoverPaths(baseDir, include)
+func DiscoverFromEntry(baseDir string, entryPath string) (string, []Document, error) {
+	fullPath := filepath.Join(baseDir, filepath.FromSlash(entryPath))
+	body, err := os.ReadFile(fullPath)
 	if err != nil {
-		return nil, err
+		return "", nil, fmt.Errorf("read entry %s: %w", entryPath, err)
 	}
 
-	docs := make([]Document, 0, len(matches))
-	for _, match := range matches {
-		doc, err := readDocument(baseDir, match)
+	content := string(body)
+	title := parseEntryTitle(content)
+	if title == "" {
+		return "", nil, fmt.Errorf("entry file %s must have an H1 heading", entryPath)
+	}
+
+	links := parseEntryLinks(content)
+	if len(links) == 0 {
+		return "", nil, fmt.Errorf("entry file %s contains no links to spec files", entryPath)
+	}
+
+	entryDir := path.Dir(path.Clean(entryPath))
+	docs := make([]Document, 0, len(links))
+	seen := make(map[string]struct{})
+	for _, link := range links {
+		relativePath := path.Clean(path.Join(entryDir, link))
+		if _, ok := seen[relativePath]; ok {
+			continue
+		}
+		seen[relativePath] = struct{}{}
+		doc, err := readDocument(baseDir, relativePath)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		docs = append(docs, doc)
 	}
-	return docs, nil
+	return title, docs, nil
+}
+
+var markdownLinkPattern = regexp.MustCompile(`\[([^\]]*)\]\(([^)]+\.spec\.md)\)`)
+
+func parseEntryTitle(markdown string) string {
+	for _, line := range strings.Split(markdown, "\n") {
+		if level, text, ok := parseHeading(line + "\n"); ok && level == 1 {
+			return text
+		}
+	}
+	return ""
+}
+
+func parseEntryLinks(markdown string) []string {
+	matches := markdownLinkPattern.FindAllStringSubmatch(markdown, -1)
+	var paths []string
+	for _, match := range matches {
+		paths = append(paths, match[2])
+	}
+	return paths
 }
 
 func CompileDocuments(docs []Document) (Plan, error) {
@@ -111,73 +151,6 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 		AlloyModels: alloyModels,
 		AlloyChecks: alloyChecks,
 	}, nil
-}
-
-func discoverPaths(baseDir string, include []string) ([]string, error) {
-	if len(include) == 0 {
-		return nil, fmt.Errorf("no include patterns configured")
-	}
-
-	seen := make(map[string]struct{})
-	var matches []string
-	err := walkFiles(baseDir, func(relativePath string) error {
-		if !matchesAnyPattern(relativePath, include) {
-			return nil
-		}
-		if _, ok := seen[relativePath]; ok {
-			return nil
-		}
-		seen[relativePath] = struct{}{}
-		matches = append(matches, relativePath)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	sort.Strings(matches)
-	return matches, nil
-}
-
-func matchesAnyPattern(relativePath string, include []string) bool {
-	for _, pattern := range include {
-		if matchPattern(path.Clean(pattern), relativePath) {
-			return true
-		}
-	}
-	return false
-}
-
-func matchPattern(pattern string, relativePath string) bool {
-	pattern = path.Clean(strings.TrimPrefix(toSlash(pattern), "./"))
-	relativePath = toSlash(relativePath)
-	return matchSegments(strings.Split(pattern, "/"), strings.Split(relativePath, "/"))
-}
-
-func matchSegments(pattern []string, value []string) bool {
-	if len(pattern) == 0 {
-		return len(value) == 0
-	}
-
-	if pattern[0] == "**" {
-		if matchSegments(pattern[1:], value) {
-			return true
-		}
-		if len(value) == 0 {
-			return false
-		}
-		return matchSegments(pattern, value[1:])
-	}
-
-	if len(value) == 0 {
-		return false
-	}
-
-	ok, err := path.Match(pattern[0], value[0])
-	if err != nil || !ok {
-		return false
-	}
-	return matchSegments(pattern[1:], value[1:])
 }
 
 type bindingDefinition struct {
@@ -372,6 +345,3 @@ func (c AlloyCheckSpec) DefaultLabel() string {
 	return suffix + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
 }
 
-func toSlash(value string) string {
-	return strings.ReplaceAll(value, `\`, "/")
-}
