@@ -4,7 +4,7 @@
     {
       "name": "shell",
       "command": ["./specdown-adapter-shell", "-fixtures-dir", "./selfspecs/fixtures"],
-      "blocks": ["run:shell", "verify:shell"],
+      "blocks": ["run:shell", "verify:shell", "doctest:shell"],
       "fixtures": ["block-kind", "cell-escape"]
     }
   ],

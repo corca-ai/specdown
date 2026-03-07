@@ -9,10 +9,11 @@ import (
 type BlockKind string
 
 const (
-	BlockKindNone   BlockKind = ""
-	BlockKindRun    BlockKind = "run"
-	BlockKindVerify BlockKind = "verify"
-	BlockKindTest   BlockKind = "test"
+	BlockKindNone    BlockKind = ""
+	BlockKindRun     BlockKind = "run"
+	BlockKindVerify  BlockKind = "verify"
+	BlockKindTest    BlockKind = "test"
+	BlockKindDoctest BlockKind = "doctest"
 )
 
 type BlockSpec struct {
@@ -77,6 +78,14 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
 		}
 		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames}, nil
+	case BlockKindDoctest:
+		if target == "" {
+			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
+		}
+		if len(captureNames) > 0 {
+			return BlockSpec{}, fmt.Errorf("doctest blocks do not support captures")
+		}
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target}, nil
 	}
 
 	return BlockSpec{Raw: trimmed}, nil

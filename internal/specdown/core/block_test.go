@@ -69,6 +69,25 @@ func TestParseBlockSpecLeavesPlainCodeBlocksNonExecutable(t *testing.T) {
 	}
 }
 
+func TestParseBlockSpecSupportsDoctestBlocks(t *testing.T) {
+	block, err := parseBlockSpec("doctest:shell")
+	if err != nil {
+		t.Fatalf("parse doctest block: %v", err)
+	}
+	if block.Kind != BlockKindDoctest || block.Target != "shell" || !block.Executable() {
+		t.Fatalf("unexpected doctest block %#v", block)
+	}
+	if block.Descriptor() != "doctest:shell" {
+		t.Fatalf("unexpected descriptor %q", block.Descriptor())
+	}
+}
+
+func TestParseBlockSpecRejectsDoctestWithCaptures(t *testing.T) {
+	if _, err := parseBlockSpec("doctest:shell -> $x"); err == nil {
+		t.Fatal("expected error for doctest with captures")
+	}
+}
+
 func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
 	cases := []string{"run:", "verify:", "test:", "run:board ->", "run:board -> boardName", "expect", "alloy:model(board)"}
 	for _, input := range cases {

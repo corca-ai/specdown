@@ -77,6 +77,10 @@ func runCase(request adapterprotocol.Request) adapterprotocol.Response {
 }
 
 func runCodeCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
+	if strings.HasPrefix(c.Block, "doctest:") {
+		return runDoctestCase(id, c)
+	}
+
 	source := c.Source
 
 	cmd := exec.Command("sh", "-c", source)
@@ -131,6 +135,86 @@ func runCodeCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 		ID:       id,
 		Type:     "passed",
 		Bindings: bindings,
+	}
+}
+
+type doctestStep struct {
+	Command  string
+	Expected string
+}
+
+func parseDoctestSource(source string) []doctestStep {
+	lines := strings.Split(source, "\n")
+	var steps []doctestStep
+	var current *doctestStep
+	var expectedLines []string
+
+	flush := func() {
+		if current != nil {
+			current.Expected = strings.Join(expectedLines, "\n")
+			steps = append(steps, *current)
+			current = nil
+			expectedLines = nil
+		}
+	}
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "$ ") {
+			flush()
+			current = &doctestStep{Command: strings.TrimPrefix(line, "$ ")}
+			expectedLines = nil
+		} else if current != nil {
+			expectedLines = append(expectedLines, line)
+		}
+	}
+	flush()
+	return steps
+}
+
+func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
+	steps := parseDoctestSource(c.Source)
+	if len(steps) == 0 {
+		return adapterprotocol.Response{
+			ID:      id,
+			Type:    "failed",
+			Message: "doctest block contains no $ commands",
+		}
+	}
+
+	for _, step := range steps {
+		cmd := exec.Command("sh", "-c", step.Command)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			message := strings.TrimSpace(stderr.String())
+			if message == "" {
+				message = err.Error()
+			}
+			return adapterprotocol.Response{
+				ID:      id,
+				Type:    "failed",
+				Message: fmt.Sprintf("$ %s\n%s", step.Command, message),
+			}
+		}
+
+		actual := strings.TrimRight(stdout.String(), "\n")
+		expected := step.Expected
+		if actual != expected {
+			return adapterprotocol.Response{
+				ID:       id,
+				Type:     "failed",
+				Message:  fmt.Sprintf("output mismatch for: $ %s", step.Command),
+				Expected: expected,
+				Actual:   actual,
+			}
+		}
+	}
+
+	return adapterprotocol.Response{
+		ID:   id,
+		Type: "passed",
 	}
 }
 

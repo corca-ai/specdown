@@ -10,7 +10,7 @@ Prose is preserved as-is; only executable blocks, fixture tables, and Alloy mode
 
 A spec document can contain:
 
-- **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, or `test:` that are dispatched to adapters for execution
+- **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, `test:`, or `doctest:` that are dispatched to adapters for execution
 - **Fixture tables** — Markdown tables preceded by a `<!-- fixture:name -->` directive, where each row becomes an independent test case
 - **Alloy model blocks** — fenced code blocks with `alloy:model(name)` that embed formal verification fragments
 - **Variables** — values captured from block output with `-> $name` and referenced with `${name}` in subsequent blocks and tables
@@ -104,10 +104,11 @@ Executable blocks are fenced code blocks whose info string starts with a recogni
 | `run:<target>` | Side-effecting executable block |
 | `verify:<target>` | Assertion block |
 | `test:<name>` | Named high-level test DSL |
+| `doctest:<target>` | Inline command/output verification block |
 
 The `<target>` is defined by the adapter, not the core.
 
-The parser must recognize `run`, `verify`, and `test` as executable block kinds.
+The parser must recognize `run`, `verify`, `test`, and `doctest` as executable block kinds.
 
 <!-- fixture:block-kind -->
 | info | kind | target |
@@ -115,6 +116,7 @@ The parser must recognize `run`, `verify`, and `test` as executable block kinds.
 | run:shell | run | shell |
 | verify:api | verify | api |
 | test:login | test | login |
+| doctest:shell | doctest | shell |
 
 ### Variable Capture
 
@@ -144,6 +146,40 @@ printf 'ok'
 
 ```verify:shell
 test "${escapeTest}" = "ok"
+```
+
+### Doctest Blocks
+
+A `doctest:<target>` block pairs shell commands with their expected output
+inline, similar to Python's doctest. Lines starting with `$ ` are commands;
+subsequent lines until the next `$ ` or end of block are the expected output.
+
+Commands are executed sequentially. On the first output mismatch, the block
+fails with `expected` and `actual` values for diffing. Commands without
+expected output lines are executed but only checked for exit status.
+
+Doctest blocks do not support variable capture (`-> $name`).
+
+```doctest:shell
+$ echo hello
+hello
+$ echo one two three
+one two three
+```
+
+A doctest block with no expected output still verifies the command succeeds.
+
+```doctest:shell
+$ true
+```
+
+Multi-line expected output is matched exactly.
+
+```doctest:shell
+$ printf 'line1\nline2\nline3'
+line1
+line2
+line3
 ```
 
 ### Fixture Tables
@@ -470,16 +506,13 @@ specdown run -config .tmp-test/report-test.json -out report.html 2>&1 || true
 
 The report file must exist and contain standard HTML structure.
 
-```verify:shell
-test -f .tmp-test/report.html
-```
-
-```verify:shell
-grep -q '<html' .tmp-test/report.html
-```
-
-```verify:shell
-grep -q 'Report Test' .tmp-test/report.html
+```doctest:shell
+$ test -f .tmp-test/report.html && echo yes
+yes
+$ grep -q '<html' .tmp-test/report.html && echo found
+found
+$ grep -q 'Report Test' .tmp-test/report.html && echo found
+found
 ```
 
 ### Output files
@@ -536,20 +569,15 @@ CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
 ```
 
-The JSON report must contain the expected and actual fields.
+The JSON report must contain the expected and actual fields, and the adapter label.
 
-```verify:shell
-grep -q '"expected"' .tmp-test/report.json
-```
-
-```verify:shell
-grep -q '"actual"' .tmp-test/report.json
-```
-
-The adapter label must appear in the report.
-
-```verify:shell
-grep -q '"diag row"' .tmp-test/report.json
+```doctest:shell
+$ grep -q '"expected"' .tmp-test/report.json && echo found
+found
+$ grep -q '"actual"' .tmp-test/report.json && echo found
+found
+$ grep -q '"diag row"' .tmp-test/report.json && echo found
+found
 ```
 
 ## Alloy Models
