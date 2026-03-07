@@ -21,6 +21,7 @@ type BlockSpec struct {
 	Kind         BlockKind `json:"kind"`
 	Target       string    `json:"target"`
 	CaptureNames []string  `json:"captureNames,omitempty"`
+	ExpectFail   bool      `json:"expectFail,omitempty"`
 }
 
 func (b BlockSpec) String() string {
@@ -48,10 +49,21 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
 	}
 
-	infoPart := trimmed
+	// Extract !fail modifier
+	expectFail := false
+	working := trimmed
+	if idx := strings.Index(working, " !fail"); idx >= 0 {
+		rest := working[idx+len(" !fail"):]
+		if rest == "" || rest[0] == ' ' {
+			expectFail = true
+			working = strings.TrimSpace(working[:idx] + rest)
+		}
+	}
+
+	infoPart := working
 	var captureNames []string
-	if strings.Contains(trimmed, "->") {
-		parts := strings.SplitN(trimmed, "->", 2)
+	if strings.Contains(working, "->") {
+		parts := strings.SplitN(working, "->", 2)
 		infoPart = strings.TrimSpace(parts[0])
 		names, err := parseCaptureNames(parts[1])
 		if err != nil {
@@ -72,12 +84,18 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		if target == "" {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
 		}
-		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames}, nil
+		if expectFail && len(captureNames) > 0 {
+			return BlockSpec{}, fmt.Errorf("!fail blocks do not support captures")
+		}
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames, ExpectFail: expectFail}, nil
 	case BlockKindTest:
 		if target == "" {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
 		}
-		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames}, nil
+		if expectFail && len(captureNames) > 0 {
+			return BlockSpec{}, fmt.Errorf("!fail blocks do not support captures")
+		}
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames, ExpectFail: expectFail}, nil
 	case BlockKindDoctest:
 		if target == "" {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
@@ -85,7 +103,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		if len(captureNames) > 0 {
 			return BlockSpec{}, fmt.Errorf("doctest blocks do not support captures")
 		}
-		return BlockSpec{Raw: trimmed, Kind: kind, Target: target}, nil
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, ExpectFail: expectFail}, nil
 	}
 
 	return BlockSpec{Raw: trimmed}, nil

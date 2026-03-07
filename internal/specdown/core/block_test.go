@@ -88,6 +88,40 @@ func TestParseBlockSpecRejectsDoctestWithCaptures(t *testing.T) {
 	}
 }
 
+func TestParseBlockSpecSupportsExpectFail(t *testing.T) {
+	cases := []struct {
+		input  string
+		kind   BlockKind
+		target string
+	}{
+		{"run:shell !fail", BlockKindRun, "shell"},
+		{"verify:shell !fail", BlockKindVerify, "shell"},
+		{"doctest:shell !fail", BlockKindDoctest, "shell"},
+		{"test:webapp !fail", BlockKindTest, "webapp"},
+	}
+	for _, tc := range cases {
+		block, err := parseBlockSpec(tc.input)
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.input, err)
+		}
+		if !block.ExpectFail {
+			t.Fatalf("%q: expected ExpectFail=true", tc.input)
+		}
+		if block.Kind != tc.kind || block.Target != tc.target {
+			t.Fatalf("%q: kind=%q target=%q", tc.input, block.Kind, block.Target)
+		}
+		if block.Descriptor() != string(tc.kind)+":"+tc.target {
+			t.Fatalf("%q: descriptor=%q", tc.input, block.Descriptor())
+		}
+	}
+}
+
+func TestParseBlockSpecRejectsExpectFailWithCaptures(t *testing.T) {
+	if _, err := parseBlockSpec("run:shell !fail -> $x"); err == nil {
+		t.Fatal("expected error for !fail with captures")
+	}
+}
+
 func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
 	cases := []string{"run:", "verify:", "test:", "run:board ->", "run:board -> boardName", "expect", "alloy:model(board)"}
 	for _, input := range cases {

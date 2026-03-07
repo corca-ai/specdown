@@ -182,6 +182,55 @@ line2
 line3
 ```
 
+### Expected Failures
+
+Any executable block can be marked with `!fail` to indicate that failure
+is the expected outcome. The spec passes when the adapter reports failure,
+and fails if the adapter unexpectedly succeeds.
+
+This is useful for documenting error cases, showing what invalid input
+looks like, or including negative examples in a spec without breaking CI.
+
+`!fail` blocks do not support variable capture (`-> $name`).
+
+#### Failing verify block
+
+A command that exits non-zero is normally a failure. With `!fail`, it passes.
+
+```verify:shell !fail
+false
+```
+
+#### Failing doctest with output mismatch
+
+This doctest intentionally shows the wrong expected output.
+The `!fail` modifier makes the mismatch count as a pass.
+
+```doctest:shell !fail
+$ echo hello
+goodbye
+```
+
+#### Failing run block
+
+A run block that exits non-zero normally fails. With `!fail`, it passes.
+
+```run:shell !fail
+exit 1
+```
+
+#### Multi-line doctest mismatch
+
+When multiple commands are present, the block fails fast on the first
+mismatch. With `!fail`, that expected mismatch is a pass.
+
+```doctest:shell !fail
+$ echo first
+first
+$ echo second
+WRONG
+```
+
 ### Fixture Tables
 
 A Markdown table becomes executable when preceded by a fixture directive.

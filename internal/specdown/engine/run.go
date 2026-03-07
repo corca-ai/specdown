@@ -505,7 +505,35 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 		}
 	}
 
-	return session.RunCase(specCase, prepared, visible, timeoutMs)
+	result, err := session.RunCase(specCase, prepared, visible, timeoutMs)
+	if err != nil {
+		return result, err
+	}
+
+	if specCase.Block.ExpectFail {
+		result = applyExpectFail(result)
+	}
+
+	return result, nil
+}
+
+func applyExpectFail(result core.CaseResult) core.CaseResult {
+	switch result.Status {
+	case core.StatusFailed:
+		result.Status = core.StatusPassed
+		result.Events = []core.Event{
+			{Type: core.EventCaseStarted, ID: result.ID, Label: result.Label},
+			{Type: core.EventCasePassed, ID: result.ID, Label: result.Label},
+		}
+	case core.StatusPassed:
+		result.Status = core.StatusFailed
+		result.Message = "expected failure but case passed"
+		result.Events = []core.Event{
+			{Type: core.EventCaseStarted, ID: result.ID, Label: result.Label},
+			{Type: core.EventCaseFailed, ID: result.ID, Label: result.Label, Message: result.Message},
+		}
+	}
+	return result
 }
 
 func hasFailedAlloyCheck(results []core.AlloyCheckResult) bool {
