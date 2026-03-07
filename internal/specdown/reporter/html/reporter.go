@@ -737,8 +737,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
       & > :first-child > :first-child { margin-top: 0; }
 
-      & :is(p, ul, ol, dl, blockquote) { margin: 0.75rem 0; }
-      & :is(p, ul, ol, dl, blockquote):first-child { margin-top: 0; }
+      & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 0.75rem 0; }
+      & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
       & pre { margin: 1rem 0; }
       & li { margin: 0.25rem 0; }
       & ul, & ol { padding-left: 1.5rem; }
@@ -801,7 +801,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     :is(.exec-block-footer, .exec-table-footer) {
-      margin: 0;
       text-align: right;
       font-size: 0.8rem;
       color: var(--muted);
