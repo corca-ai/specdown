@@ -9,7 +9,7 @@ Read the following documents before starting work.
 
 - [System design](docs/design.md) — scope, terminology, package boundaries, grammar, interfaces, and phased deliverables
 - [Documentation guide](docs/metadoc.md) — rules for keeping docs short and accurate
-- [Build & Run](docs/build.md) — how to build, run, and test
+- [Build & Run](docs/build.md) — nix/direnv prerequisites, build commands, test, and release workflow
 
 ### User Guide
 

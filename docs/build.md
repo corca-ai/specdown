@@ -2,11 +2,13 @@
 
 ## Prerequisites
 
-A Go toolchain is required. This project is managed in a nix environment.
+A Go toolchain is required. The project uses nix + direnv to provide it automatically.
 
 ```sh
-nix-shell -p go
+direnv allow   # first time only
 ```
+
+After this, Go is available whenever you enter the project directory.
 
 ## Build
 
@@ -17,7 +19,7 @@ go build -o ~/.local/bin/specdown ./cmd/specdown
 For release builds, inject the version via `ldflags`.
 
 ```sh
-go build -trimpath -ldflags="-s -w -X main.version=v0.4.0" -o specdown ./cmd/specdown
+go build -trimpath -ldflags="-s -w -X main.version=v0.7.0" -o specdown ./cmd/specdown
 ```
 
 ## Run
@@ -43,6 +45,6 @@ go test ./...
 Pushing a `v*` tag triggers GitHub Actions to build Windows, macOS, and Linux binaries and attach them to the Release.
 
 ```sh
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.7.0
+git push origin v0.7.0
 ```
