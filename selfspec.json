@@ -1,0 +1,25 @@
+{
+  "title": "Specdown Self-Spec",
+  "include": ["selfspecs/**/*.spec.md"],
+  "adapters": [
+    {
+      "name": "shell",
+      "command": ["./specdown-adapter-shell", "-fixtures-dir", "./selfspecs/fixtures"],
+      "blocks": ["run:shell", "verify:shell"],
+      "fixtures": ["block-kind", "cell-escape"]
+    }
+  ],
+  "reporters": [
+    {
+      "builtin": "html",
+      "outFile": ".artifacts/specdown/self-report.html"
+    },
+    {
+      "builtin": "json",
+      "outFile": ".artifacts/specdown/self-report.json"
+    }
+  ],
+  "models": {
+    "builtin": "alloy"
+  }
+}

@@ -1,4 +1,6 @@
 .artifacts/
 /specdown
-/org.alloytools.alloy.dist.jar
+/specdown-adapter-shell
+org.alloytools.alloy.dist.jar
 .envrc
+.tmp-test/

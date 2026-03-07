@@ -1,0 +1,63 @@
+name: Self-Spec
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  selfspec:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build
+        run: |
+          go build -o specdown ./cmd/specdown/
+          go build -o specdown-adapter-shell ./cmd/specdown-adapter-shell/
+
+      - name: Run self-spec
+        run: |
+          export PATH="$(pwd):$PATH"
+          ./specdown run -config selfspec.json
+
+      - name: Prepare Pages artifact
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p _site
+          cp .artifacts/specdown/self-report.html _site/index.html
+          cp .artifacts/specdown/self-report.json _site/report.json
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: selfspec
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
