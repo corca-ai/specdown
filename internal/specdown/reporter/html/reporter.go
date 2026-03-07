@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 
 	"specdown/internal/specdown/core"
 )
@@ -461,9 +462,11 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 }
 
 
+var mdConverter = goldmark.New(goldmark.WithExtensions(extension.Table))
+
 func markdownToHTML(source string) (string, error) {
 	var out bytes.Buffer
-	if err := goldmark.Convert([]byte(source), &out); err != nil {
+	if err := mdConverter.Convert([]byte(source), &out); err != nil {
 		return "", err
 	}
 	return out.String(), nil
@@ -473,11 +476,15 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>specdown report</title>
   <style>
     :root {
       color-scheme: light;
+      --safe-top: 0px;
+      --safe-right: 0px;
+      --safe-bottom: 0px;
+      --safe-left: 0px;
       --bg: #f3f3f0;
       --paper: #fcfcfa;
       --ink: #1f1f1b;
@@ -495,6 +502,24 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
     }
 
+    @supports (padding-top: constant(safe-area-inset-top)) {
+      :root {
+        --safe-top: constant(safe-area-inset-top);
+        --safe-right: constant(safe-area-inset-right);
+        --safe-bottom: constant(safe-area-inset-bottom);
+        --safe-left: constant(safe-area-inset-left);
+      }
+    }
+
+    @supports (padding-top: env(safe-area-inset-top)) {
+      :root {
+        --safe-top: env(safe-area-inset-top);
+        --safe-right: env(safe-area-inset-right);
+        --safe-bottom: env(safe-area-inset-bottom);
+        --safe-left: env(safe-area-inset-left);
+      }
+    }
+
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -503,23 +528,38 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       background: var(--bg);
     }
 
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0 0 auto 0;
+      height: var(--safe-top);
+      background: var(--bg);
+      z-index: 20;
+      pointer-events: none;
+    }
+
     main {
       max-width: 78rem;
       margin-inline: auto;
-      padding: 2.75rem 1.5rem 4rem;
+      padding:
+        calc(2.75rem + var(--safe-top))
+        calc(1.5rem + var(--safe-right))
+        calc(4rem + var(--safe-bottom))
+        calc(1.5rem + var(--safe-left));
     }
 
     .layout {
       display: grid;
       grid-template-columns: 16rem minmax(0, 54rem);
-      gap: 2.5rem;
+      column-gap: 2.5rem;
+      row-gap: 0;
       align-items: start;
     }
 
     .toc {
       position: sticky;
-      top: 1.5rem;
-      max-height: 100vh;
+      top: calc(1.5rem + var(--safe-top));
+      max-height: calc(100vh - var(--safe-top) - var(--safe-bottom));
       overflow-y: auto;
       font-size: 0.82rem;
       line-height: 1.45;
@@ -607,7 +647,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       display: block;
     }
 
-    .content { min-width: 0; }
+    .content {
+      min-width: 0;
+    }
 
     .report-title {
       font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
@@ -618,7 +660,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .content-meta {
-      margin: 0 0 1.5rem;
+      margin: 0 0 0.5rem;
       color: var(--muted);
       font-size: 0.82rem;
       line-height: 1.65;
@@ -648,6 +690,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       line-height: 1.82;
 
       & :first-child { margin-top: 0; }
+      & :is(h2, h3, h4, h5, h6):first-child { padding-top: 0; }
 
       & :is(h2, h3, h4, h5, h6) {
         font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
@@ -659,10 +702,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.06);
       }
 
-      & h2 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: 0; z-index: 14; }
-      & h3 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: calc(4.5rem - 1px); z-index: 13; }
-      & h4 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: calc(7.8rem - 1px); z-index: 12; }
-      & :is(h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: calc(10.4rem - 1px); z-index: 11; }
+      & h2 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: var(--safe-top); z-index: 14; }
+      & h3 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: calc(4.5rem + var(--safe-top) - 1px); z-index: 13; }
+      & h4 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: calc(7.8rem + var(--safe-top) - 1px); z-index: 12; }
+      & :is(h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: calc(10.4rem + var(--safe-top) - 1px); z-index: 11; }
     }
 
     .status {
@@ -710,6 +753,52 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       & tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
       & tbody tr.failed td { background: var(--fail-bg); }
       & tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
+    }
+
+    .spec-body :not(.exec-source) > pre {
+      margin: 0;
+      padding: 1em 0;
+    }
+
+    .spec-body table:not(.exec-table),
+    .spec-body :not(.exec-source) > pre,
+    .exec-table-block,
+    .exec-source {
+      overflow-x: auto;
+      --_scroll-bg: var(--bg);
+      background-color: var(--_scroll-bg);
+      background-image:
+        linear-gradient(to right, var(--_scroll-bg) 40%, transparent),
+        linear-gradient(to left, var(--_scroll-bg) 40%, transparent),
+        radial-gradient(ellipse at left center, rgba(0,0,0,.12), transparent 70%),
+        radial-gradient(ellipse at right center, rgba(0,0,0,.12), transparent 70%);
+      background-position: left center, right center, left center, right center;
+      background-size: 1.5rem 100%, 1.5rem 100%, 0.8rem 100%, 0.8rem 100%;
+      transition: background-color 150ms ease;
+      background-repeat: no-repeat;
+      background-attachment: local, local, scroll, scroll;
+    }
+
+    .exec-source { --_scroll-bg: var(--code-bg); }
+    .exec-block.passed > .exec-source:not(.resolved) { --_scroll-bg: var(--pass-bg); }
+    .exec-block.failed > .exec-source:not(.resolved) { --_scroll-bg: var(--fail-bg); }
+
+    .spec-body table:not(.exec-table) {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+      margin: 1rem 0;
+    }
+
+    .spec-body table:not(.exec-table) :is(th, td) {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--rule);
+      text-align: left;
+    }
+
+    .spec-body table:not(.exec-table) th {
+      background: var(--code-bg);
+      font-size: 0.85rem;
     }
 
     .cell-template { font-family: var(--font-mono); white-space: pre-wrap; }
@@ -787,12 +876,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       padding: 0.8rem 0.9rem;
       border: 1px solid var(--rule);
       border-radius: 0.2rem;
-      background: var(--code-bg);
       font-family: var(--font-mono);
       font-size: 0.92rem;
       line-height: 1.45;
       white-space: pre-wrap;
-      overflow-x: auto;
       border-left: 3px solid transparent;
 
       &.resolved {
@@ -803,12 +890,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .exec-block.passed > .exec-source:not(.resolved) {
       border-left-color: var(--pass-mark);
-      background: var(--pass-bg);
     }
 
     .exec-block.failed > .exec-source:not(.resolved) {
       border-left-color: var(--fail-mark);
-      background: var(--fail-bg);
     }
 
     .exec-note {
@@ -834,11 +919,22 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     @media (max-width: 960px) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
-        gap: 1.5rem;
+        gap: 0;
       }
 
-      .toc { position: static; }
-      .toc-inner { padding-bottom: 1rem; }
+      .content {
+        display: contents;
+      }
+
+      .toc {
+        position: static;
+        order: 2;
+        margin-bottom: 1.5rem;
+      }
+      .toc-inner { padding-left: 0; padding-bottom: 1rem; }
+
+      .content-header { order: 1; }
+      .content-body { order: 3; }
     }
   </style>
 </head>
@@ -873,13 +969,17 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       </aside>
 
       <div class="content">
-        <h1 class="report-title">{{ .Title }}</h1>
-        {{ .Meta }}
-        {{ range .Specs }}
-        <article class="spec">
-          <section class="spec-body">{{ .Body }}</section>
-        </article>
-        {{ end }}
+        <div class="content-header">
+          <h1 class="report-title">{{ .Title }}</h1>
+          {{ .Meta }}
+        </div>
+        <div class="content-body">
+          {{ range .Specs }}
+          <article class="spec">
+            <section class="spec-body">{{ .Body }}</section>
+          </article>
+          {{ end }}
+        </div>
       </div>
     </div>
   </main>

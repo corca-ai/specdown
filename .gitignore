@@ -4,3 +4,4 @@
 org.alloytools.alloy.dist.jar
 .envrc
 .tmp-test/
+.playwright-cli/
