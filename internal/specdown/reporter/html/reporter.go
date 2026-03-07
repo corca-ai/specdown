@@ -801,6 +801,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     :is(.exec-block-footer, .exec-table-footer) {
+      margin: 0;
       text-align: right;
       font-size: 0.8rem;
       color: var(--muted);
