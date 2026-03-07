@@ -186,61 +186,49 @@ func renderDocument(result core.DocumentResult) (string, error) {
 	var out strings.Builder
 	var sectionStack []int
 	for _, node := range result.Document.Nodes {
-		if heading, ok := node.(core.HeadingNode); ok {
-			// Close sections at same or deeper level
-			for len(sectionStack) > 0 && sectionStack[len(sectionStack)-1] >= heading.Level {
-				out.WriteString(`</section>`)
-				sectionStack = sectionStack[:len(sectionStack)-1]
-			}
-			out.WriteString(fmt.Sprintf(`<section class="s%d">`, heading.Level))
-			sectionStack = append(sectionStack, heading.Level)
+		sectionStack = closeSections(&out, sectionStack, node)
+		rendered, err := renderNode(node, result.Document.RelativeTo, caseResults, alloyResults)
+		if err != nil {
+			return "", err
 		}
-
-		switch current := node.(type) {
-		case core.HeadingNode:
-			html, err := renderHeading(current, result.Document.RelativeTo)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(html)
-		case core.ProseNode:
-			html, err := markdownToHTML(current.Markdown())
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(html)
-		case core.CodeBlockNode:
-			rendered, err := renderCodeBlock(current, caseResults)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(rendered)
-		case core.AlloyModelNode:
-			rendered, err := renderAlloyModel(current, alloyResults)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(rendered)
-		case core.AlloyRefNode:
-			rendered, err := renderAlloyRef(current, alloyResults)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(rendered)
-		case core.TableNode:
-			rendered, err := renderTable(current, caseResults)
-			if err != nil {
-				return "", err
-			}
-			out.WriteString(rendered)
-		default:
-			return "", fmt.Errorf("unknown node type %T", node)
-		}
+		out.WriteString(rendered)
 	}
 	for range sectionStack {
 		out.WriteString(`</section>`)
 	}
 	return out.String(), nil
+}
+
+func closeSections(out *strings.Builder, sectionStack []int, node core.Node) []int {
+	heading, ok := node.(core.HeadingNode)
+	if !ok {
+		return sectionStack
+	}
+	for len(sectionStack) > 0 && sectionStack[len(sectionStack)-1] >= heading.Level {
+		out.WriteString(`</section>`)
+		sectionStack = sectionStack[:len(sectionStack)-1]
+	}
+	fmt.Fprintf(out, `<section class="s%d">`, heading.Level)
+	return append(sectionStack, heading.Level)
+}
+
+func renderNode(node core.Node, documentPath string, caseResults map[string]core.CaseResult, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+	switch current := node.(type) {
+	case core.HeadingNode:
+		return renderHeading(current, documentPath)
+	case core.ProseNode:
+		return markdownToHTML(current.Markdown())
+	case core.CodeBlockNode:
+		return renderCodeBlock(current, caseResults)
+	case core.AlloyModelNode:
+		return renderAlloyModel(current, alloyResults), nil
+	case core.AlloyRefNode:
+		return renderAlloyRef(current, alloyResults)
+	case core.TableNode:
+		return renderTable(current, caseResults)
+	default:
+		return "", fmt.Errorf("unknown node type %T", node)
+	}
 }
 
 func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseResult) (string, error) {
@@ -360,31 +348,7 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 	out.WriteString(`</tr></thead>`)
 	out.WriteString(`<tbody>`)
 	for _, item := range rows {
-		row := item.node
-		result := item.result
-		out.WriteString(`<tr class="`)
-		out.WriteString(template.HTMLEscapeString(string(result.Status)))
-		out.WriteString(`" id="`)
-		out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
-		out.WriteString(`">`)
-		cells := result.TemplateCells
-		if len(result.RenderedCells) == len(cells) {
-			cells = result.RenderedCells
-		}
-		lastIndex := len(cells) - 1
-		for index, cell := range cells {
-			out.WriteString(`<td>`)
-			out.WriteString(`<div class="cell-template">`)
-			out.WriteString(template.HTMLEscapeString(core.UnescapeCell(cell)))
-			out.WriteString(`</div>`)
-			if result.Status == core.StatusFailed && index == lastIndex && result.Message != "" {
-				out.WriteString(`<div class="cell-actual">`)
-				out.WriteString(template.HTMLEscapeString(result.Message))
-				out.WriteString(`</div>`)
-			}
-			out.WriteString(`</td>`)
-		}
-		out.WriteString(`</tr>`)
+		renderTableRow(&out, item.node, item.result)
 	}
 	out.WriteString(`</tbody></table>`)
 	out.WriteString(`<p class="exec-table-footer">fixture:`)
@@ -394,7 +358,33 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 	return out.String(), nil
 }
 
-func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+func renderTableRow(out *strings.Builder, row core.TableRowNode, result core.CaseResult) {
+	out.WriteString(`<tr class="`)
+	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	out.WriteString(`" id="`)
+	out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
+	out.WriteString(`">`)
+	cells := result.TemplateCells
+	if len(result.RenderedCells) == len(cells) {
+		cells = result.RenderedCells
+	}
+	lastIndex := len(cells) - 1
+	for index, cell := range cells {
+		out.WriteString(`<td>`)
+		out.WriteString(`<div class="cell-template">`)
+		out.WriteString(template.HTMLEscapeString(core.UnescapeCell(cell)))
+		out.WriteString(`</div>`)
+		if result.Status == core.StatusFailed && index == lastIndex && result.Message != "" {
+			out.WriteString(`<div class="cell-actual">`)
+			out.WriteString(template.HTMLEscapeString(result.Message))
+			out.WriteString(`</div>`)
+		}
+		out.WriteString(`</td>`)
+	}
+	out.WriteString(`</tr>`)
+}
+
+func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) string {
 	// Find checks targeting this model
 	var failedResult *core.AlloyCheckResult
 	hasCheck := false
@@ -437,7 +427,7 @@ func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.All
 	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
 	out.WriteString(`</p>`)
 	out.WriteString(`</section>`)
-	return out.String(), nil
+	return out.String()
 }
 
 func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {

@@ -90,7 +90,7 @@ func (s *Session) Teardown() error {
 		Type: "teardown",
 	}
 	if err := s.encoder.Encode(request); err != nil {
-		return nil
+		return err
 	}
 	return nil
 }

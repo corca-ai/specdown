@@ -96,36 +96,9 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 		jobs = 1
 	}
 
-	results := make([]core.DocumentResult, len(plan.Documents))
-	if jobs == 1 {
-		for i, docPlan := range plan.Documents {
-			result, err := runDocument(docPlan, registry, host, alloyRunner)
-			if err != nil {
-				return core.Report{}, err
-			}
-			results[i] = result
-		}
-	} else {
-		errs := make([]error, len(plan.Documents))
-		sem := make(chan struct{}, jobs)
-		var wg sync.WaitGroup
-		for i, docPlan := range plan.Documents {
-			wg.Add(1)
-			go func(i int, dp core.DocumentPlan) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				result, err := runDocument(dp, registry, host, alloyRunner)
-				results[i] = result
-				errs[i] = err
-			}(i, docPlan)
-		}
-		wg.Wait()
-		for _, err := range errs {
-			if err != nil {
-				return core.Report{}, err
-			}
-		}
+	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner)
+	if err != nil {
+		return core.Report{}, err
 	}
 
 	summary := core.Summary{SpecsTotal: len(plan.Documents)}
@@ -138,6 +111,42 @@ func runWithDependencies(baseDir string, cfg config.Config, host adapterhost.Hos
 		Results:     results,
 		Summary:     summary,
 	}, nil
+}
+
+func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner alloy.DocumentRunner) ([]core.DocumentResult, error) {
+	results := make([]core.DocumentResult, len(documents))
+	if jobs == 1 {
+		for i, docPlan := range documents {
+			result, err := runDocument(docPlan, registry, host, alloyRunner)
+			if err != nil {
+				return nil, err
+			}
+			results[i] = result
+		}
+		return results, nil
+	}
+
+	errs := make([]error, len(documents))
+	sem := make(chan struct{}, jobs)
+	var wg sync.WaitGroup
+	for i, docPlan := range documents {
+		wg.Add(1)
+		go func(i int, dp core.DocumentPlan) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			result, err := runDocument(dp, registry, host, alloyRunner)
+			results[i] = result
+			errs[i] = err
+		}(i, docPlan)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return results, nil
 }
 
 func filterPlan(plan core.Plan, filter string) core.Plan {
@@ -269,65 +278,16 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	}
 
 	sessions := make(map[string]*adapterhost.Session)
-	defer closeSessions(sessions)
+	defer func() { _ = closeSessions(sessions) }()
 
-	// Send setup to all sessions needed
-	setupSessions := make(map[string]bool)
-
-	bindings := make([]scopedBinding, 0)
-	cases := make([]core.CaseResult, 0, len(plan.Cases))
-	status := core.StatusPassed
-	timeoutMs := plan.Document.Frontmatter.Timeout
-
-	for _, specCase := range plan.Cases {
-		adapter, err := registry.adapterFor(specCase)
-		if err != nil {
-			return core.DocumentResult{}, err
-		}
-
-		visible := visibleBindings(bindings, specCase.ID.HeadingPath)
-		prepared, err := prepareCase(specCase, visible)
-		if err != nil {
-			result := variableFailure(specCase, err)
-			cases = append(cases, result)
-			status = core.StatusFailed
-			continue
-		}
-
-		session, err := sessionFor(sessions, host, adapter.Config)
-		if err != nil {
-			return core.DocumentResult{}, err
-		}
-
-		if !setupSessions[adapter.Config.Name] {
-			setupSessions[adapter.Config.Name] = true
-			if err := session.Setup(); err != nil {
-				return core.DocumentResult{}, err
-			}
-		}
-
-		result, err := session.RunCase(specCase, prepared, visible, timeoutMs)
-		if err != nil {
-			return core.DocumentResult{}, err
-		}
-		cases = append(cases, result)
-		if result.Status == core.StatusFailed {
-			status = core.StatusFailed
-			continue
-		}
-
-		for _, binding := range result.Bindings {
-			bindings = append(bindings, scopedBinding{
-				Binding:     binding,
-				HeadingPath: append([]string(nil), specCase.ID.HeadingPath...),
-				Order:       len(bindings),
-			})
-		}
+	cases, status, err := runDocumentCases(plan, registry, host, sessions)
+	if err != nil {
+		return core.DocumentResult{}, err
 	}
 
 	// Send teardown before closing
 	for _, session := range sessions {
-		session.Teardown()
+		_ = session.Teardown()
 	}
 
 	if err := closeSessions(sessions); err != nil {
@@ -338,11 +298,8 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	if err != nil {
 		return core.DocumentResult{}, err
 	}
-	for _, result := range alloyResults {
-		if result.Status == core.StatusFailed {
-			status = core.StatusFailed
-			break
-		}
+	if hasFailedAlloyCheck(alloyResults) {
+		status = core.StatusFailed
 	}
 
 	return core.DocumentResult{
@@ -351,6 +308,70 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		Cases:       cases,
 		AlloyChecks: alloyResults,
 	}, nil
+}
+
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session) ([]core.CaseResult, core.Status, error) {
+	setupSessions := make(map[string]bool)
+	bindings := make([]scopedBinding, 0)
+	cases := make([]core.CaseResult, 0, len(plan.Cases))
+	status := core.StatusPassed
+	timeoutMs := plan.Document.Frontmatter.Timeout
+
+	for _, specCase := range plan.Cases {
+		result, err := runSingleCase(specCase, registry, host, sessions, setupSessions, bindings, timeoutMs)
+		if err != nil {
+			return nil, "", err
+		}
+		cases = append(cases, result)
+		if result.Status == core.StatusFailed {
+			status = core.StatusFailed
+			continue
+		}
+		for _, binding := range result.Bindings {
+			bindings = append(bindings, scopedBinding{
+				Binding:     binding,
+				HeadingPath: append([]string(nil), specCase.ID.HeadingPath...),
+				Order:       len(bindings),
+			})
+		}
+	}
+	return cases, status, nil
+}
+
+func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, setupSessions map[string]bool, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {
+	adapter, err := registry.adapterFor(specCase)
+	if err != nil {
+		return core.CaseResult{}, err
+	}
+
+	visible := visibleBindings(bindings, specCase.ID.HeadingPath)
+	prepared, err := prepareCase(specCase, visible)
+	if err != nil {
+		return variableFailure(specCase, err), nil
+	}
+
+	session, err := sessionFor(sessions, host, adapter.Config)
+	if err != nil {
+		return core.CaseResult{}, err
+	}
+
+	if !setupSessions[adapter.Config.Name] {
+		setupSessions[adapter.Config.Name] = true
+		if err := session.Setup(); err != nil {
+			return core.CaseResult{}, err
+		}
+	}
+
+	return session.RunCase(specCase, prepared, visible, timeoutMs)
+}
+
+func hasFailedAlloyCheck(results []core.AlloyCheckResult) bool {
+	for _, result := range results {
+		if result.Status == core.StatusFailed {
+			return true
+		}
+	}
+	return false
 }
 
 func sessionFor(sessions map[string]*adapterhost.Session, host adapterhost.Host, adapter config.AdapterConfig) (*adapterhost.Session, error) {

@@ -211,34 +211,43 @@ func executableCases(doc Document) []CaseSpec {
 	for _, node := range doc.Nodes {
 		switch current := node.(type) {
 		case CodeBlockNode:
-			if current.ID == nil {
-				continue
-			}
-			cases = append(cases, CaseSpec{
-				ID:       *current.ID,
-				Kind:     CaseKindCode,
-				Block:    current.Block,
-				Template: current.Source,
-			})
+			cases = appendCodeCase(cases, current)
 		case TableNode:
-			if current.Fixture == "" {
-				continue
-			}
-			for index, row := range current.Rows {
-				if row.ID == nil {
-					continue
-				}
-				cases = append(cases, CaseSpec{
-					ID:            *row.ID,
-					Kind:          CaseKindTableRow,
-					Fixture:       current.Fixture,
-					FixtureParams: current.FixtureParams,
-					Columns:       append([]string(nil), current.Columns...),
-					Cells:         append([]string(nil), row.Cells...),
-					RowNumber:     index + 1,
-				})
-			}
+			cases = appendTableCases(cases, current)
 		}
+	}
+	return cases
+}
+
+func appendCodeCase(cases []CaseSpec, block CodeBlockNode) []CaseSpec {
+	if block.ID == nil {
+		return cases
+	}
+	return append(cases, CaseSpec{
+		ID:       *block.ID,
+		Kind:     CaseKindCode,
+		Block:    block.Block,
+		Template: block.Source,
+	})
+}
+
+func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
+	if table.Fixture == "" {
+		return cases
+	}
+	for index, row := range table.Rows {
+		if row.ID == nil {
+			continue
+		}
+		cases = append(cases, CaseSpec{
+			ID:            *row.ID,
+			Kind:          CaseKindTableRow,
+			Fixture:       table.Fixture,
+			FixtureParams: table.FixtureParams,
+			Columns:       append([]string(nil), table.Columns...),
+			Cells:         append([]string(nil), row.Cells...),
+			RowNumber:     index + 1,
+		})
 	}
 	return cases
 }

@@ -36,10 +36,35 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		t.Fatalf("parse document: %v", err)
 	}
 
-	if doc.Title != "Pocket Board" {
-		t.Fatalf("unexpected title %q", doc.Title)
-	}
+	blocks, tables, headings := classifyNodes(doc)
 
+	t.Run("title", func(t *testing.T) {
+		if doc.Title != "Pocket Board" {
+			t.Fatalf("unexpected title %q", doc.Title)
+		}
+	})
+	t.Run("headings", func(t *testing.T) {
+		if len(headings) != 4 {
+			t.Fatalf("expected 4 headings, got %d", len(headings))
+		}
+		if got := headings[2].HeadingPath; len(got) != 3 || got[0] != "Pocket Board" || got[2] != "Verify Created Board" {
+			t.Fatalf("unexpected heading path %#v", got)
+		}
+	})
+	t.Run("code_blocks", func(t *testing.T) {
+		if len(blocks) != 2 {
+			t.Fatalf("expected 2 code blocks, got %d", len(blocks))
+		}
+	})
+	t.Run("tables", func(t *testing.T) {
+		assertTableShape(t, tables)
+	})
+	t.Run("ordinals", func(t *testing.T) {
+		assertOrdinals(t, blocks, tables)
+	})
+}
+
+func classifyNodes(doc Document) ([]CodeBlockNode, []TableNode, []HeadingNode) {
 	var blocks []CodeBlockNode
 	var tables []TableNode
 	var headings []HeadingNode
@@ -53,16 +78,11 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 			tables = append(tables, current)
 		}
 	}
+	return blocks, tables, headings
+}
 
-	if len(blocks) != 2 {
-		t.Fatalf("expected 2 code blocks, got %d", len(blocks))
-	}
-	if len(headings) != 4 {
-		t.Fatalf("expected 4 headings, got %d", len(headings))
-	}
-	if got := headings[2].HeadingPath; len(got) != 3 || got[0] != "Pocket Board" || got[2] != "Verify Created Board" {
-		t.Fatalf("unexpected heading path %#v", got)
-	}
+func assertTableShape(t *testing.T, tables []TableNode) {
+	t.Helper()
 	if len(tables) != 1 {
 		t.Fatalf("expected 1 table, got %d", len(tables))
 	}
@@ -75,6 +95,10 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 	if tables[0].Rows[0].ID == nil || tables[0].Rows[1].ID == nil {
 		t.Fatal("expected executable table row ids")
 	}
+}
+
+func assertOrdinals(t *testing.T, blocks []CodeBlockNode, tables []TableNode) {
+	t.Helper()
 	if blocks[0].ID.Ordinal != 1 || blocks[1].ID.Ordinal != 2 || tables[0].Rows[0].ID.Ordinal != 3 || tables[0].Rows[1].ID.Ordinal != 4 {
 		t.Fatalf("unexpected ordinals %d %d %d %d", blocks[0].ID.Ordinal, blocks[1].ID.Ordinal, tables[0].Rows[0].ID.Ordinal, tables[0].Rows[1].ID.Ordinal)
 	}

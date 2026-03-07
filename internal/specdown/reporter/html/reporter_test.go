@@ -10,11 +10,8 @@ import (
 	"specdown/internal/specdown/core"
 )
 
-func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
-	outDir := t.TempDir()
-	outPath := filepath.Join(outDir, "report.html")
-
-	report := core.Report{
+func buildMainTestReport() core.Report {
+	return core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
 		Summary: core.Summary{
 			SpecsTotal:  1,
@@ -145,86 +142,76 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 			},
 		},
 	}
+}
 
-	if err := Write(report, "My Report", outPath); err != nil {
+func writeAndReadReport(t *testing.T, report core.Report, title string) string {
+	t.Helper()
+	outDir := t.TempDir()
+	outPath := filepath.Join(outDir, "report.html")
+	if err := Write(report, title, outPath); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
-
 	body, err := os.ReadFile(outPath)
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
+	return string(body)
+}
 
-	html := string(body)
-	if !strings.Contains(html, "<h1 class=\"report-title\">My Report</h1>") {
-		t.Fatalf("expected h1 report title, got %q", html)
+func assertContains(t *testing.T, html, substr, label string) {
+	t.Helper()
+	if !strings.Contains(html, substr) {
+		t.Fatalf("expected %s, got %q", label, html)
 	}
-	if !strings.Contains(html, "<h2 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h2>") {
-		t.Fatalf("expected markdown heading in html, got %q", html)
+}
+
+func assertNotContains(t *testing.T, html, substr, label string) {
+	t.Helper()
+	if strings.Contains(html, substr) {
+		t.Fatalf("expected %s, got %q", label, html)
 	}
-	if !strings.Contains(html, "aria-label=\"Table of contents\"") {
-		t.Fatalf("expected toc sidebar, got %q", html)
-	}
-	if !strings.Contains(html, "position: sticky;") {
-		t.Fatalf("expected sticky toc styles, got %q", html)
-	}
-	if strings.Contains(html, "<h2>report</h2>") {
-		t.Fatalf("expected no report heading, got %q", html)
-	}
-	if strings.Contains(html, ">Failures<") {
-		t.Fatalf("expected no failure summary section, got %q", html)
-	}
-	if strings.Contains(html, "border-left: 1px solid var(--rule);") {
-		t.Fatalf("expected no left rule in toc, got %q", html)
-	}
-	if !strings.Contains(html, "font-family: \"Avenir Next\", \"Helvetica Neue\", \"Segoe UI\", sans-serif;") {
-		t.Fatalf("expected sans body typography, got %q", html)
-	}
-	if !strings.Contains(html, "text-wrap: balance;") {
-		t.Fatalf("expected balanced heading wrap, got %q", html)
-	}
-	if !strings.Contains(html, "& h2 {") {
-		t.Fatalf("expected heading typography rules, got %q", html)
-	}
-	if !strings.Contains(html, "align-items: baseline;") {
-		t.Fatalf("expected baseline-aligned failure diff, got %q", html)
-	}
-	if !strings.Contains(html, "toc-spec-title") {
-		t.Fatalf("expected spec title in toc, got %q", html)
-	}
-	if !strings.Contains(html, `<a class="toc-spec-title`) {
-		t.Fatalf("expected spec title to be a link, got %q", html)
-	}
-	if !strings.Contains(html, "classList.toggle('active'") {
-		t.Fatalf("expected active toc script, got %q", html)
-	}
-	if strings.Contains(html, "class=\"toc-link toc-level-1 failed\"") {
-		t.Fatalf("expected no propagated status on parent heading, got %q", html)
-	}
-	if strings.Contains(html, "class=\"toc-link toc-level-1 passed\"") || strings.Contains(html, "class=\"toc-link toc-level-2 passed\"") {
-		t.Fatalf("expected no success marker in toc, got %q", html)
-	}
-	if !strings.Contains(html, "pass 3") {
-		t.Fatalf("expected pass summary, got %q", html)
-	}
-	if !strings.Contains(html, "fail 1") {
-		t.Fatalf("expected fail summary, got %q", html)
-	}
-	if !strings.Contains(html, "boardName=board-1") {
-		t.Fatalf("expected binding note, got %q", html)
-	}
-	if !strings.Contains(html, "fixture:board-exists") {
-		t.Fatalf("expected fixture label, got %q", html)
-	}
-	if !strings.Contains(html, "board-1-archive") {
-		t.Fatalf("expected resolved table cell, got %q", html)
-	}
-	if !strings.Contains(html, `<div class="cell-actual">expected board &#34;board-1-archive&#34; to exist; actual boards: [&#34;board-1&#34;]</div>`) {
-		t.Fatalf("expected cell-actual with failure message, got %q", html)
-	}
-	if !strings.Contains(html, "id=\"case-specs-pocket-board-spec-md-pocket-board-variable-flow-table-check-4\"") {
-		t.Fatalf("expected failure anchor link, got %q", html)
-	}
+}
+
+func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
+	report := buildMainTestReport()
+	html := writeAndReadReport(t, report, "My Report")
+
+	t.Run("layout", func(t *testing.T) {
+		assertContains(t, html, "<h1 class=\"report-title\">My Report</h1>", "h1 report title")
+		assertContains(t, html, "<h2 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h2>", "markdown heading in html")
+		assertContains(t, html, "aria-label=\"Table of contents\"", "toc sidebar")
+		assertContains(t, html, "position: sticky;", "sticky toc styles")
+		assertNotContains(t, html, "<h2>report</h2>", "no report heading")
+		assertNotContains(t, html, ">Failures<", "no failure summary section")
+		assertNotContains(t, html, "border-left: 1px solid var(--rule);", "no left rule in toc")
+	})
+
+	t.Run("typography", func(t *testing.T) {
+		assertContains(t, html, "font-family: \"Avenir Next\", \"Helvetica Neue\", \"Segoe UI\", sans-serif;", "sans body typography")
+		assertContains(t, html, "text-wrap: balance;", "balanced heading wrap")
+		assertContains(t, html, "& h2 {", "heading typography rules")
+		assertContains(t, html, "align-items: baseline;", "baseline-aligned failure diff")
+	})
+
+	t.Run("toc", func(t *testing.T) {
+		assertContains(t, html, "toc-spec-title", "spec title in toc")
+		assertContains(t, html, `<a class="toc-spec-title`, "spec title to be a link")
+		assertContains(t, html, "classList.toggle('active'", "active toc script")
+		assertNotContains(t, html, "class=\"toc-link toc-level-1 failed\"", "no propagated status on parent heading")
+		if strings.Contains(html, "class=\"toc-link toc-level-1 passed\"") || strings.Contains(html, "class=\"toc-link toc-level-2 passed\"") {
+			t.Fatalf("expected no success marker in toc, got %q", html)
+		}
+	})
+
+	t.Run("summary_and_results", func(t *testing.T) {
+		assertContains(t, html, "pass 3", "pass summary")
+		assertContains(t, html, "fail 1", "fail summary")
+		assertContains(t, html, "boardName=board-1", "binding note")
+		assertContains(t, html, "fixture:board-exists", "fixture label")
+		assertContains(t, html, "board-1-archive", "resolved table cell")
+		assertContains(t, html, `<div class="cell-actual">expected board &#34;board-1-archive&#34; to exist; actual boards: [&#34;board-1&#34;]</div>`, "cell-actual with failure message")
+		assertContains(t, html, "id=\"case-specs-pocket-board-spec-md-pocket-board-variable-flow-table-check-4\"", "failure anchor link")
+	})
 }
 
 func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {

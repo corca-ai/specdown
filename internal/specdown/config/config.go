@@ -50,27 +50,34 @@ func Load(path string) (Config, string, error) {
 	if len(cfg.Include) == 0 {
 		return Config{}, "", fmt.Errorf("config must define at least one include pattern")
 	}
-	seen := make(map[string]struct{}, len(cfg.Adapters))
-	for _, adapter := range cfg.Adapters {
-		if adapter.Name == "" {
-			return Config{}, "", fmt.Errorf("adapter name must not be empty")
-		}
-		if _, ok := seen[adapter.Name]; ok {
-			return Config{}, "", fmt.Errorf("adapter %q is defined more than once", adapter.Name)
-		}
-		seen[adapter.Name] = struct{}{}
-		if len(adapter.Command) == 0 {
-			return Config{}, "", fmt.Errorf("adapter %q must define a command", adapter.Name)
-		}
-		if len(adapter.Blocks) == 0 && len(adapter.Fixtures) == 0 {
-			return Config{}, "", fmt.Errorf("adapter %q must declare at least one block or fixture", adapter.Name)
-		}
+	if err := validateAdapters(cfg.Adapters); err != nil {
+		return Config{}, "", err
 	}
 	if cfg.Models.Builtin != "" && cfg.Models.Builtin != "alloy" {
 		return Config{}, "", fmt.Errorf("models builtin %q is not supported", cfg.Models.Builtin)
 	}
 
 	return cfg, filepath.Dir(absPath), nil
+}
+
+func validateAdapters(adapters []AdapterConfig) error {
+	seen := make(map[string]struct{}, len(adapters))
+	for _, adapter := range adapters {
+		if adapter.Name == "" {
+			return fmt.Errorf("adapter name must not be empty")
+		}
+		if _, ok := seen[adapter.Name]; ok {
+			return fmt.Errorf("adapter %q is defined more than once", adapter.Name)
+		}
+		seen[adapter.Name] = struct{}{}
+		if len(adapter.Command) == 0 {
+			return fmt.Errorf("adapter %q must define a command", adapter.Name)
+		}
+		if len(adapter.Blocks) == 0 && len(adapter.Fixtures) == 0 {
+			return fmt.Errorf("adapter %q must declare at least one block or fixture", adapter.Name)
+		}
+	}
+	return nil
 }
 
 func (c Config) HTMLReportOutFile() string {

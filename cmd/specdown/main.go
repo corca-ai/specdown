@@ -183,27 +183,33 @@ func resolvePath(baseDir string, value string) string {
 
 func printFailures(report core.Report) {
 	for _, doc := range report.Results {
-		for _, c := range doc.Cases {
-			if c.Status != core.StatusFailed {
-				continue
-			}
-			path := strings.Join(c.ID.HeadingPath, " > ")
-			msg := c.Message
-			fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]\n", path, c.Block+c.Fixture)
-			if msg != "" {
-				fmt.Fprintf(os.Stderr, "        %s\n", msg)
-			}
+		printCaseFailures(doc.Cases)
+		printAlloyFailures(doc.AlloyChecks)
+	}
+}
+
+func printCaseFailures(cases []core.CaseResult) {
+	for _, c := range cases {
+		if c.Status != core.StatusFailed {
+			continue
 		}
-		for _, c := range doc.AlloyChecks {
-			if c.Status != core.StatusFailed {
-				continue
-			}
-			path := strings.Join(c.ID.HeadingPath, " > ")
-			msg := c.Message
-			fmt.Fprintf(os.Stderr, "  FAIL  %s  [alloy:%s#%s]\n", path, c.Model, c.Assertion)
-			if msg != "" {
-				fmt.Fprintf(os.Stderr, "        %s\n", msg)
-			}
+		path := strings.Join(c.ID.HeadingPath, " > ")
+		fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]\n", path, c.Block+c.Fixture)
+		if c.Message != "" {
+			fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
+		}
+	}
+}
+
+func printAlloyFailures(checks []core.AlloyCheckResult) {
+	for _, c := range checks {
+		if c.Status != core.StatusFailed {
+			continue
+		}
+		path := strings.Join(c.ID.HeadingPath, " > ")
+		fmt.Fprintf(os.Stderr, "  FAIL  %s  [alloy:%s#%s]\n", path, c.Model, c.Assertion)
+		if c.Message != "" {
+			fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
 		}
 	}
 }

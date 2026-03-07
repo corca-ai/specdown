@@ -561,7 +561,7 @@ type helperCard struct {
 func runHelperCase(encoder *json.Encoder, state *helperState, seqID int, item adapterprotocol.Case) {
 	bindings, err := executeHelperCase(state, item)
 	if err != nil {
-		encoder.Encode(adapterprotocol.Response{
+		_ = encoder.Encode(adapterprotocol.Response{
 			ID:      seqID,
 			Type:    "failed",
 			Message: err.Error(),
@@ -569,7 +569,7 @@ func runHelperCase(encoder *json.Encoder, state *helperState, seqID int, item ad
 		return
 	}
 
-	encoder.Encode(adapterprotocol.Response{
+	_ = encoder.Encode(adapterprotocol.Response{
 		ID:       seqID,
 		Type:     "passed",
 		Bindings: bindings,
@@ -605,12 +605,13 @@ func executeHelperCase(state *helperState, item adapterprotocol.Case) ([]adapter
 
 func executeHelperCreateBoard(state *helperState, item adapterprotocol.Case, parts []string) ([]adapterprotocol.Binding, error) {
 	var name string
-	if len(parts) == 1 {
+	switch len(parts) {
+	case 1:
 		name = "board-" + strconv.Itoa(state.nextBoardID)
 		state.nextBoardID++
-	} else if len(parts) == 2 {
+	case 2:
 		name = parts[1]
-	} else {
+	default:
 		return nil, &helperError{message: "unsupported board command " + strconvQuote(item.Source)}
 	}
 	if _, exists := state.boards[name]; exists {

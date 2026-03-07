@@ -9,7 +9,7 @@ import (
 	"specdown/internal/specdown/core"
 )
 
-func Write(report core.Report, outPath string) error {
+func Write(report core.Report, outPath string) (err error) {
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return fmt.Errorf("create report dir: %w", err)
 	}
@@ -18,7 +18,11 @@ func Write(report core.Report, outPath string) error {
 	if err != nil {
 		return fmt.Errorf("create report: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close report: %w", cerr)
+		}
+	}()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")

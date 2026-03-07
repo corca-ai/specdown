@@ -42,8 +42,7 @@ func parseFrontmatter(markdown string) (Frontmatter, string) {
 		}
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
-		switch key {
-		case "timeout":
+		if key == "timeout" {
 			if n, err := strconv.Atoi(value); err == nil {
 				fm.Timeout = n
 			}
@@ -52,6 +51,7 @@ func parseFrontmatter(markdown string) (Frontmatter, string) {
 	return fm, rest
 }
 
+//nolint:gocognit // parser walk is inherently complex
 func ParseDocument(relativePath string, markdown string) (Document, error) {
 	fm, content := parseFrontmatter(markdown)
 	lines := splitLines(content)
@@ -393,7 +393,7 @@ func parseTableNode(relativePath string, lines []string, start int, fixture stri
 			Raw:   lines[end],
 		}
 		if fixture != "" {
-			*ordinal = *ordinal + 1
+			*ordinal++
 			row.ID = &SpecID{
 				File:        relativePath,
 				HeadingPath: append([]string(nil), headingPath...),
@@ -431,25 +431,27 @@ func isTableSeparator(line string) bool {
 		return false
 	}
 	for _, cell := range cells {
-		trimmed := strings.ReplaceAll(strings.TrimSpace(cell), " ", "")
-		if trimmed == "" {
-			return false
-		}
-		hasDash := false
-		for _, r := range trimmed {
-			if r == '-' {
-				hasDash = true
-				continue
-			}
-			if r != ':' {
-				return false
-			}
-		}
-		if !hasDash {
+		if !isSeparatorCell(cell) {
 			return false
 		}
 	}
 	return true
+}
+
+func isSeparatorCell(cell string) bool {
+	trimmed := strings.ReplaceAll(strings.TrimSpace(cell), " ", "")
+	if trimmed == "" {
+		return false
+	}
+	hasDash := false
+	for _, r := range trimmed {
+		if r == '-' {
+			hasDash = true
+		} else if r != ':' {
+			return false
+		}
+	}
+	return hasDash
 }
 
 func parseTableCells(line string) ([]string, error) {
@@ -472,13 +474,14 @@ func splitTableCells(s string) []string {
 	var cells []string
 	var current strings.Builder
 	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '|' {
+		switch {
+		case s[i] == '\\' && i+1 < len(s) && s[i+1] == '|':
 			current.WriteString(`\|`)
 			i++ // skip the |
-		} else if s[i] == '|' {
+		case s[i] == '|':
 			cells = append(cells, current.String())
 			current.Reset()
-		} else {
+		default:
 			current.WriteByte(s[i])
 		}
 	}

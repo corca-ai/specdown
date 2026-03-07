@@ -92,8 +92,8 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, er
 		return nil, nil
 	}
 
-	javaPath, err := exec.LookPath("java")
-	if err != nil {
+	javaPath, _ := exec.LookPath("java")
+	if javaPath == "" {
 		return failedChecksAll(plan.AlloyChecks, "java not found in PATH; install a JRE to run Alloy checks"), nil
 	}
 
@@ -102,6 +102,15 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, er
 		return nil, err
 	}
 
+	resultsByKey, err := r.runAllModels(plan, javaPath, jarPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return collectOrderedResults(plan.AlloyChecks, resultsByKey)
+}
+
+func (r Runner) runAllModels(plan core.DocumentPlan, javaPath string, jarPath string) (map[string]core.AlloyCheckResult, error) {
 	checksByModel := make(map[string][]core.AlloyCheckSpec)
 	for _, check := range plan.AlloyChecks {
 		checksByModel[check.Model] = append(checksByModel[check.Model], check)
@@ -127,9 +136,12 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, er
 			resultsByKey[result.ID.Key()] = result
 		}
 	}
+	return resultsByKey, nil
+}
 
-	results := make([]core.AlloyCheckResult, 0, len(plan.AlloyChecks))
-	for _, check := range plan.AlloyChecks {
+func collectOrderedResults(checks []core.AlloyCheckSpec, resultsByKey map[string]core.AlloyCheckResult) ([]core.AlloyCheckResult, error) {
+	results := make([]core.AlloyCheckResult, 0, len(checks))
+	for _, check := range checks {
 		result, ok := resultsByKey[check.ID.Key()]
 		if !ok {
 			return nil, fmt.Errorf("missing alloy result for %s", check.ID.Key())
@@ -227,7 +239,24 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		return failedChecks(checks, bundle.AbsolutePath, bundle.SourceMapAbsolutePath, annotateAlloyFailure(message, location, ok), location, ok), nil
 	}
 
-	receiptPath := filepath.Join(outputDir, "receipt.json")
+	commandResults, err := parseReceipt(filepath.Join(outputDir, "receipt.json"))
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]core.AlloyCheckResult, 0, len(checks))
+	for _, check := range checks {
+		result, err := r.evaluateCheck(check, bundle, commandResults)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func parseReceipt(receiptPath string) (map[string]receiptCommand, error) {
 	receiptBody, err := os.ReadFile(receiptPath)
 	if err != nil {
 		return nil, fmt.Errorf("read alloy receipt: %w", err)
@@ -242,42 +271,38 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 	for _, command := range runReceipt.Commands {
 		commandResults[strings.TrimSpace(command.Source)] = command
 	}
+	return commandResults, nil
+}
 
-	results := make([]core.AlloyCheckResult, 0, len(checks))
-	for _, check := range checks {
-		base := baseCheckResult(check, bundle)
+func (r Runner) evaluateCheck(check core.AlloyCheckSpec, bundle modelBundle, commandResults map[string]receiptCommand) (core.AlloyCheckResult, error) {
+	base := baseCheckResult(check, bundle)
 
-		commandSource := checkCommandSource(check)
-		command, ok := commandResults[commandSource]
-		if !ok {
-			base.Status = core.StatusFailed
-			base.Message = "missing Alloy result for " + strconvQuote(commandSource)
-			results = append(results, base)
-			continue
-		}
-
-		if len(command.Solution) == 0 {
-			base.Status = core.StatusPassed
-			results = append(results, base)
-			continue
-		}
-
-		counterexamplePath, err := writeCounterexample(r.BaseDir, check, command)
-		if err != nil {
-			return nil, err
-		}
-		summary := summarizeCounterexample(command)
-		message := "counterexample for " + strconvQuote(check.Assertion)
-		if summary != "" && summary != "counterexample found" {
-			message += "\n" + summary
-		}
+	commandSource := checkCommandSource(check)
+	command, ok := commandResults[commandSource]
+	if !ok {
 		base.Status = core.StatusFailed
-		base.Message = message
-		base.CounterexamplePath = counterexamplePath
-		results = append(results, base)
+		base.Message = "missing Alloy result for " + strconvQuote(commandSource)
+		return base, nil
 	}
 
-	return results, nil
+	if len(command.Solution) == 0 {
+		base.Status = core.StatusPassed
+		return base, nil
+	}
+
+	counterexamplePath, err := writeCounterexample(r.BaseDir, check, command)
+	if err != nil {
+		return core.AlloyCheckResult{}, err
+	}
+	summary := summarizeCounterexample(command)
+	message := "counterexample for " + strconvQuote(check.Assertion)
+	if summary != "" && summary != "counterexample found" {
+		message += "\n" + summary
+	}
+	base.Status = core.StatusFailed
+	base.Message = message
+	base.CounterexamplePath = counterexamplePath
+	return base, nil
 }
 
 func baseCheckResult(check core.AlloyCheckSpec, bundle modelBundle) core.AlloyCheckResult {
@@ -387,7 +412,7 @@ func summarizeCounterexample(command receiptCommand) string {
 	return strings.Join(lines, "\n")
 }
 
-func (r Runner) ensureAlloyJar() (string, error) {
+func (r Runner) ensureAlloyJar() (_ string, err error) {
 	jarPath := filepath.Join(r.BaseDir, alloyJarName)
 	if _, err := os.Stat(jarPath); err == nil {
 		return jarPath, nil
@@ -404,7 +429,7 @@ func (r Runner) ensureAlloyJar() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("download alloy jar: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download alloy jar: unexpected status %s", response.Status)
@@ -414,9 +439,13 @@ func (r Runner) ensureAlloyJar() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create alloy jar: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close alloy jar: %w", cerr)
+		}
+	}()
 
-	if _, err := io.Copy(file, response.Body); err != nil {
+	if _, err = io.Copy(file, response.Body); err != nil {
 		return "", fmt.Errorf("write alloy jar: %w", err)
 	}
 	return jarPath, nil
