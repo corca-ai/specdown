@@ -101,7 +101,7 @@ func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibl
 		Kind:      original.Kind,
 		Block:     original.Block.Descriptor(),
 		Fixture:   original.Fixture,
-		Label:     defaultLabel(original),
+		Label:     original.DefaultLabel(),
 		Columns:   append([]string(nil), original.Columns...),
 		RowNumber: original.RowNumber,
 	}
@@ -278,16 +278,6 @@ func applyResponse(result *core.CaseResult, expectedID int, response adapterprot
 	}
 }
 
-func defaultLabel(specCase core.CaseSpec) string {
-	if len(specCase.ID.HeadingPath) == 0 {
-		return specCase.DisplayKind()
-	}
-	label := specCase.DisplayKind() + " @ " + specCase.ID.HeadingPath[len(specCase.ID.HeadingPath)-1]
-	if specCase.Kind == core.CaseKindTableRow {
-		return label + " row " + fmt.Sprintf("%d", specCase.RowNumber)
-	}
-	return label
-}
 
 func protocolBindings(bindings []core.Binding) []adapterprotocol.Binding {
 	items := make([]adapterprotocol.Binding, 0, len(bindings))

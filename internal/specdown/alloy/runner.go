@@ -245,36 +245,20 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 
 	results := make([]core.AlloyCheckResult, 0, len(checks))
 	for _, check := range checks {
+		base := baseCheckResult(check, bundle)
+
 		commandSource := checkCommandSource(check)
 		command, ok := commandResults[commandSource]
 		if !ok {
-			results = append(results, core.AlloyCheckResult{
-				ID:         check.ID,
-				Model:      check.Model,
-				Assertion:  check.Assertion,
-				Scope:      check.Scope,
-				Label:      defaultLabel(check),
-				Status:     core.StatusFailed,
-				Message:    "missing Alloy result for " + strconvQuote(commandSource),
-				BundlePath: bundle.AbsolutePath,
-				SourceMapPath: bundle.SourceMapAbsolutePath,
-				SourceRef: formatSourceRef(check.ID.File, check.ID.HeadingPath),
-			})
+			base.Status = core.StatusFailed
+			base.Message = "missing Alloy result for " + strconvQuote(commandSource)
+			results = append(results, base)
 			continue
 		}
 
 		if len(command.Solution) == 0 {
-			results = append(results, core.AlloyCheckResult{
-				ID:         check.ID,
-				Model:      check.Model,
-				Assertion:  check.Assertion,
-				Scope:      check.Scope,
-				Label:      defaultLabel(check),
-				Status:     core.StatusPassed,
-				BundlePath: bundle.AbsolutePath,
-				SourceMapPath: bundle.SourceMapAbsolutePath,
-				SourceRef: formatSourceRef(check.ID.File, check.ID.HeadingPath),
-			})
+			base.Status = core.StatusPassed
+			results = append(results, base)
 			continue
 		}
 
@@ -287,36 +271,41 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		if summary != "" && summary != "counterexample found" {
 			message += "\n" + summary
 		}
-		results = append(results, core.AlloyCheckResult{
-			ID:                 check.ID,
-			Model:              check.Model,
-			Assertion:          check.Assertion,
-			Scope:              check.Scope,
-			Label:              defaultLabel(check),
-			Status:             core.StatusFailed,
-			Message:            message,
-			BundlePath:         bundle.AbsolutePath,
-			SourceMapPath:      bundle.SourceMapAbsolutePath,
-			SourceRef:          formatSourceRef(check.ID.File, check.ID.HeadingPath),
-			CounterexamplePath: counterexamplePath,
-		})
+		base.Status = core.StatusFailed
+		base.Message = message
+		base.CounterexamplePath = counterexamplePath
+		results = append(results, base)
 	}
 
 	return results, nil
 }
 
+func baseCheckResult(check core.AlloyCheckSpec, bundle modelBundle) core.AlloyCheckResult {
+	return core.AlloyCheckResult{
+		ID:            check.ID,
+		Model:         check.Model,
+		Assertion:     check.Assertion,
+		Scope:         check.Scope,
+		Label:         check.DefaultLabel(),
+		BundlePath:    bundle.AbsolutePath,
+		SourceMapPath: bundle.SourceMapAbsolutePath,
+		SourceRef:     formatSourceRef(check.ID.File, check.ID.HeadingPath),
+	}
+}
+
 func failedChecksAll(checks []core.AlloyCheckSpec, message string) []core.AlloyCheckResult {
 	results := make([]core.AlloyCheckResult, 0, len(checks))
 	for _, check := range checks {
-		results = append(results, core.AlloyCheckResult{
+		result := core.AlloyCheckResult{
 			ID:        check.ID,
 			Model:     check.Model,
 			Assertion: check.Assertion,
 			Scope:     check.Scope,
-			Label:     defaultLabel(check),
+			Label:     check.DefaultLabel(),
 			Status:    core.StatusFailed,
 			Message:   message,
-		})
+		}
+		results = append(results, result)
 	}
 	return results
 }
@@ -325,14 +314,14 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath
 	results := make([]core.AlloyCheckResult, 0, len(checks))
 	for _, check := range checks {
 		result := core.AlloyCheckResult{
-			ID:         check.ID,
-			Model:      check.Model,
-			Assertion:  check.Assertion,
-			Scope:      check.Scope,
-			Label:      defaultLabel(check),
-			Status:     core.StatusFailed,
-			Message:    message,
-			BundlePath: bundlePath,
+			ID:            check.ID,
+			Model:         check.Model,
+			Assertion:     check.Assertion,
+			Scope:         check.Scope,
+			Label:         check.DefaultLabel(),
+			Status:        core.StatusFailed,
+			Message:       message,
+			BundlePath:    bundlePath,
 			SourceMapPath: sourceMapPath,
 		}
 		if hasLocation {
@@ -486,13 +475,6 @@ func checkCommandSource(check core.AlloyCheckSpec) string {
 	return "check " + check.Assertion + " for " + check.Scope
 }
 
-func defaultLabel(check core.AlloyCheckSpec) string {
-	suffix := "alloy:ref(" + check.Model + "#" + check.Assertion + ", scope=" + check.Scope + ")"
-	if len(check.ID.HeadingPath) == 0 {
-		return suffix
-	}
-	return suffix + " @ " + check.ID.HeadingPath[len(check.ID.HeadingPath)-1]
-}
 
 var alloyLinePattern = regexp.MustCompile(`\bline\s+([0-9]+)\b`)
 

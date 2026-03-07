@@ -492,7 +492,7 @@ func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 		Kind:      specCase.Kind,
 		Block:     specCase.Block.Descriptor(),
 		Fixture:   specCase.Fixture,
-		Label:     defaultLabel(specCase),
+		Label:     specCase.DefaultLabel(),
 		Columns:   append([]string(nil), specCase.Columns...),
 		RowNumber: specCase.RowNumber,
 		Status:    core.StatusFailed,
@@ -517,16 +517,6 @@ func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 	return result
 }
 
-func defaultLabel(specCase core.CaseSpec) string {
-	if len(specCase.ID.HeadingPath) == 0 {
-		return specCase.DisplayKind()
-	}
-	suffix := specCase.ID.HeadingPath[len(specCase.ID.HeadingPath)-1]
-	if specCase.Kind == core.CaseKindTableRow {
-		return specCase.DisplayKind() + " @ " + suffix + " row " + fmt.Sprintf("%d", specCase.RowNumber)
-	}
-	return specCase.DisplayKind() + " @ " + suffix
-}
 
 func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 	if result.Status == core.StatusPassed {

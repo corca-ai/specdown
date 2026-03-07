@@ -14,8 +14,10 @@ Read the following documents before starting work.
 ### User Guide
 
 - [Writing Specs](docs/guide-spec.md) — how to write spec files
+- [Writing Good Specs](docs/guide-writing.md) — best practices and Alloy/E2E patterns
 - [Writing Adapters](docs/guide-adapter.md) — how to implement adapters and the protocol
 - [Configuration & Running](docs/guide-config.md) — configuration files and execution
+- [Alloy Language Reference](docs/alloy-reference.md) — syntax and semantics of the Alloy language
 
 ## Working Rules
 

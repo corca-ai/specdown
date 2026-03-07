@@ -317,6 +317,73 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	}
 }
 
+func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
+	outDir := t.TempDir()
+	reportPath := filepath.Join(outDir, "report.html")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary: core.Summary{
+			SpecsTotal:        1,
+			SpecsFailed:       1,
+			AlloyChecksTotal:  1,
+			AlloyChecksFailed: 1,
+		},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusFailed,
+				Document: core.Document{
+					Title:      "Pocket Board",
+					RelativeTo: "specs/pocket-board.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Pocket Board", Raw: "# Pocket Board\n", HeadingPath: []string{"Pocket Board"}},
+						core.AlloyModelNode{
+							Model:  "board",
+							Source: "module board\n\nsig Card {}",
+							Raw:    "```alloy:model(board)\nmodule board\n\nsig Card {}\n```\n",
+						},
+					},
+				},
+				AlloyChecks: []core.AlloyCheckResult{
+					{
+						ID: core.SpecID{
+							File:        "specs/pocket-board.spec.md",
+							HeadingPath: []string{"Pocket Board"},
+							Ordinal:     1,
+						},
+						Model:     "board",
+						Assertion: "cardShape",
+						Scope:     "5",
+						Label:     "alloy:ref(board#cardShape, scope=5) @ Pocket Board",
+						Status:    core.StatusFailed,
+						Message:   "found counterexample for assertion \"cardShape\" at scope 5\n\nCounterexample:\n  Card$0 = {Card$0}\n  Card$1 = {Card$1}",
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, "", reportPath); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+
+	html := string(body)
+	if !strings.Contains(html, "found counterexample for assertion") {
+		t.Fatalf("expected counterexample summary in report, got %q", html)
+	}
+	if !strings.Contains(html, "Card$0") {
+		t.Fatalf("expected counterexample detail (Card$0) in report, got %q", html)
+	}
+	if !strings.Contains(html, "Card$1") {
+		t.Fatalf("expected counterexample detail (Card$1) in report, got %q", html)
+	}
+}
+
 func TestCollectHeadingStatusesPropagatesFailureToParent(t *testing.T) {
 	result := core.DocumentResult{
 		Document: core.Document{

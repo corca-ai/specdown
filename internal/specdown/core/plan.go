@@ -301,6 +301,25 @@ func (c CaseSpec) DisplayKind() string {
 	return "fixture:" + c.Fixture
 }
 
+func (c CaseSpec) DefaultLabel() string {
+	if len(c.ID.HeadingPath) == 0 {
+		return c.DisplayKind()
+	}
+	suffix := c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
+	if c.Kind == CaseKindTableRow {
+		return c.DisplayKind() + " @ " + suffix + " row " + fmt.Sprintf("%d", c.RowNumber)
+	}
+	return c.DisplayKind() + " @ " + suffix
+}
+
+func (c AlloyCheckSpec) DefaultLabel() string {
+	suffix := "alloy:ref(" + c.Model + "#" + c.Assertion + ", scope=" + c.Scope + ")"
+	if len(c.ID.HeadingPath) == 0 {
+		return suffix
+	}
+	return suffix + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
+}
+
 func toSlash(value string) string {
 	return strings.ReplaceAll(value, `\`, "/")
 }
