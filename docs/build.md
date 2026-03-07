@@ -40,6 +40,23 @@ Reports are generated at `.artifacts/specdown/report.html`.
 go test ./...
 ```
 
+## Lint
+
+The project uses [golangci-lint](https://golangci-lint.run/) with the configuration in `.golangci.yml`.
+
+```sh
+golangci-lint run
+```
+
+Enabled linters: errcheck, govet, staticcheck, unused, ineffassign, gocritic, gocognit, bodyclose, nilerr, errorlint, unparam, unconvert.
+
+## CI
+
+GitHub Actions runs on every push to `main` and on pull requests (`.github/workflows/ci.yml`).
+
+1. `go test -race ./...`
+2. `golangci-lint run`
+
 ## Release
 
 Pushing a `v*` tag triggers GitHub Actions to build Windows, macOS, and Linux binaries and attach them to the Release.

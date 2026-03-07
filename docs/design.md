@@ -415,6 +415,7 @@ This directive serves the following purposes.
 - Links the current paragraph/section to a specific model check result
 - Displayed as a badge or status row in the HTML report
 - Links to a corresponding counterexample artifact on failure
+- On failure, the `Message` field includes a counterexample summary extracted from the Alloy solver output (e.g., atom bindings such as `Card$0 = {Card$0}`)
 
 Natural-language blockquotes may be used freely, but the machine-readable contract is based on the above directive.
 
