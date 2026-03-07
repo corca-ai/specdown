@@ -737,7 +737,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
       & > :first-child > :first-child { margin-top: 0; }
 
-      & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.1rem 0 0.75rem; }
+      & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0.5rem; }
       & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
       & pre { margin: 1rem 0; }
       & li { margin: 0.25rem 0; }
