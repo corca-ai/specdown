@@ -23,12 +23,20 @@ type Case struct {
 	Bindings      []Binding         `json:"bindings,omitempty"`
 }
 
+type DoctestStep struct {
+	Command  string `json:"command"`
+	Expected string `json:"expected"`
+	Actual   string `json:"actual"`
+	Status   string `json:"status"` // "passed" or "failed"
+}
+
 type Response struct {
-	ID       int       `json:"id"`
-	Type     string    `json:"type"`
-	Message  string    `json:"message,omitempty"`
-	Expected string    `json:"expected,omitempty"`
-	Actual   string    `json:"actual,omitempty"`
-	Label    string    `json:"label,omitempty"`
-	Bindings []Binding `json:"bindings,omitempty"`
+	ID       int           `json:"id"`
+	Type     string        `json:"type"`
+	Message  string        `json:"message,omitempty"`
+	Expected string        `json:"expected,omitempty"`
+	Actual   string        `json:"actual,omitempty"`
+	Label    string        `json:"label,omitempty"`
+	Bindings []Binding     `json:"bindings,omitempty"`
+	Steps    []DoctestStep `json:"steps,omitempty"`
 }

@@ -181,6 +181,7 @@ func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 		}
 	}
 
+	var resultSteps []adapterprotocol.DoctestStep
 	for _, step := range steps {
 		cmd := exec.Command("sh", "-c", step.Command)
 		var stdout, stderr bytes.Buffer
@@ -192,29 +193,48 @@ func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 			if message == "" {
 				message = err.Error()
 			}
+			resultSteps = append(resultSteps, adapterprotocol.DoctestStep{
+				Command:  step.Command,
+				Expected: step.Expected,
+				Actual:   message,
+				Status:   "failed",
+			})
 			return adapterprotocol.Response{
-				ID:      id,
-				Type:    "failed",
-				Message: fmt.Sprintf("$ %s\n%s", step.Command, message),
+				ID:    id,
+				Type:  "failed",
+				Steps: resultSteps,
 			}
 		}
 
 		actual := strings.TrimRight(stdout.String(), "\n")
 		expected := step.Expected
+		resultSteps = append(resultSteps, adapterprotocol.DoctestStep{
+			Command:  step.Command,
+			Expected: expected,
+			Actual:   actual,
+			Status:   stepStatus(actual, expected),
+		})
 		if actual != expected {
 			return adapterprotocol.Response{
-				ID:       id,
-				Type:     "failed",
-				Expected: expected,
-				Actual:   actual,
+				ID:    id,
+				Type:  "failed",
+				Steps: resultSteps,
 			}
 		}
 	}
 
 	return adapterprotocol.Response{
-		ID:   id,
-		Type: "passed",
+		ID:    id,
+		Type:  "passed",
+		Steps: resultSteps,
 	}
+}
+
+func stepStatus(actual, expected string) string {
+	if actual == expected {
+		return "passed"
+	}
+	return "failed"
 }
 
 func runTableRowCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {

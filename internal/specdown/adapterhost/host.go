@@ -263,6 +263,7 @@ func applyResponse(result *core.CaseResult, expectedID int, response adapterprot
 	case "passed":
 		result.Status = core.StatusPassed
 		result.Bindings = coreBindings(response.Bindings)
+		result.Steps = coreDoctestSteps(response.Steps)
 		result.Events = append(result.Events, core.Event{
 			Type:     core.EventCasePassed,
 			ID:       result.ID,
@@ -275,6 +276,7 @@ func applyResponse(result *core.CaseResult, expectedID int, response adapterprot
 		result.Message = response.Message
 		result.Expected = response.Expected
 		result.Actual = response.Actual
+		result.Steps = coreDoctestSteps(response.Steps)
 		if response.Label != "" {
 			result.Label = response.Label
 		}
@@ -302,6 +304,22 @@ func protocolBindings(bindings []core.Binding) []adapterprotocol.Binding {
 		})
 	}
 	return items
+}
+
+func coreDoctestSteps(steps []adapterprotocol.DoctestStep) []core.DoctestStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	result := make([]core.DoctestStep, 0, len(steps))
+	for _, s := range steps {
+		result = append(result, core.DoctestStep{
+			Command:  s.Command,
+			Expected: s.Expected,
+			Actual:   s.Actual,
+			Status:   core.Status(s.Status),
+		})
+	}
+	return result
 }
 
 func coreBindings(bindings []adapterprotocol.Binding) []core.Binding {

@@ -25,6 +25,13 @@ type Event struct {
 	Bindings []Binding `json:"bindings,omitempty"`
 }
 
+type DoctestStep struct {
+	Command  string `json:"command"`
+	Expected string `json:"expected"`
+	Actual   string `json:"actual"`
+	Status   Status `json:"status"`
+}
+
 type CaseResult struct {
 	ID             SpecID    `json:"id"`
 	Kind           CaseKind  `json:"kind"`
@@ -42,8 +49,9 @@ type CaseResult struct {
 	Message        string    `json:"message,omitempty"`
 	Expected       string    `json:"expected,omitempty"`
 	Actual         string    `json:"actual,omitempty"`
-	Bindings       []Binding `json:"bindings,omitempty"`
-	Events         []Event   `json:"events,omitempty"`
+	Bindings       []Binding      `json:"bindings,omitempty"`
+	Steps          []DoctestStep  `json:"steps,omitempty"`
+	Events         []Event        `json:"events,omitempty"`
 }
 
 type AlloyCheckResult struct {

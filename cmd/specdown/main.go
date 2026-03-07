@@ -193,25 +193,29 @@ func printCaseFailures(cases []core.CaseResult) {
 		if c.Status != core.StatusFailed || c.ExpectFail {
 			continue
 		}
-		path := strings.Join(c.ID.HeadingPath, " > ")
-		kind := c.Block + c.Fixture
-		label := ""
-		if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
-			label = fmt.Sprintf(" row %d", c.RowNumber)
-			if c.Label != "" {
-				label = fmt.Sprintf(" row %d %q", c.RowNumber, c.Label)
-			}
+		printCaseFailure(c)
+	}
+}
+
+func printCaseFailure(c core.CaseResult) {
+	path := strings.Join(c.ID.HeadingPath, " > ")
+	kind := c.Block + c.Fixture
+	label := ""
+	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
+		label = fmt.Sprintf(" row %d", c.RowNumber)
+		if c.Label != "" {
+			label = fmt.Sprintf(" row %d %q", c.RowNumber, c.Label)
 		}
-		fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]%s\n", path, kind, label)
-		if c.Message != "" {
-			fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
-		}
-		if c.Expected != "" {
-			fmt.Fprintf(os.Stderr, "        expected: %s\n", c.Expected)
-		}
-		if c.Actual != "" {
-			fmt.Fprintf(os.Stderr, "        actual:   %s\n", c.Actual)
-		}
+	}
+	fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]%s\n", path, kind, label)
+	if c.Message != "" {
+		fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
+	}
+	if c.Expected != "" {
+		fmt.Fprintf(os.Stderr, "        expected: %s\n", c.Expected)
+	}
+	if c.Actual != "" {
+		fmt.Fprintf(os.Stderr, "        actual:   %s\n", c.Actual)
 	}
 }
 

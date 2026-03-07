@@ -258,41 +258,51 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
-	source := result.Template
-	if result.RenderedSource != "" {
-		source = result.RenderedSource
-	}
-	if strings.HasPrefix(result.Block, "doctest:") && result.Status == core.StatusFailed {
-		source = doctestCommandsOnly(source)
-	}
 	out.WriteString(`<div class="exec-source">`)
-	out.WriteString(`<code>`)
-	out.WriteString(template.HTMLEscapeString(source))
-	out.WriteString(`</code>`)
-	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
-		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
+	if strings.HasPrefix(result.Block, "doctest:") && len(result.Steps) > 0 {
+		renderDoctestSteps(&out, result.Steps)
+	} else {
+		renderCodeSource(&out, result)
 	}
 	if result.ExpectFail {
 		out.WriteString(`<div class="expect-fail-label">expected failure</div>`)
 	}
-	if len(result.Bindings) > 0 {
-		out.WriteString(`<div class="exec-bindings">`)
-		for i, b := range result.Bindings {
-			if i > 0 {
-				out.WriteString(`, `)
-			}
-			out.WriteString(template.HTMLEscapeString(b.Name))
-			out.WriteString(`=`)
-			out.WriteString(template.HTMLEscapeString(b.Value))
-		}
-		out.WriteString(`</div>`)
-	}
+	renderBindings(&out, result.Bindings)
 	out.WriteString(`</div>`)
 	out.WriteString(`<p class="exec-block-footer">`)
 	out.WriteString(template.HTMLEscapeString(result.Block))
 	out.WriteString(`</p>`)
 	out.WriteString(`</section>`)
 	return out.String(), nil
+}
+
+func renderCodeSource(out *strings.Builder, result core.CaseResult) {
+	source := result.Template
+	if result.RenderedSource != "" {
+		source = result.RenderedSource
+	}
+	out.WriteString(`<code>`)
+	out.WriteString(template.HTMLEscapeString(source))
+	out.WriteString(`</code>`)
+	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
+		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
+	}
+}
+
+func renderBindings(out *strings.Builder, bindings []core.Binding) {
+	if len(bindings) == 0 {
+		return
+	}
+	out.WriteString(`<div class="exec-bindings">`)
+	for i, b := range bindings {
+		if i > 0 {
+			out.WriteString(`, `)
+		}
+		out.WriteString(template.HTMLEscapeString(b.Name))
+		out.WriteString(`=`)
+		out.WriteString(template.HTMLEscapeString(b.Value))
+	}
+	out.WriteString(`</div>`)
 }
 
 func renderHeading(node core.HeadingNode, documentPath string) (string, error) {
@@ -534,14 +544,34 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 }
 
 
-func doctestCommandsOnly(source string) string {
-	var commands []string
-	for _, line := range strings.Split(source, "\n") {
-		if strings.HasPrefix(line, "$ ") {
-			commands = append(commands, line)
+func renderDoctestSteps(out *strings.Builder, steps []core.DoctestStep) {
+	out.WriteString(`<div class="doctest-steps">`)
+	for _, step := range steps {
+		out.WriteString(`<div class="doctest-command">`)
+		out.WriteString(`<span class="doctest-prompt">$ </span>`)
+		out.WriteString(template.HTMLEscapeString(step.Command))
+		out.WriteString(`</div>`)
+		if step.Status == core.StatusPassed {
+			if step.Actual != "" {
+				out.WriteString(`<div class="doctest-output passed">`)
+				out.WriteString(template.HTMLEscapeString(step.Actual))
+				out.WriteString(`</div>`)
+			}
+		} else {
+			if step.Actual != "" {
+				out.WriteString(`<div class="doctest-output failed">`)
+				out.WriteString(template.HTMLEscapeString(step.Actual))
+				out.WriteString(`</div>`)
+			}
+			if step.Expected != "" {
+				out.WriteString(`<div class="doctest-expected">`)
+				out.WriteString(template.HTMLEscapeString(step.Expected))
+				out.WriteString(` <span class="doctest-expected-label">(expected)</span>`)
+				out.WriteString(`</div>`)
+			}
 		}
 	}
-	return strings.Join(commands, "\n")
+	out.WriteString(`</div>`)
 }
 
 var mdConverter = goldmark.New(goldmark.WithExtensions(extension.Table))
@@ -811,6 +841,27 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .exec-block.failed > .exec-source:not(.resolved) {
       border-left-color: var(--fail-mark);
       background: var(--fail-bg);
+    }
+
+    .doctest-steps {
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .doctest-prompt { color: var(--muted); user-select: none; }
+
+    .doctest-output.passed { color: var(--pass-ink); }
+    .doctest-output.failed { color: var(--fail-ink); }
+
+    .doctest-expected {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .doctest-expected-label {
+      font-size: 0.82rem;
     }
 
     .expect-fail-label {

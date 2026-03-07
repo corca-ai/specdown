@@ -95,6 +95,23 @@ line2
 line3
 ```
 
+Arithmetic and pipelines work as expected.
+
+```doctest:shell
+$ echo $((2 + 3))
+5
+$ seq 3 | tr '\n' '+' | sed 's/+$//'
+1+2+3
+```
+
+Commands that produce no output show only the prompt line.
+
+```doctest:shell
+$ mkdir -p /tmp/specdown-test
+$ touch /tmp/specdown-test/file.txt
+$ test -f /tmp/specdown-test/file.txt
+```
+
 ## Expected Failures
 
 Any executable block can be marked with `!fail` to indicate that failure
@@ -132,16 +149,28 @@ A run block that exits non-zero normally fails. With `!fail`, it passes.
 exit 1
 ```
 
-### Multi-line doctest mismatch
+### Multi-step doctest mismatch
 
 When multiple commands are present, the block fails fast on the first
-mismatch. With `!fail`, that expected mismatch is a pass.
+mismatch. Passed steps show actual output in green; the failed step
+shows actual output in red with the expected value below it.
 
 ```doctest:shell !fail
 $ echo first
 first
 $ echo second
 WRONG
+```
+
+### Doctest with multi-line mismatch
+
+Multi-line expected output is compared exactly. The entire actual
+output is shown in red on mismatch.
+
+```doctest:shell !fail
+$ printf 'alpha\nbeta'
+alpha
+gamma
 ```
 
 ## Fixture Tables

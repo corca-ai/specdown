@@ -49,27 +49,10 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
 	}
 
-	// Extract !fail modifier
-	expectFail := false
-	working := trimmed
-	if idx := strings.Index(working, " !fail"); idx >= 0 {
-		rest := working[idx+len(" !fail"):]
-		if rest == "" || rest[0] == ' ' {
-			expectFail = true
-			working = strings.TrimSpace(working[:idx] + rest)
-		}
-	}
-
-	infoPart := working
-	var captureNames []string
-	if strings.Contains(working, "->") {
-		parts := strings.SplitN(working, "->", 2)
-		infoPart = strings.TrimSpace(parts[0])
-		names, err := parseCaptureNames(parts[1])
-		if err != nil {
-			return BlockSpec{}, err
-		}
-		captureNames = names
+	expectFail, working := extractExpectFail(trimmed)
+	infoPart, captureNames, err := extractCaptures(working)
+	if err != nil {
+		return BlockSpec{}, err
 	}
 
 	parts := strings.SplitN(infoPart, ":", 2)
@@ -80,15 +63,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 	kind := BlockKind(parts[0])
 	target := strings.TrimSpace(parts[1])
 	switch kind {
-	case BlockKindRun, BlockKindVerify:
-		if target == "" {
-			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
-		}
-		if expectFail && len(captureNames) > 0 {
-			return BlockSpec{}, fmt.Errorf("!fail blocks do not support captures")
-		}
-		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames, ExpectFail: expectFail}, nil
-	case BlockKindTest:
+	case BlockKindRun, BlockKindVerify, BlockKindTest:
 		if target == "" {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
 		}
@@ -107,6 +82,30 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 	}
 
 	return BlockSpec{Raw: trimmed}, nil
+}
+
+func extractExpectFail(s string) (bool, string) {
+	idx := strings.Index(s, " !fail")
+	if idx < 0 {
+		return false, s
+	}
+	rest := s[idx+len(" !fail"):]
+	if rest != "" && rest[0] != ' ' {
+		return false, s
+	}
+	return true, strings.TrimSpace(s[:idx] + rest)
+}
+
+func extractCaptures(working string) (string, []string, error) {
+	if !strings.Contains(working, "->") {
+		return working, nil, nil
+	}
+	parts := strings.SplitN(working, "->", 2)
+	names, err := parseCaptureNames(parts[1])
+	if err != nil {
+		return "", nil, err
+	}
+	return strings.TrimSpace(parts[0]), names, nil
 }
 
 var captureNamePattern = regexp.MustCompile(`^\$([A-Za-z_][A-Za-z0-9_]*)$`)
