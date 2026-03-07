@@ -660,7 +660,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .content-meta {
-      margin: 0 0 0.5rem;
+      margin: 0 0 2rem;
       color: var(--muted);
       font-size: 0.82rem;
       line-height: 1.65;
@@ -700,6 +700,16 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         position: sticky;
         background: var(--bg);
         box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.06);
+
+        &::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 100%;
+          height: 1.5rem;
+          background: inherit;
+        }
       }
 
       & h2 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: var(--safe-top); z-index: 14; }
