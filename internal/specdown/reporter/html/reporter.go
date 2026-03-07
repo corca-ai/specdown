@@ -759,7 +759,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     /* ── Executable blocks ── */
     .exec-block,
     .exec-table-block {
-      margin: 1.35rem 0;
+      margin: 0.75rem 0;
     }
 
     .exec-block { scroll-margin-top: 1.5rem; }
