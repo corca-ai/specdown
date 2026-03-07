@@ -3,9 +3,14 @@
 `specdown` is a Markdown-first executable specification system.
 A single Markdown document serves as both a readable specification and an executable test.
 
-## Version
+Spec files are `*.spec.md` Markdown documents.
+Prose is preserved as-is; only executable blocks, fixture tables, and Alloy model blocks are structurally interpreted.
 
-The CLI must report its version when invoked with `version`.
+## CLI
+
+### Version
+
+The CLI reports its version when invoked with `version`.
 
 ```run:shell -> $version
 specdown version
@@ -15,7 +20,7 @@ specdown version
 echo "${version}" | grep -qE '^[a-z0-9]'
 ```
 
-## Dry Run
+### Dry Run
 
 Dry-run mode parses and validates spec files without executing adapters.
 This is useful for checking syntax before a full run.
@@ -24,10 +29,131 @@ This is useful for checking syntax before a full run.
 specdown run -config selfspec.json -dry-run 2>&1
 ```
 
-The dry-run output must contain the word "spec" (listing discovered specs).
+The dry-run output lists discovered specs.
 
 ```verify:shell
 echo "${dryOutput}" | grep -q "spec"
+```
+
+### Filter
+
+The `-filter` flag runs only cases whose heading path contains the given string.
+
+```run:shell -> $filterOutput
+specdown run -config selfspec.json -dry-run -filter "Version" 2>&1
+```
+
+```verify:shell
+echo "${filterOutput}" | grep -q "Version"
+```
+
+### CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-config` | `specdown.json` | Config file path |
+| `-out` | (per config file) | HTML report output path |
+| `-filter` | (none) | Heading path substring filter |
+| `-jobs` | `1` | Number of spec files to run in parallel |
+| `-dry-run` | `false` | Parse and validate only |
+
+## Configuration
+
+specdown uses a data-only JSON configuration file.
+The canonical config must not depend on any specific language runtime.
+
+```json
+{
+  "title": "Project Spec",
+  "include": ["specs/**/*.spec.md"],
+  "adapters": [
+    {
+      "name": "myapp",
+      "command": ["python3", "./tools/adapter.py"],
+      "blocks": ["run:myapp", "verify:myapp"],
+      "fixtures": ["user-exists"]
+    }
+  ],
+  "reporters": [
+    { "builtin": "html", "outFile": ".artifacts/specdown/report.html" },
+    { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
+  ],
+  "models": { "builtin": "alloy" }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `title` | Report title displayed as `<h1>`. Defaults to `"Specification"` |
+| `include` | Glob patterns for spec files |
+| `adapters` | List of adapters that handle executable blocks and fixtures |
+| `reporters` | Output generators. `html` and `json` builtins provided |
+| `models` | Alloy model verification. Can be omitted if not used |
+
+### Missing include pattern
+
+A config file without `include` must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+echo '{}' > .tmp-test/bad-config.json
+! specdown run -config .tmp-test/bad-config.json 2>/dev/null
+```
+
+### Duplicate adapter name
+
+Two adapters with the same name must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+cat <<'CFG' > .tmp-test/dup-adapter.json
+{
+  "include": ["*.spec.md"],
+  "adapters": [
+    {"name": "a", "command": ["true"], "blocks": ["run:x"]},
+    {"name": "a", "command": ["true"], "blocks": ["run:y"]}
+  ]
+}
+CFG
+! specdown run -config .tmp-test/dup-adapter.json 2>/dev/null
+```
+
+## Document Structure
+
+### Heading hierarchy
+
+Heading hierarchy (`#`, `##`, `###`, ...) is converted into a test suite hierarchy.
+Prose paragraphs are preserved in the HTML report but are not execution targets.
+
+### Frontmatter
+
+An optional YAML frontmatter can be placed at the top of a spec file.
+
+| Key | Description |
+|-----|-------------|
+| `timeout` | Per-case execution time limit in milliseconds. 0 means unlimited |
+
+If frontmatter is absent, defaults (unlimited) apply.
+
+A spec with a timeout must still pass when the adapter responds quickly.
+
+```run:shell
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/timeout.spec.md
+---
+timeout: 5000
+---
+
+# Timeout Test
+
+## Quick
+
+A simple command that completes well within the timeout.
+SPEC
+cat <<'CFG' > .tmp-test/timeout-cfg.json
+{"include":["timeout.spec.md"],"adapters":[]}
+CFG
+specdown run -config .tmp-test/timeout-cfg.json -dry-run 2>&1
 ```
 
 ## Parsing
@@ -79,37 +205,17 @@ CFG
 ! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
 ```
 
-## Configuration
+## Executable Blocks
 
-### Missing include pattern
+Executable blocks are fenced code blocks whose info string starts with a recognized prefix.
 
-A config file without `include` must be rejected.
+| Prefix | Meaning |
+|--------|---------|
+| `run:<target>` | Side-effecting executable block |
+| `verify:<target>` | Assertion block |
+| `test:<name>` | Named high-level test DSL |
 
-```verify:shell
-mkdir -p .tmp-test
-echo '{}' > .tmp-test/bad-config.json
-! specdown run -config .tmp-test/bad-config.json 2>/dev/null
-```
-
-### Duplicate adapter name
-
-Two adapters with the same name must be rejected.
-
-```verify:shell
-mkdir -p .tmp-test
-cat <<'CFG' > .tmp-test/dup-adapter.json
-{
-  "include": ["*.spec.md"],
-  "adapters": [
-    {"name": "a", "command": ["true"], "blocks": ["run:x"]},
-    {"name": "a", "command": ["true"], "blocks": ["run:y"]}
-  ]
-}
-CFG
-! specdown run -config .tmp-test/dup-adapter.json 2>/dev/null
-```
-
-## Block Syntax
+The `<target>` is defined by the adapter, not the core.
 
 ### Supported block kinds
 
@@ -122,20 +228,73 @@ The parser must recognize `run`, `verify`, and `test` as executable block kinds.
 | verify:api | verify | api |
 | test:login | test | login |
 
-### Variable capture syntax
+### Variable capture
 
-A block with `-> $varName` must capture the named variable.
+A block can capture its output into a variable with `-> $varName`.
 
 <!-- fixture:block-kind -->
 | info | kind | target |
 | --- | --- | --- |
 | run:shell -> $id | run | shell |
 
-## Table Specs
+## Variables
+
+Values captured from executable blocks are referenced in subsequent blocks
+and tables using `${variableName}`.
+
+### Scoping rules
+
+- Variables from parent sections are readable in child sections
+- Sibling sections at the same depth can share variables (in document order, only previously captured values)
+- An unresolved variable is a compile-time error
+
+### Variable escaping
+
+To output a literal `${...}`, escape it with a backslash: `\${literal}`.
+
+```run:shell -> $escapeTest
+printf 'ok'
+```
+
+```verify:shell
+test "${escapeTest}" = "ok"
+```
+
+### Unresolved variable error
+
+Referencing a variable that was never captured must produce an error.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```run:shell\necho \${missing}\n```\n' > .tmp-test/unresolved.spec.md
+cat <<'CFG' > .tmp-test/unresolved-cfg.json
+{"include":["unresolved.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+CFG
+specdown run -config .tmp-test/unresolved-cfg.json 2>&1 | grep -q "missing"
+! specdown run -config .tmp-test/unresolved-cfg.json 2>/dev/null
+```
+
+## Fixture Tables
+
+A Markdown table becomes executable when preceded by a fixture directive.
+
+The directive is an HTML comment of the form `<!-- fixture:name -->`.
+The first row is the header. Each subsequent row is an independent test case.
+Fixture names are defined by the adapter, not the core.
 
 ### Cell escaping
 
-Table cells support escape sequences that are processed by the core.
+Table cells support escape sequences that are processed by the core
+before sending to the adapter.
+
+| Sequence | Meaning |
+|----------|---------|
+| `\n` | newline |
+| `\|` | literal pipe |
+| `\\` | literal backslash |
+
+Adapters always receive unescaped values.
+The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 
 <!-- fixture:cell-escape -->
 | input | expected |
@@ -144,9 +303,115 @@ Table cells support escape sequences that are processed by the core.
 | line1\nline2 | line1\nline2 |
 | a\\\|b | a\\\|b |
 
+### Fixture parameters
+
+Fixtures can accept parameters via `(key=value)` syntax.
+Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
+Multiple parameters are comma-separated: `<!-- fixture:name(key1=val1, key2=val2) -->`.
+
+## Adapter Protocol
+
+An adapter is an executable that exchanges NDJSON messages via stdin/stdout.
+Any language works as long as it reads JSON from stdin and writes JSON to stdout.
+
+### Protocol flow
+
+1. specdown sends a `setup` message (no response required)
+2. specdown sends `runCase` messages in document order, each with an integer `id`
+3. The adapter responds to each case with `passed` or `failed`, echoing the `id`
+4. specdown sends a `teardown` message (no response required)
+
+### Request format
+
+For executable blocks (`kind: "code"`):
+
+```json
+{
+  "type": "runCase",
+  "id": 1,
+  "case": {
+    "kind": "code",
+    "block": "run:myapp",
+    "source": "create-board",
+    "captureNames": ["boardName"],
+    "bindings": [{"name": "x", "value": "1"}]
+  }
+}
+```
+
+For fixture table rows (`kind: "tableRow"`):
+
+```json
+{
+  "type": "runCase",
+  "id": 2,
+  "case": {
+    "kind": "tableRow",
+    "fixture": "board-exists",
+    "fixtureParams": {"user": "alan"},
+    "columns": ["board", "exists"],
+    "cells": ["board-1", "yes"],
+    "bindings": []
+  }
+}
+```
+
+Variables in `source` and `cells` are already substituted.
+Cell escape sequences are already resolved.
+The adapter can process values directly without additional substitution.
+
+### Response format
+
+```json
+{"id": 1, "type": "passed"}
+{"id": 1, "type": "passed", "bindings": [{"name": "boardName", "value": "board-1"}]}
+{"id": 1, "type": "failed", "message": "expected 3, got 4"}
+{"id": 1, "type": "failed", "message": "mismatch", "expected": "foo", "actual": "bar", "label": "row description"}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Correlation ID, must echo the request `id` |
+| `type` | `"passed"` or `"failed"` |
+| `message` | Error description (failed only) |
+| `expected` | Expected value for structured diff (optional) |
+| `actual` | Actual value for structured diff (optional) |
+| `label` | Human-readable row identifier, overrides default (optional) |
+| `bindings` | Captured variables to pass to subsequent cases (passed only) |
+
+### Registration
+
+Adapters declare their capabilities in `specdown.json`.
+specdown routes each case to the adapter that declared the matching block or fixture.
+
+```json
+{
+  "adapters": [{
+    "name": "myapp",
+    "command": ["python3", "./tools/adapter.py"],
+    "blocks": ["run:myapp", "verify:myapp"],
+    "fixtures": ["user-exists"]
+  }]
+}
+```
+
+### Adapter behavior
+
+- A single adapter process handles multiple `runCase` requests during one spec run
+- The adapter can maintain process-local state across requests
+- A non-zero exit indicates infrastructure failure, not a case failure
+- stderr is used for diagnostic output; only protocol messages go to stdout
+
 ## HTML Report
 
-After a spec run, the HTML report must be generated as a self-contained file.
+After a spec run, the HTML report is generated as a self-contained file.
+It preserves the document structure, annotating execution results inline.
+
+- Prose is displayed as-is; only execution results are annotated with status
+- Status indicators appear at section, code block, table row, and alloy reference levels
+- Pass is shown with green, fail with red
+- Failed items display message, expected/actual diff inline
+- A summary shows pass/fail counts
 
 ```run:shell
 mkdir -p .tmp-test
@@ -175,7 +440,93 @@ grep -q '<html' .tmp-test/report.html
 grep -q 'Report Test' .tmp-test/report.html
 ```
 
-## Formal Properties
+### Artifacts
+
+| File | Description |
+|------|-------------|
+| `.artifacts/specdown/report.html` | Executed specification HTML report |
+| `.artifacts/specdown/report.json` | Machine-readable results |
+| `.artifacts/specdown/models/*.als` | Combined Alloy models |
+
+## Failure Diagnostics
+
+When an adapter returns `expected`/`actual` values on failure,
+those values appear in both the CLI output and the JSON report.
+
+The CLI output format for fixture table failures includes the row number
+and optional label:
+
+```
+  FAIL  Heading > Path  [fixture-name] row 5 "description"
+        error message
+        expected: expected-value
+        actual:   actual-value
+```
+
+```run:shell
+mkdir -p .tmp-test
+cat <<'ADAPTER' > .tmp-test/diag-adapter.sh
+#!/bin/sh
+# A minimal adapter that fails with expected/actual/label
+while IFS= read -r line; do
+  type=$(echo "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
+  case "$type" in
+    setup|teardown) ;;
+    runCase)
+      echo "{\"id\":1,\"type\":\"failed\",\"message\":\"content mismatch\",\"expected\":\"alpha\\nbeta\",\"actual\":\"alpha\\ngamma\",\"label\":\"diag row\"}"
+      ;;
+  esac
+done
+ADAPTER
+chmod +x .tmp-test/diag-adapter.sh
+cat <<'SPEC' > .tmp-test/diag.spec.md
+# Diag Test
+
+<!-- fixture:diag -->
+| input | output |
+| --- | --- |
+| a | b |
+SPEC
+cat <<'CFG' > .tmp-test/diag.json
+{"include":["diag.spec.md"],"adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"}]}
+CFG
+specdown run -config .tmp-test/diag.json 2>&1 || true
+```
+
+The JSON report must contain the expected and actual fields.
+
+```verify:shell
+grep -q '"expected"' .tmp-test/report.json
+```
+
+```verify:shell
+grep -q '"actual"' .tmp-test/report.json
+```
+
+The adapter label must appear in the report.
+
+```verify:shell
+grep -q '"diag row"' .tmp-test/report.json
+```
+
+## Alloy Models
+
+Alloy fragments can be embedded directly in a spec document using
+`alloy:model(name)` code blocks.
+
+Fragments with the same model name are combined in document order
+into a single logical model. Only the first fragment may contain
+a `module` declaration.
+
+To link an assertion check result to the current section:
+
+```
+<!-- alloy:ref(modelName#assertionName, scope=5) -->
+```
+
+This directive displays the check result as a status badge in the HTML report.
+
+### Formal Properties
 
 The document model has a simple structural invariant:
 every executable block belongs to exactly one heading scope.

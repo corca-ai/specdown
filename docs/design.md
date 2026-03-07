@@ -182,7 +182,7 @@ export type AdapterRequest =
 
 export type AdapterResponse =
   | { id: number; type: "passed"; bindings?: Binding[] }
-  | { id: number; type: "failed"; message: string };
+  | { id: number; type: "failed"; message: string; expected?: string; actual?: string; label?: string };
 ```
 
 Key rules:

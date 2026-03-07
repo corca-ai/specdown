@@ -37,7 +37,7 @@ go build -o specdown ./cmd/specdown
 }
 ```
 
-2. Write a spec in `specs/example.spec.md` (see [Writing Specs](docs/guide-spec.md)).
+2. Write a spec in `specs/example.spec.md` (see [Self-Spec](selfspecs/specdown.spec.md) for syntax reference).
 
 3. Run:
 
@@ -50,9 +50,9 @@ The HTML report is written to `.artifacts/specdown/report.html`.
 ## Documentation
 
 - [Introduction](docs/introduction.md) — problem, approach, and how the three layers work together
-- [Writing Specs](docs/guide-spec.md) — spec file syntax
-- [Writing Adapters](docs/guide-adapter.md) — adapter protocol and examples
-- [Configuration & Running](docs/guide-config.md) — `specdown.json` and CLI options
+- [Specdown Self-Spec](selfspecs/specdown.spec.md) — executable reference for syntax, config, CLI, adapter protocol, and report behavior
+- [Adapter Tutorial](docs/guide-adapter-tutorial.md) — how to build an adapter from scratch
+- [Writing Good Specs](docs/guide-writing.md) — best practices and Alloy/E2E patterns
 - [Build & Run](docs/build.md) — building from source and releasing
 - [System Design](docs/design.md) — architecture and internals
 

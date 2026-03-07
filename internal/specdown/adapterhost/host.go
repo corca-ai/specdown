@@ -273,11 +273,18 @@ func applyResponse(result *core.CaseResult, expectedID int, response adapterprot
 	case "failed":
 		result.Status = core.StatusFailed
 		result.Message = response.Message
+		result.Expected = response.Expected
+		result.Actual = response.Actual
+		if response.Label != "" {
+			result.Label = response.Label
+		}
 		result.Events = append(result.Events, core.Event{
-			Type:    core.EventCaseFailed,
-			ID:      result.ID,
-			Label:   result.Label,
-			Message: result.Message,
+			Type:     core.EventCaseFailed,
+			ID:       result.ID,
+			Label:    result.Label,
+			Message:  result.Message,
+			Expected: result.Expected,
+			Actual:   result.Actual,
 		})
 		return nil
 	default:

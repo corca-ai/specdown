@@ -27,5 +27,8 @@ type Response struct {
 	ID       int       `json:"id"`
 	Type     string    `json:"type"`
 	Message  string    `json:"message,omitempty"`
+	Expected string    `json:"expected,omitempty"`
+	Actual   string    `json:"actual,omitempty"`
+	Label    string    `json:"label,omitempty"`
 	Bindings []Binding `json:"bindings,omitempty"`
 }

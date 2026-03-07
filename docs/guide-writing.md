@@ -1,7 +1,7 @@
 # Writing Good Specs
 
 This guide covers best practices for writing effective specdown documents.
-For syntax reference, see [Writing Specs](guide-spec.md).
+For syntax reference, see the [Specdown self-spec](../selfspecs/specdown.spec.md).
 For Alloy language details, see [Alloy Language Reference](alloy-reference.md).
 
 
@@ -154,7 +154,7 @@ Four cases, proven complete. One representative per case is sufficient.
 | /private/alice/a | deny     | denied       |
 ````
 
-Note: the fixture directive uses a parameter `(user=alice)` to set shared context for all rows. Parameters are passed to the adapter as `fixtureParams`. See [Writing Specs](guide-spec.md) for the parameter syntax.
+Note: the fixture directive uses a parameter `(user=alice)` to set shared context for all rows. Parameters are passed to the adapter as `fixtureParams`. See the [self-spec](../selfspecs/specdown.spec.md#fixture-parameters) for the parameter syntax.
 
 ### 4. Invariant Leverage
 

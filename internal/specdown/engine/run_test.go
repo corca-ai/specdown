@@ -3,6 +3,7 @@ package engine
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -146,8 +147,15 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 	if report.Summary.CasesFailed != 1 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].Cases[2].Message; got != "expected card \"card-1\" in board \"board-1\" to be in column \"doing\"; actual column: \"todo\"" {
-		t.Fatalf("unexpected failure message %q", got)
+	failedCase := report.Results[0].Cases[2]
+	if failedCase.Message != "column mismatch for card \"card-1\" in board \"board-1\"" {
+		t.Fatalf("unexpected failure message %q", failedCase.Message)
+	}
+	if failedCase.Expected != "doing" {
+		t.Fatalf("unexpected expected %q", failedCase.Expected)
+	}
+	if failedCase.Actual != "todo" {
+		t.Fatalf("unexpected actual %q", failedCase.Actual)
 	}
 }
 
@@ -561,11 +569,19 @@ type helperCard struct {
 func runHelperCase(encoder *json.Encoder, state *helperState, seqID int, item adapterprotocol.Case) {
 	bindings, err := executeHelperCase(state, item)
 	if err != nil {
-		_ = encoder.Encode(adapterprotocol.Response{
+		resp := adapterprotocol.Response{
 			ID:      seqID,
 			Type:    "failed",
 			Message: err.Error(),
-		})
+		}
+		var hf *helperFailure
+		if errors.As(err, &hf) {
+			resp.Message = hf.message
+			resp.Expected = hf.expected
+			resp.Actual = hf.actual
+			resp.Label = hf.label
+		}
+		_ = encoder.Encode(resp)
 		return
 	}
 
@@ -716,8 +732,10 @@ func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]a
 		if card.column == expectedColumn {
 			return nil, nil
 		}
-		return nil, &helperError{
-			message: "expected card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName) + " to be in column " + strconvQuote(expectedColumn) + "; actual column: " + strconvQuote(card.column),
+		return nil, &helperFailure{
+			message:  "column mismatch for card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName),
+			expected: expectedColumn,
+			actual:   card.column,
 		}
 	default:
 		return nil, &helperError{message: "unsupported fixture " + strconvQuote(item.Fixture)}
@@ -729,6 +747,17 @@ type helperError struct {
 }
 
 func (e *helperError) Error() string {
+	return e.message
+}
+
+type helperFailure struct {
+	message  string
+	expected string
+	actual   string
+	label    string
+}
+
+func (e *helperFailure) Error() string {
 	return e.message
 }
 

@@ -255,10 +255,8 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(source))
 	out.WriteString(`</code>`)
-	if result.Message != "" {
-		out.WriteString(`<div class="cell-actual">`)
-		out.WriteString(template.HTMLEscapeString(result.Message))
-		out.WriteString(`</div>`)
+	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
+		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
 	}
 	if len(result.Bindings) > 0 {
 		out.WriteString(`<div class="exec-bindings">`)
@@ -374,14 +372,41 @@ func renderTableRow(out *strings.Builder, row core.TableRowNode, result core.Cas
 		out.WriteString(`<div class="cell-template">`)
 		out.WriteString(template.HTMLEscapeString(core.UnescapeCell(cell)))
 		out.WriteString(`</div>`)
-		if result.Status == core.StatusFailed && index == lastIndex && result.Message != "" {
-			out.WriteString(`<div class="cell-actual">`)
-			out.WriteString(template.HTMLEscapeString(result.Message))
-			out.WriteString(`</div>`)
+		if result.Status == core.StatusFailed && index == lastIndex {
+			renderFailureDiff(out, result.Message, result.Expected, result.Actual)
 		}
 		out.WriteString(`</td>`)
 	}
 	out.WriteString(`</tr>`)
+}
+
+func renderFailureDiff(out *strings.Builder, message, expected, actual string) {
+	if message == "" && expected == "" && actual == "" {
+		return
+	}
+	if expected == "" && actual == "" {
+		out.WriteString(`<div class="cell-actual">`)
+		out.WriteString(template.HTMLEscapeString(message))
+		out.WriteString(`</div>`)
+		return
+	}
+	out.WriteString(`<dl class="failure-diff compact">`)
+	if message != "" {
+		out.WriteString(`<dt>error</dt><dd>`)
+		out.WriteString(template.HTMLEscapeString(message))
+		out.WriteString(`</dd>`)
+	}
+	if expected != "" {
+		out.WriteString(`<dt>expected</dt><dd>`)
+		out.WriteString(template.HTMLEscapeString(expected))
+		out.WriteString(`</dd>`)
+	}
+	if actual != "" {
+		out.WriteString(`<dt>actual</dt><dd>`)
+		out.WriteString(template.HTMLEscapeString(actual))
+		out.WriteString(`</dd>`)
+	}
+	out.WriteString(`</dl>`)
 }
 
 func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) string {

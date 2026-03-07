@@ -40,7 +40,7 @@ Alloy fragments are woven into the prose with `alloy:model(name)` blocks and `al
 
 ## Further reading
 
-- [Writing Specs](guide-spec.md) — syntax for blocks, tables, variables, and frontmatter
-- [Writing Adapters](guide-adapter.md) — how to implement an adapter in any language
-- [Configuration & Running](guide-config.md) — CLI flags and `specdown.json`
+- [Specdown Self-Spec](../selfspecs/specdown.spec.md) — executable reference for syntax, config, CLI, adapter protocol, and report behavior
+- [Adapter Tutorial](guide-adapter-tutorial.md) — how to build an adapter from scratch
+- [Writing Good Specs](guide-writing.md) — best practices and Alloy/E2E patterns
 - [System Design](design.md) — architecture, protocol, and internals

@@ -13,10 +13,9 @@ Read the following documents before starting work.
 
 ### User Guide
 
-- [Writing Specs](docs/guide-spec.md) — how to write spec files
+- [Specdown Self-Spec](selfspecs/specdown.spec.md) — executable reference for syntax, config, CLI, adapter protocol, and report behavior
 - [Writing Good Specs](docs/guide-writing.md) — best practices and Alloy/E2E patterns
-- [Writing Adapters](docs/guide-adapter.md) — how to implement adapters and the protocol
-- [Configuration & Running](docs/guide-config.md) — configuration files and execution
+- [Adapter Tutorial](docs/guide-adapter-tutorial.md) — how to build an adapter from scratch
 - [Alloy Language Reference](docs/alloy-reference.md) — syntax and semantics of the Alloy language
 
 ## Working Rules

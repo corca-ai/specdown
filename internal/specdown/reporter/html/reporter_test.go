@@ -136,7 +136,9 @@ func buildMainTestReport() core.Report {
 						RenderedCells: []string{"board-1-archive", "yes"},
 						RowNumber:     2,
 						Status:        core.StatusFailed,
-						Message:       "expected board \"board-1-archive\" to exist; actual boards: [\"board-1\"]",
+						Message:       "board existence check failed",
+					Expected:      "board-1-archive exists",
+					Actual:        "not found",
 					},
 				},
 			},
@@ -209,7 +211,8 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 		assertContains(t, html, "boardName=board-1", "binding note")
 		assertContains(t, html, "fixture:board-exists", "fixture label")
 		assertContains(t, html, "board-1-archive", "resolved table cell")
-		assertContains(t, html, `<div class="cell-actual">expected board &#34;board-1-archive&#34; to exist; actual boards: [&#34;board-1&#34;]</div>`, "cell-actual with failure message")
+		assertContains(t, html, `<dt>expected</dt><dd>board-1-archive exists</dd>`, "expected value in failure diff")
+		assertContains(t, html, `<dt>actual</dt><dd>not found</dd>`, "actual value in failure diff")
 		assertContains(t, html, "id=\"case-specs-pocket-board-spec-md-pocket-board-variable-flow-table-check-4\"", "failure anchor link")
 	})
 }
