@@ -18,3 +18,5 @@ jobs:
       - run: go test -race ./...
 
       - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.1
