@@ -94,6 +94,41 @@ Specify a fixture with an HTML comment, then connect the Markdown table immediat
 - Each row is an independent test case
 - Fixture names are defined by the adapter
 
+### Fixture Parameters
+
+Fixtures can accept parameters via `(key=value)` syntax.
+
+```markdown
+<!-- fixture:editor-op(type=lexical) -->
+| initial    | op          | expected     |
+|------------|-------------|--------------|
+| hello‸     | press:Enter | hello\n‸     |
+```
+
+Parameters are passed to the adapter as `fixtureParams` in the `runCase` message. This avoids creating separate fixtures for each parameter combination.
+
+Multiple parameters are comma-separated: `<!-- fixture:check(user=alan, role=admin) -->`.
+
+### Cell Escaping
+
+Table cells support escape sequences.
+
+| Sequence | Meaning |
+|----------|---------|
+| `\n` | newline |
+| `\|` | literal pipe |
+| `\\` | literal backslash |
+
+Escape processing is performed by specdown before cells are sent to the adapter. Adapters always receive unescaped values.
+
+```markdown
+<!-- fixture:check -->
+| input    | expected       |
+|----------|----------------|
+| a\|b     | a\|b           |
+| line1\nline2 | line1\nline2 |
+```
+
 ## Alloy Model
 
 Alloy fragments can be included directly in the document.

@@ -35,7 +35,8 @@ def handle(case):
     # case["block"]  — "run:myapp", "verify:myapp", etc.
     # case["source"] — block body
     # case["fixture"] — fixture name (for table rows)
-    # case["columns"], case["cells"] — table columns and cell values
+    # case["fixtureParams"] — {"key": "value"} from fixture directive (optional)
+    # case["columns"], case["cells"] — table columns and cell values (escapes already resolved)
     # case["bindings"] — variables captured from previous blocks
     # case["captureNames"] — list of variable names to capture
     try:
@@ -113,8 +114,13 @@ If capture is needed, include `[{"name": "userId", "value": "42"}]` in `passed.b
 | Field | Description |
 |-------|-------------|
 | `fixture` | Fixture name (`"user-exists"`) |
+| `fixtureParams` | `{"user": "alan"}` — optional parameters from the directive |
 | `columns` | `["name", "exists"]` |
-| `cells` | `["alice", "yes"]` — values with variables already substituted |
+| `cells` | `["alice", "yes"]` — values with variables already substituted and escapes resolved |
+
+Fixture parameters come from the directive syntax `<!-- fixture:name(key=value) -->`. If no parameters are specified, `fixtureParams` is omitted.
+
+Cell escape sequences (`\n`, `\|`, `\\`) are resolved by specdown before sending. The adapter receives plain values (e.g., a real newline character, not the two-character sequence `\n`).
 
 ## Timeout
 

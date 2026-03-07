@@ -183,6 +183,143 @@ func TestParseDocumentDefaultsFrontmatterWhenAbsent(t *testing.T) {
 	}
 }
 
+func TestParseDocumentParsesFixtureParams(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"<!-- fixture:write-permission(user=alan) -->",
+		"| path | write |",
+		"| --- | --- |",
+		"| /tmp | yes |",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var tables []TableNode
+	for _, node := range doc.Nodes {
+		if tbl, ok := node.(TableNode); ok {
+			tables = append(tables, tbl)
+		}
+	}
+	if len(tables) != 1 {
+		t.Fatalf("expected 1 table, got %d", len(tables))
+	}
+	if tables[0].Fixture != "write-permission" {
+		t.Fatalf("unexpected fixture %q", tables[0].Fixture)
+	}
+	if tables[0].FixtureParams == nil {
+		t.Fatal("expected fixture params")
+	}
+	if got := tables[0].FixtureParams["user"]; got != "alan" {
+		t.Fatalf("expected param user=alan, got %q", got)
+	}
+}
+
+func TestParseDocumentParsesFixtureMultipleParams(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"<!-- fixture:editor-op(type=lexical, mode=rich) -->",
+		"| input | output |",
+		"| --- | --- |",
+		"| a | b |",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var tables []TableNode
+	for _, node := range doc.Nodes {
+		if tbl, ok := node.(TableNode); ok {
+			tables = append(tables, tbl)
+		}
+	}
+	if tables[0].FixtureParams["type"] != "lexical" || tables[0].FixtureParams["mode"] != "rich" {
+		t.Fatalf("unexpected params %#v", tables[0].FixtureParams)
+	}
+}
+
+func TestParseDocumentFixtureWithoutParamsHasNilParams(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"<!-- fixture:board-exists -->",
+		"| board | exists |",
+		"| --- | --- |",
+		"| x | yes |",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var tables []TableNode
+	for _, node := range doc.Nodes {
+		if tbl, ok := node.(TableNode); ok {
+			tables = append(tables, tbl)
+		}
+	}
+	if tables[0].FixtureParams != nil {
+		t.Fatalf("expected nil params for parameterless fixture, got %#v", tables[0].FixtureParams)
+	}
+}
+
+func TestParseTableCellsWithEscapedPipe(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		`<!-- fixture:check -->`,
+		`| input | expected |`,
+		`| --- | --- |`,
+		`| a\|b | a\|b |`,
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var tables []TableNode
+	for _, node := range doc.Nodes {
+		if tbl, ok := node.(TableNode); ok {
+			tables = append(tables, tbl)
+		}
+	}
+	if len(tables) != 1 {
+		t.Fatalf("expected 1 table, got %d", len(tables))
+	}
+	if len(tables[0].Rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(tables[0].Rows))
+	}
+	// Raw cells preserve the escape sequence; UnescapeCell resolves it
+	if got := tables[0].Rows[0].Cells[0]; got != `a\|b` {
+		t.Fatalf("expected raw cell %q, got %q", `a\|b`, got)
+	}
+}
+
+func TestUnescapeCell(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{`hello`, "hello"},
+		{`a\nb`, "a\nb"},
+		{`a\|b`, "a|b"},
+		{`a\\b`, `a\b`},
+		{`\n\|\\\n`, "\n|\\\n"},
+		{`no escapes`, "no escapes"},
+		{`trailing\`, `trailing\`},
+	}
+	for _, tt := range tests {
+		got := UnescapeCell(tt.input)
+		if got != tt.want {
+			t.Errorf("UnescapeCell(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",

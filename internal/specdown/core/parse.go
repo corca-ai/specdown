@@ -57,11 +57,12 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 	lines := splitLines(content)
 
 	var (
-		nodes       []Node
-		headingPath []string
-		title       string
-		ordinal     int
-		fixture     string
+		nodes         []Node
+		headingPath   []string
+		title         string
+		ordinal       int
+		fixture       string
+		fixtureParams map[string]string
 	)
 
 	for i := 0; i < len(lines); {
@@ -86,11 +87,12 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			continue
 		}
 
-		if nextFixture, ok := parseFixtureDirective(line); ok {
+		if nextFixture, nextParams, ok := parseFixtureDirective(line); ok {
 			if fixture != "" {
 				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
 			}
 			fixture = nextFixture
+			fixtureParams = nextParams
 			i++
 			continue
 		}
@@ -162,12 +164,13 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		}
 
 		if isTableStart(lines, i) {
-			table, next, err := parseTableNode(relativePath, lines, i, fixture, &ordinal, headingPath)
+			table, next, err := parseTableNode(relativePath, lines, i, fixture, fixtureParams, &ordinal, headingPath)
 			if err != nil {
 				return Document{}, err
 			}
 			nodes = append(nodes, table)
 			fixture = ""
+			fixtureParams = nil
 			i = next
 			continue
 		}
@@ -200,7 +203,7 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			} else if ok {
 				break
 			}
-			if _, ok := parseFixtureDirective(lines[i]); ok {
+			if _, _, ok := parseFixtureDirective(lines[i]); ok {
 				break
 			}
 			if isTableStart(lines, i) {
@@ -296,16 +299,35 @@ func parseFenceInfo(line string) string {
 	return strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
 }
 
-var fixtureDirectivePattern = regexp.MustCompile(`^\s*<!--\s*fixture:([A-Za-z0-9_-]+)\s*-->\s*$`)
+var fixtureDirectivePattern = regexp.MustCompile(`^\s*<!--\s*fixture:([A-Za-z0-9_-]+)(?:\(([^)]*)\))?\s*-->\s*$`)
 var alloyModelInfoPattern = regexp.MustCompile(`^alloy:model\(([A-Za-z_][A-Za-z0-9_-]*)\)$`)
 var alloyRefDirectivePattern = regexp.MustCompile(`^\s*<!--\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*-->\s*$`)
 
-func parseFixtureDirective(line string) (string, bool) {
+func parseFixtureDirective(line string) (string, map[string]string, bool) {
 	matches := fixtureDirectivePattern.FindStringSubmatch(line)
 	if matches == nil {
-		return "", false
+		return "", nil, false
 	}
-	return matches[1], true
+	var params map[string]string
+	if matches[2] != "" {
+		params = parseFixtureParams(matches[2])
+	}
+	return matches[1], params, true
+}
+
+func parseFixtureParams(raw string) map[string]string {
+	params := make(map[string]string)
+	for _, pair := range strings.Split(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) == 2 {
+			params[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	return params
 }
 
 func parseAlloyModelInfo(info string) (string, bool) {
@@ -346,7 +368,7 @@ func isTableStart(lines []string, index int) bool {
 	return looksLikeTableRow(lines[index]) && isTableSeparator(lines[index+1])
 }
 
-func parseTableNode(relativePath string, lines []string, start int, fixture string, ordinal *int, headingPath []string) (TableNode, int, error) {
+func parseTableNode(relativePath string, lines []string, start int, fixture string, fixtureParams map[string]string, ordinal *int, headingPath []string) (TableNode, int, error) {
 	columns, err := parseTableCells(lines[start])
 	if err != nil {
 		return TableNode{}, 0, fmt.Errorf("%s: %w", relativePath, err)
@@ -387,10 +409,11 @@ func parseTableNode(relativePath string, lines []string, start int, fixture stri
 	}
 
 	return TableNode{
-		Fixture: fixture,
-		Columns: columns,
-		Rows:    rows,
-		Raw:     strings.Join(lines[start:end], ""),
+		Fixture:       fixture,
+		FixtureParams: fixtureParams,
+		Columns:       columns,
+		Rows:          rows,
+		Raw:           strings.Join(lines[start:end], ""),
 	}, end, nil
 }
 
@@ -436,12 +459,62 @@ func parseTableCells(line string) ([]string, error) {
 	}
 	trimmed = strings.TrimPrefix(trimmed, "|")
 	trimmed = strings.TrimSuffix(trimmed, "|")
-	parts := strings.Split(trimmed, "|")
-	cells := make([]string, 0, len(parts))
-	for _, part := range parts {
-		cells = append(cells, strings.TrimSpace(part))
+	cells := splitTableCells(trimmed)
+	result := make([]string, 0, len(cells))
+	for _, cell := range cells {
+		result = append(result, strings.TrimSpace(cell))
 	}
-	return cells, nil
+	return result, nil
+}
+
+// splitTableCells splits on unescaped | characters, treating \| as a literal pipe.
+func splitTableCells(s string) []string {
+	var cells []string
+	var current strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '|' {
+			current.WriteString(`\|`)
+			i++ // skip the |
+		} else if s[i] == '|' {
+			cells = append(cells, current.String())
+			current.Reset()
+		} else {
+			current.WriteByte(s[i])
+		}
+	}
+	cells = append(cells, current.String())
+	return cells
+}
+
+// UnescapeCell processes escape sequences in a table cell value.
+// \n → newline, \| → literal pipe, \\ → literal backslash.
+// This is called by the engine before sending cells to adapters.
+func UnescapeCell(s string) string {
+	if !strings.ContainsRune(s, '\\') {
+		return s
+	}
+	var out strings.Builder
+	out.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case 'n':
+				out.WriteByte('\n')
+				i++
+			case '|':
+				out.WriteByte('|')
+				i++
+			case '\\':
+				out.WriteByte('\\')
+				i++
+			default:
+				out.WriteByte(s[i])
+			}
+		} else {
+			out.WriteByte(s[i])
+		}
+	}
+	return out.String()
 }
 
 func parseHeading(line string) (int, string, bool) {

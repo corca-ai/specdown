@@ -16,15 +16,16 @@ const (
 )
 
 type CaseSpec struct {
-	ID         SpecID
-	Kind       CaseKind
-	Block      BlockSpec
-	Fixture    string
-	Template   string
-	Columns    []string
-	Cells      []string
-	RowNumber  int
-	References []string
+	ID            SpecID
+	Kind          CaseKind
+	Block         BlockSpec
+	Fixture       string
+	FixtureParams map[string]string
+	Template      string
+	Columns       []string
+	Cells         []string
+	RowNumber     int
+	References    []string
 }
 
 type DocumentPlan struct {
@@ -228,12 +229,13 @@ func executableCases(doc Document) []CaseSpec {
 					continue
 				}
 				cases = append(cases, CaseSpec{
-					ID:        *row.ID,
-					Kind:      CaseKindTableRow,
-					Fixture:   current.Fixture,
-					Columns:   append([]string(nil), current.Columns...),
-					Cells:     append([]string(nil), row.Cells...),
-					RowNumber: index + 1,
+					ID:            *row.ID,
+					Kind:          CaseKindTableRow,
+					Fixture:       current.Fixture,
+					FixtureParams: current.FixtureParams,
+					Columns:       append([]string(nil), current.Columns...),
+					Cells:         append([]string(nil), row.Cells...),
+					RowNumber:     index + 1,
 				})
 			}
 		}

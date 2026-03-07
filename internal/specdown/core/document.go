@@ -116,10 +116,11 @@ type TableRowNode struct {
 }
 
 type TableNode struct {
-	Fixture string         `json:"fixture"`
-	Columns []string       `json:"columns"`
-	Rows    []TableRowNode `json:"rows"`
-	Raw     string         `json:"raw"`
+	Fixture       string            `json:"fixture"`
+	FixtureParams map[string]string `json:"fixtureParams,omitempty"`
+	Columns       []string          `json:"columns"`
+	Rows          []TableRowNode    `json:"rows"`
+	Raw           string            `json:"raw"`
 }
 
 func (TableNode) isNode() {}

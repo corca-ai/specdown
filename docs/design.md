@@ -172,6 +172,7 @@ export type AdapterRequest =
         block?: string;
         source?: string;
         fixture?: string;
+        fixtureParams?: Record<string, string>;
         columns?: string[];
         cells?: string[];
         captureNames?: string[];
@@ -332,10 +333,24 @@ Example:
 Rules:
 
 - A table is executable only when combined with a `fixture` directive immediately above it
+- The fixture directive supports optional parameters: `<!-- fixture:name(key=value, key2=value2) -->`
+- Parameters are passed to the adapter as `fixtureParams` in the `runCase` message
 - The first row must be a header
 - Each fixture adapter must explicitly validate the required columns
 - An unknown fixture is a compile-time error
 - Each row becomes an independent test case and an independent report row
+
+### Cell Escaping
+
+Table cells support the following escape sequences.
+
+| Sequence | Meaning |
+|----------|---------|
+| `\n` | newline |
+| `\|` | literal pipe |
+| `\\` | literal backslash |
+
+Escape processing is performed by the core before cells are sent to adapters. Adapters always receive unescaped values and do not need to implement their own escape handling.
 
 The fixture adapter contract must satisfy the following requirements.
 

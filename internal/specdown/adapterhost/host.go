@@ -123,18 +123,25 @@ func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibl
 	s.nextID++
 	seqID := s.nextID
 
+	// Unescape table cells before sending to adapter
+	cells := append([]string(nil), prepared.Cells...)
+	for i, cell := range cells {
+		cells[i] = core.UnescapeCell(cell)
+	}
+
 	request := adapterprotocol.Request{
 		Type: "runCase",
 		ID:   seqID,
 		Case: &adapterprotocol.Case{
-			Kind:         string(prepared.Kind),
-			Block:        prepared.Block.Descriptor(),
-			Source:       prepared.Template,
-			Fixture:      prepared.Fixture,
-			Columns:      append([]string(nil), prepared.Columns...),
-			Cells:        append([]string(nil), prepared.Cells...),
-			CaptureNames: append([]string(nil), prepared.Block.CaptureNames...),
-			Bindings:     protocolBindings(visibleBindings),
+			Kind:          string(prepared.Kind),
+			Block:         prepared.Block.Descriptor(),
+			Source:        prepared.Template,
+			Fixture:       prepared.Fixture,
+			FixtureParams: prepared.FixtureParams,
+			Columns:       append([]string(nil), prepared.Columns...),
+			Cells:         cells,
+			CaptureNames:  append([]string(nil), prepared.Block.CaptureNames...),
+			Bindings:      protocolBindings(visibleBindings),
 		},
 	}
 	if err := s.encoder.Encode(request); err != nil {
