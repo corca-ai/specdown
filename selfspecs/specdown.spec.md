@@ -1,14 +1,66 @@
 # Specdown
 
+## Introduction
+
 `specdown` is a Markdown-first executable specification system.
 A single Markdown document serves as both a readable specification and an executable test.
 
 Spec files are `*.spec.md` Markdown documents.
 Prose is preserved as-is; only executable blocks, fixture tables, and Alloy model blocks are structurally interpreted.
 
-## CLI
+A spec document can contain:
 
-### Version
+- **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, or `test:` that are dispatched to adapters for execution
+- **Fixture tables** — Markdown tables preceded by a `<!-- fixture:name -->` directive, where each row becomes an independent test case
+- **Alloy model blocks** — fenced code blocks with `alloy:model(name)` that embed formal verification fragments
+- **Variables** — values captured from block output with `-> $name` and referenced with `${name}` in subsequent blocks and tables
+- **Hooks** — `<!-- setup -->` and `<!-- teardown -->` directives that run adapter commands at section boundaries
+
+After execution, specdown produces an HTML report that preserves the document structure and annotates each block and table row with pass/fail status.
+
+### Three layers of specification
+
+The power of specdown comes from weaving three complementary layers in a single document:
+
+1. **Natural language** states design intent and rationale in prose. It explains *why* the system behaves a certain way, making the spec readable as a document — not just a test suite.
+
+2. **Alloy models** prove structural properties exhaustively. A model can verify that "a card always belongs to exactly one board" holds for all possible states within a bounded scope — something no finite set of examples can guarantee.
+
+3. **Executable blocks and fixture tables** confirm that the implementation matches. They test concrete behavior against the running system through adapters.
+
+Each layer covers what the others cannot. Prose communicates intent to humans but cannot be executed. Alloy proves properties across all combinations but operates on an abstract model, not real code. Executable blocks test real code but can only cover the examples you write.
+
+When all three live in the same section, the document tells a complete story: *what* the rule is (prose), *why* it holds universally (Alloy), and *that* the implementation obeys it (executable check). A failing Alloy check reveals a design flaw before any code runs. A failing executable block reveals an implementation bug even when the model is sound. And the prose ties both results back to the design decision that motivated them.
+
+## Getting Started
+
+A specdown workflow has three parts: a spec document that describes behavior,
+a configuration file that registers adapters, and the `specdown run` command.
+
+### A Minimal Spec
+
+A well-formed spec document needs only a heading and prose to parse successfully.
+Executable blocks and fixture tables are added as needed.
+
+```run:shell
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/valid.spec.md
+# Valid Spec
+
+Some prose.
+
+## Section
+
+More prose.
+SPEC
+printf '# T\n\n- [Valid](valid.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/valid-cfg.json
+{"entry":"index.spec.md","adapters":[]}
+CFG
+specdown run -config .tmp-test/valid-cfg.json -dry-run 2>&1
+```
+
+### Running Specdown
 
 The CLI reports its version when invoked with `version`.
 
@@ -19,8 +71,6 @@ specdown version
 ```verify:shell
 echo "${version}" | grep -qE '^[a-z0-9]'
 ```
-
-### Dry Run
 
 Dry-run mode parses and validates spec files without executing adapters.
 This is useful for checking syntax before a full run.
@@ -35,96 +85,142 @@ The dry-run output lists discovered specs.
 echo "${dryOutput}" | grep -q "spec"
 ```
 
-### Filter
+## Writing Specs
 
-The `-filter` flag runs only cases whose heading path contains the given string.
+This section builds up spec syntax from simple to complex:
+headings, executable blocks, variables, fixture tables, hooks, and frontmatter.
 
-```run:shell -> $filterOutput
-specdown run -config selfspec.json -dry-run -filter "Version" 2>&1
-```
-
-```verify:shell
-echo "${filterOutput}" | grep -q "Version"
-```
-
-### CLI Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-config` | `specdown.json` | Config file path |
-| `-out` | (per config file) | HTML report output path |
-| `-filter` | (none) | Heading path substring filter |
-| `-jobs` | `1` | Number of spec files to run in parallel |
-| `-dry-run` | `false` | Parse and validate only |
-
-## Configuration
-
-specdown uses a data-only JSON configuration file.
-The canonical config must not depend on any specific language runtime.
-
-```json
-{
-  "entry": "specs/index.spec.md",
-  "adapters": [
-    {
-      "name": "myapp",
-      "command": ["python3", "./tools/adapter.py"],
-      "blocks": ["run:myapp", "verify:myapp"],
-      "fixtures": ["user-exists"]
-    }
-  ],
-  "reporters": [
-    { "builtin": "html", "outFile": ".artifacts/specdown/report.html" },
-    { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
-  ],
-  "models": { "builtin": "alloy" }
-}
-```
-
-The report title is taken from the H1 heading in the entry file.
-The entry file lists spec documents as Markdown links; their order determines the table of contents.
-
-| Field | Description |
-|-------|-------------|
-| `entry` | Path to the entry Markdown file. Its H1 is the report title; links define spec order |
-| `adapters` | List of adapters that handle executable blocks and fixtures |
-| `reporters` | Output generators. `html` and `json` builtins provided |
-| `models` | Alloy model verification. Can be omitted if not used |
-
-### Missing entry
-
-A config file without `entry` must be rejected.
-
-```verify:shell
-mkdir -p .tmp-test
-echo '{}' > .tmp-test/bad-config.json
-! specdown run -config .tmp-test/bad-config.json 2>/dev/null
-```
-
-### Duplicate adapter name
-
-Two adapters with the same name must be rejected.
-
-```verify:shell
-mkdir -p .tmp-test
-cat <<'CFG' > .tmp-test/dup-adapter.json
-{
-  "entry": "index.spec.md",
-  "adapters": [
-    {"name": "a", "command": ["true"], "blocks": ["run:x"]},
-    {"name": "a", "command": ["true"], "blocks": ["run:y"]}
-  ]
-}
-CFG
-! specdown run -config .tmp-test/dup-adapter.json 2>/dev/null
-```
-
-## Document Structure
-
-### Heading hierarchy
+### Headings and Prose
 
 Heading hierarchy (`#`, `##`, `###`, ...) is converted into a test suite hierarchy.
 Prose paragraphs are preserved in the HTML report but are not execution targets.
+
+### Executable Blocks
+
+Executable blocks are fenced code blocks whose info string starts with a recognized prefix.
+
+| Prefix | Meaning |
+|--------|---------|
+| `run:<target>` | Side-effecting executable block |
+| `verify:<target>` | Assertion block |
+| `test:<name>` | Named high-level test DSL |
+
+The `<target>` is defined by the adapter, not the core.
+
+The parser must recognize `run`, `verify`, and `test` as executable block kinds.
+
+<!-- fixture:block-kind -->
+| info | kind | target |
+| --- | --- | --- |
+| run:shell | run | shell |
+| verify:api | verify | api |
+| test:login | test | login |
+
+### Variable Capture
+
+A block can capture its output into a variable with `-> $varName`.
+
+<!-- fixture:block-kind -->
+| info | kind | target |
+| --- | --- | --- |
+| run:shell -> $id | run | shell |
+
+Variables captured this way are referenced in subsequent blocks
+and tables using `${variableName}`.
+
+#### Scoping rules
+
+- Variables from parent sections are readable in child sections
+- Sibling sections at the same depth can share variables (in document order, only previously captured values)
+- An unresolved variable is a compile-time error
+
+#### Variable escaping
+
+To output a literal `${...}`, escape it with a backslash: `\${literal}`.
+
+```run:shell -> $escapeTest
+printf 'ok'
+```
+
+```verify:shell
+test "${escapeTest}" = "ok"
+```
+
+### Fixture Tables
+
+A Markdown table becomes executable when preceded by a fixture directive.
+
+The directive is an HTML comment of the form `<!-- fixture:name -->`.
+The first row is the header. Each subsequent row is an independent test case.
+Fixture names are defined by the adapter, not the core.
+
+#### Cell escaping
+
+Table cells support escape sequences that are processed by the core
+before sending to the adapter.
+
+| Sequence | Meaning |
+|----------|---------|
+| `\n` | newline |
+| `\|` | literal pipe |
+| `\\` | literal backslash |
+
+Adapters always receive unescaped values.
+The HTML report also unescapes cells, rendering `\n` as visible line breaks.
+
+<!-- fixture:cell-escape -->
+| input | expected |
+| --- | --- |
+| hello | hello |
+| line1\nline2 | line1\nline2 |
+| a\\\|b | a\\\|b |
+
+#### Fixture parameters
+
+Fixtures can accept parameters via `(key=value)` syntax.
+Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
+Multiple parameters are comma-separated: `<!-- fixture:name(key1=val1, key2=val2) -->`.
+
+#### Parameterized fixture call
+
+A fixture directive with parameters but no following table creates a single
+assertion case. The adapter receives a `runCase` with `kind: "tableRow"`,
+the fixture name, `fixtureParams` populated, and empty `columns`/`cells`.
+
+This is useful for inline assertions that don't warrant a full table:
+
+```markdown
+<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+```
+
+A fixture directive without parameters and without a table is a compile-time error.
+
+### Setup and Teardown Hooks
+
+Hooks run adapter commands at section boundaries.
+A hook directive must be followed by an executable code block.
+
+| Directive | Meaning |
+|-----------|---------|
+| `<!-- setup -->` | Run once before the first case in the heading subtree |
+| `<!-- teardown -->` | Run once after the last case in the heading subtree |
+| `<!-- setup:each -->` | Run before the first case of each immediate child section |
+| `<!-- teardown:each -->` | Run after the last case of each immediate child section |
+
+Hooks are not counted as test cases. Their results do not appear in the
+case list, but a hook failure marks the document as failed.
+
+A setup or teardown directive followed by an executable code block must parse successfully.
+
+```run:shell
+mkdir -p .tmp-test
+printf '# Hook Test\n\n## Group\n\n<!-- setup:each -->\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
+printf '# T\n\n- [Hook](hook-good.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/hook-good-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+CFG
+specdown run -config .tmp-test/hook-good-cfg.json -dry-run 2>&1
+```
 
 ### Frontmatter
 
@@ -158,238 +254,101 @@ CFG
 specdown run -config .tmp-test/timeout-cfg.json -dry-run 2>&1
 ```
 
-## Parsing
+## Configuration
 
-### Valid spec document
+specdown uses a data-only JSON configuration file.
+The canonical config must not depend on any specific language runtime.
 
-A well-formed spec document must parse without errors.
-
-```run:shell
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/valid.spec.md
-# Valid Spec
-
-Some prose.
-
-## Section
-
-More prose.
-SPEC
-printf '# T\n\n- [Valid](valid.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/valid-cfg.json
-{"entry":"index.spec.md","adapters":[]}
-CFG
-specdown run -config .tmp-test/valid-cfg.json -dry-run 2>&1
+```json
+{
+  "entry": "specs/index.spec.md",
+  "adapters": [
+    {
+      "name": "myapp",
+      "command": ["python3", "./tools/adapter.py"],
+      "blocks": ["run:myapp", "verify:myapp"],
+      "fixtures": ["user-exists"]
+    }
+  ],
+  "reporters": [
+    { "builtin": "html", "outFile": ".artifacts/specdown/report.html" },
+    { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
+  ],
+  "models": { "builtin": "alloy" }
+}
 ```
 
-### Unclosed code block
+### Entry File
 
-A spec with an unclosed fenced code block must be rejected at parse time.
+The `entry` field points to a Markdown file whose H1 heading becomes the report title.
+The entry file lists spec documents as Markdown links; their order determines the table of contents.
+
+### Config Fields
+
+| Field | Description |
+|-------|-------------|
+| `entry` | Path to the entry Markdown file. Its H1 is the report title; links define spec order |
+| `adapters` | List of adapters that handle executable blocks and fixtures |
+| `reporters` | Output generators. `html` and `json` builtins provided |
+| `models` | Alloy model verification. Can be omitted if not used |
+
+### Validation
+
+A config file without `entry` must be rejected.
 
 ```verify:shell
 mkdir -p .tmp-test
-printf '# Bad\n\n```run:shell\necho hello\n' > .tmp-test/unclosed.spec.md
-printf '# T\n\n- [Unclosed](unclosed.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/unclosed-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
-CFG
-! specdown run -config .tmp-test/unclosed-cfg.json 2>/dev/null
+echo '{}' > .tmp-test/bad-config.json
+! specdown run -config .tmp-test/bad-config.json 2>/dev/null
 ```
 
-### Fixture without table
-
-A fixture directive without parameters and not followed by a table must be rejected.
+Two adapters with the same name must be rejected.
 
 ```verify:shell
 mkdir -p .tmp-test
-printf '# Bad\n\n<!-- fixture:x -->\n\nJust prose.\n' > .tmp-test/fnt.spec.md
-printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/fnt-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
+cat <<'CFG' > .tmp-test/dup-adapter.json
+{
+  "entry": "index.spec.md",
+  "adapters": [
+    {"name": "a", "command": ["true"], "blocks": ["run:x"]},
+    {"name": "a", "command": ["true"], "blocks": ["run:y"]}
+  ]
+}
 CFG
-! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
+! specdown run -config .tmp-test/dup-adapter.json 2>/dev/null
 ```
 
-A fixture directive with parameters but no table is valid (parameterized fixture call).
+## CLI Reference
 
-```run:shell
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/fixture-call.spec.md
-# Fixture Call
+### Commands
 
-Some prose.
-<!-- fixture:check(field=plan, expected=STANDARD) -->
+| Command | Description |
+|---------|-------------|
+| `specdown run` | Parse, execute, and generate reports in one pass |
+| `specdown version` | Print the build version |
+| `specdown alloy dump` | Generate Alloy model `.als` files without running adapters |
 
-More prose.
-SPEC
-printf '# T\n\n- [FC](fixture-call.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/fixture-call-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"fixtures":["check"]}]}
-CFG
-specdown run -config .tmp-test/fixture-call-cfg.json -dry-run 2>&1
-```
+### Flags
 
-### Hook directive without code block
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-config` | `specdown.json` | Config file path |
+| `-out` | (per config file) | HTML report output path |
+| `-filter` | (none) | Heading path substring filter |
+| `-jobs` | `1` | Number of spec files to run in parallel |
+| `-dry-run` | `false` | Parse and validate only |
 
-A setup or teardown directive not followed by a code block must be rejected.
+### Filter
 
-```verify:shell
-mkdir -p .tmp-test
-printf '# Bad\n\n<!-- setup:each -->\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
-printf '# T\n\n- [Hook](hook-bad.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/hook-bad-cfg.json
-{"entry":"index.spec.md","adapters":[]}
-CFG
-! specdown run -config .tmp-test/hook-bad-cfg.json 2>/dev/null
-```
+The `-filter` flag runs only cases whose heading path contains the given string.
 
-### Hook directive with code block
-
-A setup or teardown directive followed by an executable code block must parse successfully.
-
-```run:shell
-mkdir -p .tmp-test
-printf '# Hook Test\n\n## Group\n\n<!-- setup:each -->\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
-printf '# T\n\n- [Hook](hook-good.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/hook-good-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
-CFG
-specdown run -config .tmp-test/hook-good-cfg.json -dry-run 2>&1
-```
-
-## Executable Blocks
-
-Executable blocks are fenced code blocks whose info string starts with a recognized prefix.
-
-| Prefix | Meaning |
-|--------|---------|
-| `run:<target>` | Side-effecting executable block |
-| `verify:<target>` | Assertion block |
-| `test:<name>` | Named high-level test DSL |
-
-The `<target>` is defined by the adapter, not the core.
-
-### Supported block kinds
-
-The parser must recognize `run`, `verify`, and `test` as executable block kinds.
-
-<!-- fixture:block-kind -->
-| info | kind | target |
-| --- | --- | --- |
-| run:shell | run | shell |
-| verify:api | verify | api |
-| test:login | test | login |
-
-### Variable capture
-
-A block can capture its output into a variable with `-> $varName`.
-
-<!-- fixture:block-kind -->
-| info | kind | target |
-| --- | --- | --- |
-| run:shell -> $id | run | shell |
-
-## Variables
-
-Values captured from executable blocks are referenced in subsequent blocks
-and tables using `${variableName}`.
-
-### Scoping rules
-
-- Variables from parent sections are readable in child sections
-- Sibling sections at the same depth can share variables (in document order, only previously captured values)
-- An unresolved variable is a compile-time error
-
-### Variable escaping
-
-To output a literal `${...}`, escape it with a backslash: `\${literal}`.
-
-```run:shell -> $escapeTest
-printf 'ok'
+```run:shell -> $filterOutput
+specdown run -config selfspec.json -dry-run -filter "Filter" 2>&1
 ```
 
 ```verify:shell
-test "${escapeTest}" = "ok"
+echo "${filterOutput}" | grep -q "Filter"
 ```
-
-### Unresolved variable error
-
-Referencing a variable that was never captured must produce an error.
-
-```verify:shell
-mkdir -p .tmp-test
-printf '# Bad\n\n```run:shell\necho \${missing}\n```\n' > .tmp-test/unresolved.spec.md
-printf '# T\n\n- [Unresolved](unresolved.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/unresolved-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
-CFG
-specdown run -config .tmp-test/unresolved-cfg.json 2>&1 | grep -q "missing"
-! specdown run -config .tmp-test/unresolved-cfg.json 2>/dev/null
-```
-
-## Fixture Tables
-
-A Markdown table becomes executable when preceded by a fixture directive.
-
-The directive is an HTML comment of the form `<!-- fixture:name -->`.
-The first row is the header. Each subsequent row is an independent test case.
-Fixture names are defined by the adapter, not the core.
-
-### Cell escaping
-
-Table cells support escape sequences that are processed by the core
-before sending to the adapter.
-
-| Sequence | Meaning |
-|----------|---------|
-| `\n` | newline |
-| `\|` | literal pipe |
-| `\\` | literal backslash |
-
-Adapters always receive unescaped values.
-The HTML report also unescapes cells, rendering `\n` as visible line breaks.
-
-<!-- fixture:cell-escape -->
-| input | expected |
-| --- | --- |
-| hello | hello |
-| line1\nline2 | line1\nline2 |
-| a\\\|b | a\\\|b |
-
-### Fixture parameters
-
-Fixtures can accept parameters via `(key=value)` syntax.
-Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
-Multiple parameters are comma-separated: `<!-- fixture:name(key1=val1, key2=val2) -->`.
-
-### Parameterized fixture call
-
-A fixture directive with parameters but no following table creates a single
-assertion case. The adapter receives a `runCase` with `kind: "tableRow"`,
-the fixture name, `fixtureParams` populated, and empty `columns`/`cells`.
-
-This is useful for inline assertions that don't warrant a full table:
-
-```markdown
-<!-- fixture:check-user(field=plan, expected=STANDARD) -->
-```
-
-A fixture directive without parameters and without a table is a compile-time error.
-
-## Setup / Teardown Hooks
-
-Hooks run adapter commands at section boundaries.
-A hook directive must be followed by an executable code block.
-
-| Directive | Meaning |
-|-----------|---------|
-| `<!-- setup -->` | Run once before the first case in the heading subtree |
-| `<!-- teardown -->` | Run once after the last case in the heading subtree |
-| `<!-- setup:each -->` | Run before the first case of each immediate child section |
-| `<!-- teardown:each -->` | Run after the last case of each immediate child section |
-
-Hooks are not counted as test cases. Their results do not appear in the
-case list, but a hook failure marks the document as failed.
 
 ## Adapter Protocol
 
@@ -484,7 +443,7 @@ specdown routes each case to the adapter that declared the matching block or fix
 - A non-zero exit indicates infrastructure failure, not a case failure
 - stderr is used for diagnostic output; only protocol messages go to stdout
 
-## HTML Report
+## HTML Report and Artifacts
 
 After a spec run, the HTML report is generated as a self-contained file.
 It preserves the document structure, annotating execution results inline.
@@ -523,7 +482,7 @@ grep -q '<html' .tmp-test/report.html
 grep -q 'Report Test' .tmp-test/report.html
 ```
 
-### Artifacts
+### Output files
 
 | File | Description |
 |------|-------------|
@@ -652,3 +611,84 @@ check rowBelongsToOneScope for 5
 ```
 
 <!-- alloy:ref(docmodel#rowBelongsToOneScope, scope=5) -->
+
+## Validation Rules
+
+specdown validates spec documents at parse time and rejects malformed input
+before any adapter is invoked. The following errors are caught during parsing.
+
+### Unclosed code block
+
+A spec with an unclosed fenced code block must be rejected at parse time.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```run:shell\necho hello\n' > .tmp-test/unclosed.spec.md
+printf '# T\n\n- [Unclosed](unclosed.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/unclosed-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+CFG
+! specdown run -config .tmp-test/unclosed-cfg.json 2>/dev/null
+```
+
+### Fixture without table
+
+A fixture directive without parameters and not followed by a table must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n<!-- fixture:x -->\n\nJust prose.\n' > .tmp-test/fnt.spec.md
+printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/fnt-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
+CFG
+! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
+```
+
+A fixture directive with parameters but no table is valid (parameterized fixture call).
+
+```run:shell
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/fixture-call.spec.md
+# Fixture Call
+
+Some prose.
+<!-- fixture:check(field=plan, expected=STANDARD) -->
+
+More prose.
+SPEC
+printf '# T\n\n- [FC](fixture-call.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/fixture-call-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"fixtures":["check"]}]}
+CFG
+specdown run -config .tmp-test/fixture-call-cfg.json -dry-run 2>&1
+```
+
+### Hook without code block
+
+A setup or teardown directive not followed by a code block must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n<!-- setup:each -->\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
+printf '# T\n\n- [Hook](hook-bad.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/hook-bad-cfg.json
+{"entry":"index.spec.md","adapters":[]}
+CFG
+! specdown run -config .tmp-test/hook-bad-cfg.json 2>/dev/null
+```
+
+### Unresolved variable
+
+Referencing a variable that was never captured must produce an error.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```run:shell\necho \${missing}\n```\n' > .tmp-test/unresolved.spec.md
+printf '# T\n\n- [Unresolved](unresolved.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/unresolved-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+CFG
+specdown run -config .tmp-test/unresolved-cfg.json 2>&1 | grep -q "missing"
+! specdown run -config .tmp-test/unresolved-cfg.json 2>/dev/null
+```
