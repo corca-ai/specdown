@@ -262,7 +262,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	if result.RenderedSource != "" {
 		source = result.RenderedSource
 	}
-	if strings.HasPrefix(result.Block, "doctest:") {
+	if strings.HasPrefix(result.Block, "doctest:") && result.Status == core.StatusFailed {
 		source = doctestCommandsOnly(source)
 	}
 	out.WriteString(`<div class="exec-source">`)
