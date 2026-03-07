@@ -36,7 +36,7 @@ type tocItemView struct {
 	Children []tocItemView
 }
 
-func Write(report core.Report, title string, outPath string) error {
+func Write(report core.Report, title string, outPath string) (err error) {
 	if title == "" {
 		title = "Specification"
 	}
@@ -69,7 +69,11 @@ func Write(report core.Report, title string, outPath string) error {
 	if err != nil {
 		return fmt.Errorf("create report: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close report: %w", cerr)
+		}
+	}()
 
 	if err := pageTemplate.Execute(file, view); err != nil {
 		return fmt.Errorf("write report: %w", err)
@@ -301,7 +305,7 @@ func renderHeading(node core.HeadingNode, documentPath string) (string, error) {
 	closeTag := fmt.Sprintf("</h%d>", node.Level)
 	var replacement string
 	if len(node.HeadingPath) > 0 {
-		replacement = fmt.Sprintf("<h%d id=\"%s\">", rendered, template.HTMLEscapeString(core.HeadingAnchor(documentPath, node.HeadingPath)))
+		replacement = fmt.Sprintf("<h%d id=%q>", rendered, template.HTMLEscapeString(core.HeadingAnchor(documentPath, node.HeadingPath)))
 	} else {
 		replacement = fmt.Sprintf("<h%d>", rendered)
 	}
@@ -371,7 +375,7 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		for index, cell := range cells {
 			out.WriteString(`<td>`)
 			out.WriteString(`<div class="cell-template">`)
-			out.WriteString(template.HTMLEscapeString(cell))
+			out.WriteString(template.HTMLEscapeString(core.UnescapeCell(cell)))
 			out.WriteString(`</div>`)
 			if result.Status == core.StatusFailed && index == lastIndex && result.Message != "" {
 				out.WriteString(`<div class="cell-actual">`)
@@ -693,7 +697,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       & tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
     }
 
-    .cell-template { font-family: var(--font-mono); }
+    .cell-template { font-family: var(--font-mono); white-space: pre-wrap; }
 
     .cell-resolved {
       margin-top: 0.35rem;

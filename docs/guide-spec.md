@@ -119,7 +119,7 @@ Table cells support escape sequences.
 | `\|` | literal pipe |
 | `\\` | literal backslash |
 
-Escape processing is performed by specdown before cells are sent to the adapter. Adapters always receive unescaped values.
+Escape processing is performed by specdown before cells are sent to the adapter. Adapters always receive unescaped values. The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 
 ```markdown
 <!-- fixture:check -->

@@ -384,6 +384,75 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 	}
 }
 
+func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
+	outDir := t.TempDir()
+	outPath := filepath.Join(outDir, "report.html")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1, CasesTotal: 1, CasesPassed: 1},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Editor",
+					RelativeTo: "specs/editor.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Editor", Raw: "# Editor\n", HeadingPath: []string{"Editor"}},
+						core.TableNode{
+							Fixture: "editor-op",
+							Columns: []string{"initial", "expected"},
+							Rows: []core.TableRowNode{
+								{
+									Cells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},
+									Raw:   `| alpha\n\nbeta | alpha\n\nbeta |` + "\n",
+									ID:    &core.SpecID{File: "specs/editor.spec.md", HeadingPath: []string{"Editor"}, Ordinal: 1},
+								},
+							},
+							Raw: "| initial | expected |\n| --- | --- |\n| alpha\\n\\nbeta | alpha\\n\\nbeta |\n",
+						},
+					},
+				},
+				Cases: []core.CaseResult{
+					{
+						ID:            core.SpecID{File: "specs/editor.spec.md", HeadingPath: []string{"Editor"}, Ordinal: 1},
+						Kind:          core.CaseKindTableRow,
+						Fixture:       "editor-op",
+						Label:         "fixture:editor-op @ Editor row 1",
+						Columns:       []string{"initial", "expected"},
+						TemplateCells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},
+						RenderedCells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},
+						RowNumber:     1,
+						Status:        core.StatusPassed,
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, "", outPath); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+
+	html := string(body)
+	// \n should be unescaped to real newlines, not rendered as literal \n
+	if strings.Contains(html, `<div class="cell-template">alpha\n\nbeta</div>`) {
+		t.Fatal("expected \\n to be unescaped in table cells, but found literal \\n")
+	}
+	if !strings.Contains(html, "<div class=\"cell-template\">alpha\n\nbeta</div>") {
+		t.Fatal("expected real newlines in table cell output")
+	}
+	// CSS should support multiline rendering
+	if !strings.Contains(html, "white-space: pre-wrap") {
+		t.Fatal("expected white-space: pre-wrap on .cell-template")
+	}
+}
+
 func TestCollectHeadingStatusesPropagatesFailureToParent(t *testing.T) {
 	result := core.DocumentResult{
 		Document: core.Document{

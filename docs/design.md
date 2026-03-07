@@ -350,7 +350,7 @@ Table cells support the following escape sequences.
 | `\|` | literal pipe |
 | `\\` | literal backslash |
 
-Escape processing is performed by the core before cells are sent to adapters. Adapters always receive unescaped values and do not need to implement their own escape handling.
+Escape processing is performed by the core before cells are sent to adapters. Adapters always receive unescaped values and do not need to implement their own escape handling. The HTML reporter also unescapes cells so that `\n` renders as visible line breaks in the report.
 
 The fixture adapter contract must satisfy the following requirements.
 
