@@ -69,27 +69,6 @@ func TestAnnotateAlloyFailureMapsBundleLineToSource(t *testing.T) {
 	}
 }
 
-func TestClassifyAlloyError(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"Syntax error at line 3 column 1", "syntax error in Alloy model"},
-		{"Parse error near sig", "syntax error in Alloy model"},
-		{"Type error: name cannot be resolved", "type error in Alloy model"},
-		{"The name 'Foo' cannot be resolved", "type error in Alloy model"},
-		{"java: not found", "java not found in PATH"},
-		{"/usr/bin/java: No such file or directory", "java not found in PATH"},
-		{"out of memory", "Alloy execution error: out of memory"},
-		{"line1\nline2", "Alloy execution error: line1"},
-	}
-	for _, tt := range tests {
-		got := classifyAlloyError(tt.input)
-		if got != tt.want {
-			t.Errorf("classifyAlloyError(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
 
 func TestDumpModelsWritesBundleWithoutRunning(t *testing.T) {
 	root := t.TempDir()

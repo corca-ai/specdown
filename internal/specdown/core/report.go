@@ -49,8 +49,6 @@ type AlloyCheckResult struct {
 	Label              string `json:"label"`
 	Status             Status `json:"status"`
 	Message            string `json:"message,omitempty"`
-	Expected           string `json:"expected,omitempty"`
-	Actual             string `json:"actual,omitempty"`
 	BundlePath         string `json:"bundlePath,omitempty"`
 	SourceMapPath      string `json:"sourceMapPath,omitempty"`
 	BundleLine         int    `json:"bundleLine,omitempty"`

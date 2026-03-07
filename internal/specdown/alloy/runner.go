@@ -256,8 +256,6 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 				Label:      defaultLabel(check),
 				Status:     core.StatusFailed,
 				Message:    "missing Alloy result for " + strconvQuote(commandSource),
-				Expected:   "Alloy command " + strconvQuote(commandSource),
-				Actual:     "no matching receipt command",
 				BundlePath: bundle.AbsolutePath,
 				SourceMapPath: bundle.SourceMapAbsolutePath,
 				SourceRef: formatSourceRef(check.ID.File, check.ID.HeadingPath),
@@ -284,7 +282,11 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		if err != nil {
 			return nil, err
 		}
-		actual := summarizeCounterexample(command)
+		summary := summarizeCounterexample(command)
+		message := "counterexample for " + strconvQuote(check.Assertion)
+		if summary != "" && summary != "counterexample found" {
+			message += "\n" + summary
+		}
 		results = append(results, core.AlloyCheckResult{
 			ID:                 check.ID,
 			Model:              check.Model,
@@ -292,8 +294,7 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 			Scope:              check.Scope,
 			Label:              defaultLabel(check),
 			Status:             core.StatusFailed,
-			Message:            "counterexample for " + strconvQuote(check.Assertion),
-			Actual:             actual,
+			Message:            message,
 			BundlePath:         bundle.AbsolutePath,
 			SourceMapPath:      bundle.SourceMapAbsolutePath,
 			SourceRef:          formatSourceRef(check.ID.File, check.ID.HeadingPath),
@@ -315,14 +316,12 @@ func failedChecksAll(checks []core.AlloyCheckSpec, message string) []core.AlloyC
 			Label:     defaultLabel(check),
 			Status:    core.StatusFailed,
 			Message:   message,
-			Actual:    message,
 		})
 	}
 	return results
 }
 
 func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.AlloyCheckResult {
-	actual := classifyAlloyError(message)
 	results := make([]core.AlloyCheckResult, 0, len(checks))
 	for _, check := range checks {
 		result := core.AlloyCheckResult{
@@ -333,8 +332,6 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath
 			Label:      defaultLabel(check),
 			Status:     core.StatusFailed,
 			Message:    message,
-			Expected:   "Alloy check " + strconvQuote(checkCommandSource(check)) + " succeeds",
-			Actual:     actual,
 			BundlePath: bundlePath,
 			SourceMapPath: sourceMapPath,
 		}
@@ -347,26 +344,6 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath
 	return results
 }
 
-func classifyAlloyError(message string) string {
-	lower := strings.ToLower(message)
-	if strings.Contains(lower, "syntax error") || strings.Contains(lower, "parse error") || strings.Contains(lower, "unexpected token") {
-		return "syntax error in Alloy model"
-	}
-	if strings.Contains(lower, "type error") || strings.Contains(lower, "cannot be resolved") {
-		return "type error in Alloy model"
-	}
-	if strings.Contains(lower, "java") && (strings.Contains(lower, "not found") || strings.Contains(lower, "no such file")) {
-		return "java not found in PATH"
-	}
-	return "Alloy execution error: " + firstLine(message)
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
-}
 
 func writeCounterexample(baseDir string, check core.AlloyCheckSpec, command receiptCommand) (string, error) {
 	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "counterexamples", check.ID.Anchor()+".json"))

@@ -279,8 +279,6 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 						Label:      "alloy:ref(board#cardShape, scope=5) @ Formal Rules",
 						Status:     core.StatusFailed,
 						Message:    "found counterexample for assertion \"cardShape\" at scope 5",
-						Expected:   "assertion \"cardShape\" holds for scope 5",
-						Actual:     "counterexample found",
 						SourceRef:  "specs/pocket-board.spec.md#Pocket Board/Formal Rules",
 						BundleLine: 7,
 					},
