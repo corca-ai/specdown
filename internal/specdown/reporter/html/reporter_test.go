@@ -184,7 +184,6 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 		assertContains(t, html, "aria-label=\"Table of contents\"", "toc sidebar")
 		assertContains(t, html, "viewport-fit=cover", "safe-area viewport mode")
 		assertContains(t, html, "safe-area-inset-top", "safe-area css vars")
-		assertContains(t, html, "body::before", "safe-area top cover")
 		assertContains(t, html, "top: var(--safe-top);", "sticky heading safe-area offset")
 		assertContains(t, html, "position: sticky;", "sticky toc styles")
 		assertNotContains(t, html, "<h2>report</h2>", "no report heading")

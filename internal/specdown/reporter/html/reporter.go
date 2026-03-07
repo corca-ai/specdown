@@ -479,12 +479,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>specdown report</title>
   <style>
+    /* ── Design tokens ── */
     :root {
       color-scheme: light;
-      --safe-top: 0px;
-      --safe-right: 0px;
-      --safe-bottom: 0px;
-      --safe-left: 0px;
       --bg: #f3f3f0;
       --paper: #fcfcfa;
       --ink: #1f1f1b;
@@ -500,44 +497,24 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --pass-bg: #e8f0e6;
       --fail-bg: #f0e4e2;
       --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
     }
 
-    @supports (padding-top: constant(safe-area-inset-top)) {
-      :root {
-        --safe-top: constant(safe-area-inset-top);
-        --safe-right: constant(safe-area-inset-right);
-        --safe-bottom: constant(safe-area-inset-bottom);
-        --safe-left: constant(safe-area-inset-left);
-      }
-    }
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
 
-    @supports (padding-top: env(safe-area-inset-top)) {
-      :root {
-        --safe-top: env(safe-area-inset-top);
-        --safe-right: env(safe-area-inset-right);
-        --safe-bottom: env(safe-area-inset-bottom);
-        --safe-left: env(safe-area-inset-left);
-      }
-    }
-
-    * { box-sizing: border-box; }
+    /* ── Body ── */
     body {
-      margin: 0;
       font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
       color: var(--ink);
       background: var(--bg);
     }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0 0 auto 0;
-      height: var(--safe-top);
-      background: var(--bg);
-      z-index: 20;
-      pointer-events: none;
-    }
-
+    /* ── Page layout ── */
     main {
       max-width: 78rem;
       margin-inline: auto;
@@ -552,23 +529,23 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       display: grid;
       grid-template-columns: 16rem minmax(0, 54rem);
       column-gap: 2.5rem;
-      row-gap: 0;
-      align-items: start;
+      align-items: baseline;
     }
 
+    /* ── Table of contents ── */
     .toc {
       position: sticky;
       top: calc(1.5rem + var(--safe-top));
-      max-height: calc(100vh - var(--safe-top) - var(--safe-bottom));
+      max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
       overflow-y: auto;
       font-size: 0.82rem;
       line-height: 1.45;
     }
 
-    .toc-inner { padding: 1.1rem 0 0 0.85rem; }
+    .toc-inner { padding: 0 0 0 0.85rem; }
 
     .toc-title {
-      margin: 0 0 0.75rem;
+      margin-bottom: 0.75rem;
       color: var(--muted);
       font-size: 0.78rem;
       font-weight: 600;
@@ -583,7 +560,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .toc-spec-title {
       display: block;
-      margin: 0 0 0.35rem;
+      margin-bottom: 0.35rem;
       font-weight: 600;
       color: var(--ink);
       text-decoration: none;
@@ -592,9 +569,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .toc-list {
       list-style: none;
-      margin: 0;
-      padding: 0 0 0 0.85rem;
+      padding-left: 0.85rem;
+      display: none;
     }
+
+    .toc-spec.expanded > .toc-list { display: block; }
 
     .toc-item {
       margin: 0.1rem 0;
@@ -617,10 +596,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       position: absolute;
       left: -0.85rem;
       top: 50%;
-      transform: translateY(-50%);
+      translate: 0 -50%;
       width: 0.38rem;
       height: 0.38rem;
-      border-radius: 999px;
+      border-radius: 50%;
       background: var(--fail-mark);
     }
 
@@ -628,94 +607,79 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .toc-level-5,
     .toc-level-6 { padding-left: 1.4rem; }
 
-    .toc-list {
-      display: none;
-    }
-
-    .toc-spec.expanded > .toc-list {
-      display: block;
-    }
-
     .toc-children {
       list-style: none;
-      margin: 0;
-      padding: 0 0 0 0.85rem;
+      padding-left: 0.85rem;
       display: none;
     }
 
-    .toc-item.expanded > .toc-children {
-      display: block;
-    }
+    .toc-item.expanded > .toc-children { display: block; }
 
-    .content {
-      min-width: 0;
-    }
+    /* ── Content area ── */
+    .content { min-width: 0; }
 
     .report-title {
       font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
       font-size: 2.8rem;
       line-height: 1.15;
       letter-spacing: -0.01em;
-      margin: 0 0 0.4rem;
+      margin-bottom: 0.4rem;
     }
 
     .content-meta {
-      margin: 0 0 2rem;
+      margin-bottom: 2rem;
       color: var(--muted);
       font-size: 0.82rem;
       line-height: 1.65;
     }
 
     .pill {
-      display: inline;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-
       &::before { content: "· "; color: var(--muted); }
       &.pass { color: var(--pass-ink); }
       &.fail { color: var(--fail-ink); }
     }
 
-    .spec {
-      margin: 0;
-    }
-
-    .spec + .spec {
-      padding-top: 2rem;
-    }
+    /* ── Spec articles ── */
+    .spec + .spec { padding-top: 2rem; }
 
     .spec-body {
       line-height: 1.82;
 
-      & :first-child { margin-top: 0; }
-      & :is(h2, h3, h4, h5, h6):first-child { padding-top: 0; }
+      & > :first-child { margin-top: 0; }
 
+      /* ── Sticky headings ──
+         Each level stacks below the ones above it.
+         The border-bottom separates the heading bar from content.
+         No ::before hacks — just padding + solid background. */
+      /* Sticky headings stack below each other.
+         All levels share em-based padding so height = font-size × 2 + 1px border. */
       & :is(h2, h3, h4, h5, h6) {
         font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
         line-height: 1.15;
+        padding: 0.5em 0 0.35em;
+        margin-top: 0.75em;
         text-wrap: balance;
         letter-spacing: -0.01em;
         position: sticky;
         background: var(--bg);
-        box-shadow: 0 2px 3px -1px rgba(0, 0, 0, 0.06);
-
-        &::before {
-          content: "";
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 100%;
-          height: 1.5rem;
-          background: inherit;
-        }
+        border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
       }
 
-      & h2 { font-size: 2.5rem; margin: 0; padding: 1rem 0 0.6rem; top: var(--safe-top); z-index: 14; }
-      & h3 { font-size: 1.85rem; margin: 0; padding: 0.8rem 0 0.5rem; top: calc(4.5rem + var(--safe-top) - 1px); z-index: 13; }
-      & h4 { font-size: 1.4rem; margin: 0; padding: 0.7rem 0 0.45rem; top: calc(7.8rem + var(--safe-top) - 1px); z-index: 12; }
-      & :is(h5, h6) { font-size: 1.08rem; margin: 0; padding: 0.6rem 0 0.4rem; top: calc(10.4rem + var(--safe-top) - 1px); z-index: 11; }
+      & :is(h2, h3, h4, h5, h6).stuck-last::after {
+        content: "";
+        position: absolute;
+        inset: 100% 0 auto 0;
+        height: 4px;
+        background: linear-gradient(rgba(0, 0, 0, 0.06), transparent);
+        pointer-events: none;
+      }
+
+      & > :first-child > :first-child { margin-top: 0; }
+
+      & h2 { font-size: 2.5rem; top: var(--safe-top); z-index: 4; }
+      & h3 { font-size: 1.85rem; top: calc(5rem + 1px + var(--safe-top)); z-index: 3; }
+      & h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; }
+      & :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
     }
 
     .status {
@@ -725,12 +689,70 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       &.failed { color: var(--fail-ink); }
     }
 
+    /* ── Executable blocks ── */
     .exec-block,
     .exec-table-block {
       margin: 1.35rem 0;
     }
 
     .exec-block { scroll-margin-top: 1.5rem; }
+
+    .exec-source {
+      padding: 0.8rem 0.9rem;
+      border: 1px solid var(--rule);
+      border-radius: 0.2rem;
+      border-left: 3px solid transparent;
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      background: var(--code-bg);
+
+      &.resolved {
+        margin-top: 0.4rem;
+        border: 1px solid var(--rule);
+      }
+    }
+
+    .exec-block.passed > .exec-source:not(.resolved) {
+      border-left-color: var(--pass-mark);
+      background: var(--pass-bg);
+    }
+
+    .exec-block.failed > .exec-source:not(.resolved) {
+      border-left-color: var(--fail-mark);
+      background: var(--fail-bg);
+    }
+
+    .exec-bindings {
+      margin-top: 0.35rem;
+      font-size: 0.85rem;
+      font-style: italic;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    :is(.exec-block-footer, .exec-table-footer) {
+      text-align: right;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    .exec-note {
+      margin: 0.75rem 0 0.35rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .exec-message {
+      margin-top: 0.75rem;
+      color: var(--fail-ink);
+      font-weight: 600;
+    }
+
+    /* ── Executable tables ── */
     .exec-table-block { overflow-x: auto; }
 
     .exec-table {
@@ -757,60 +779,44 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       }
 
       & thead th:first-child { border-left: 3px solid transparent; }
-
       & tbody td:first-child { border-left: 3px solid transparent; }
+
       & tbody tr.passed td { background: var(--pass-bg); }
       & tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
       & tbody tr.failed td { background: var(--fail-bg); }
       & tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
     }
 
+    /* ── Prose code blocks & tables ── */
     .spec-body :not(.exec-source) > pre {
-      margin: 0;
-      padding: 1em 0;
-    }
-
-    .spec-body table:not(.exec-table),
-    .spec-body :not(.exec-source) > pre,
-    .exec-table-block,
-    .exec-source {
+      padding: 0.8rem 0.9rem;
+      background: var(--code-bg);
+      border: 1px solid var(--rule);
+      border-radius: 0.2rem;
       overflow-x: auto;
-      --_scroll-bg: var(--bg);
-      background-color: var(--_scroll-bg);
-      background-image:
-        linear-gradient(to right, var(--_scroll-bg) 40%, transparent),
-        linear-gradient(to left, var(--_scroll-bg) 40%, transparent),
-        radial-gradient(ellipse at left center, rgba(0,0,0,.12), transparent 70%),
-        radial-gradient(ellipse at right center, rgba(0,0,0,.12), transparent 70%);
-      background-position: left center, right center, left center, right center;
-      background-size: 1.5rem 100%, 1.5rem 100%, 0.8rem 100%, 0.8rem 100%;
-      transition: background-color 150ms ease;
-      background-repeat: no-repeat;
-      background-attachment: local, local, scroll, scroll;
     }
-
-    .exec-source { --_scroll-bg: var(--code-bg); }
-    .exec-block.passed > .exec-source:not(.resolved) { --_scroll-bg: var(--pass-bg); }
-    .exec-block.failed > .exec-source:not(.resolved) { --_scroll-bg: var(--fail-bg); }
 
     .spec-body table:not(.exec-table) {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.95rem;
       margin: 1rem 0;
+      overflow-x: auto;
+      display: block;
+
+      & :is(th, td) {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--rule);
+        text-align: left;
+      }
+
+      & th {
+        background: var(--code-bg);
+        font-size: 0.85rem;
+      }
     }
 
-    .spec-body table:not(.exec-table) :is(th, td) {
-      padding: 0.5rem 0.75rem;
-      border: 1px solid var(--rule);
-      text-align: left;
-    }
-
-    .spec-body table:not(.exec-table) th {
-      background: var(--code-bg);
-      font-size: 0.85rem;
-    }
-
+    /* ── Cell styles ── */
     .cell-template { font-family: var(--font-mono); white-space: pre-wrap; }
 
     .cell-resolved {
@@ -841,7 +847,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       &.compact { padding: 0.65rem 0.75rem; border-left: 0; }
 
       & dt {
-        margin: 0;
         color: var(--muted);
         font-size: 0.82rem;
         line-height: 1.45;
@@ -850,74 +855,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       }
 
       & dd {
-        margin: 0;
         font-family: var(--font-mono);
         line-height: 1.45;
         word-break: break-word;
       }
     }
 
-
-    .exec-bindings {
-      margin-top: 0.35rem;
-      font-size: 0.85rem;
-      font-style: italic;
-      color: var(--muted);
-      font-family: var(--font-mono);
-    }
-
-    :is(.exec-block-footer, .exec-table-footer) {
-      margin: 0;
-      text-align: right;
-      font-size: 0.8rem;
-      color: var(--muted);
-      font-family: var(--font-mono);
-    }
-
-    .exec-kind {
-      color: var(--muted);
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      line-height: 1.2;
-    }
-
-    .exec-source {
-      margin: 0;
-      padding: 0.8rem 0.9rem;
-      border: 1px solid var(--rule);
-      border-radius: 0.2rem;
-      font-family: var(--font-mono);
-      font-size: 0.92rem;
-      line-height: 1.45;
-      white-space: pre-wrap;
-      border-left: 3px solid transparent;
-
-      &.resolved {
-        margin-top: 0.4rem;
-        border: 1px solid var(--rule);
-      }
-    }
-
-    .exec-block.passed > .exec-source:not(.resolved) {
-      border-left-color: var(--pass-mark);
-    }
-
-    .exec-block.failed > .exec-source:not(.resolved) {
-      border-left-color: var(--fail-mark);
-    }
-
-    .exec-note {
-      margin: 0.75rem 0 0.35rem;
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-
-    .exec-message {
-      margin: 0.75rem 0 0;
-      color: var(--fail-ink);
-      font-weight: 600;
-    }
-
+    /* ── Links & code ── */
     a { color: var(--accent); }
 
     code, pre, kbd, samp {
@@ -926,23 +870,22 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       line-height: 1.45;
     }
 
+    /* ── Mobile layout ── */
     @media (max-width: 960px) {
       .layout {
         grid-template-columns: minmax(0, 1fr);
         gap: 0;
       }
 
-      .content {
-        display: contents;
-      }
+      .content { display: contents; }
 
       .toc {
         position: static;
         order: 2;
         margin-bottom: 1.5rem;
       }
-      .toc-inner { padding-left: 0; padding-bottom: 1rem; }
 
+      .toc-inner { padding-left: 0; padding-bottom: 1rem; }
       .content-header { order: 1; }
       .content-body { order: 3; }
     }
@@ -1033,6 +976,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     })
     .filter(Boolean);
 
+  // Precompute sticky top values for shadow detection
+  const stickyHeadings = Array.from(document.querySelectorAll('.spec-body :is(h2,h3,h4,h5,h6)'))
+    .map(el => ({ el, top: parseFloat(getComputedStyle(el).top) || 0 }));
+  let prevStuckLast = null;
+
   let frame = 0;
 
   const update = () => {
@@ -1079,6 +1027,19 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     for (const entry of h2Entries) {
       entry.li.classList.toggle('expanded', entry === activeH2);
+    }
+
+    // Shadow on the bottommost stuck heading
+    let stuckLast = null;
+    for (const item of stickyHeadings) {
+      if (Math.abs(item.el.getBoundingClientRect().top - item.top) < 2) {
+        stuckLast = item.el;
+      }
+    }
+    if (prevStuckLast !== stuckLast) {
+      prevStuckLast?.classList.remove('stuck-last');
+      stuckLast?.classList.add('stuck-last');
+      prevStuckLast = stuckLast;
     }
   };
 
