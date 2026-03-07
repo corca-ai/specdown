@@ -112,7 +112,7 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 
 func specStatusClass(result core.DocumentResult) string {
 	for _, item := range result.Cases {
-		if item.Status == core.StatusFailed {
+		if item.Status == core.StatusFailed && !item.ExpectFail {
 			return "failed"
 		}
 	}
@@ -148,7 +148,11 @@ func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
 	}
 
 	for _, item := range result.Cases {
-		mark(item.ID.HeadingPath, item.Status)
+		status := item.Status
+		if item.ExpectFail && status == core.StatusFailed {
+			status = core.StatusPassed
+		}
+		mark(item.ID.HeadingPath, status)
 	}
 	for _, item := range result.AlloyChecks {
 		mark(item.ID.HeadingPath, item.Status)
@@ -248,14 +252,9 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		return markdownToHTML(node.Markdown())
 	}
 
-	statusClass := string(result.Status)
-	if result.ExpectFail {
-		statusClass = "expect-fail"
-	}
-
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block `)
-	out.WriteString(template.HTMLEscapeString(statusClass))
+	out.WriteString(template.HTMLEscapeString(string(result.Status)))
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
@@ -267,8 +266,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(source))
 	out.WriteString(`</code>`)
-	showDiff := result.Status == core.StatusFailed || result.ExpectFail
-	if showDiff && (result.Message != "" || result.Expected != "" || result.Actual != "") {
+	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
 	}
 	if result.ExpectFail {
@@ -800,11 +798,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .exec-block.failed > .exec-source:not(.resolved) {
       border-left-color: var(--fail-mark);
       background: var(--fail-bg);
-    }
-
-    .exec-block.expect-fail > .exec-source:not(.resolved) {
-      border-left-color: var(--muted);
-      background: var(--note-bg);
     }
 
     .expect-fail-label {

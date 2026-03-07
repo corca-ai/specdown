@@ -190,7 +190,7 @@ func printFailures(report core.Report) {
 
 func printCaseFailures(cases []core.CaseResult) {
 	for _, c := range cases {
-		if c.Status != core.StatusFailed {
+		if c.Status != core.StatusFailed || c.ExpectFail {
 			continue
 		}
 		path := strings.Join(c.ID.HeadingPath, " > ")

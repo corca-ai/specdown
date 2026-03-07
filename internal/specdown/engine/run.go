@@ -335,9 +335,9 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 			return nil, "", err
 		}
 		cases = append(cases, result)
-		if result.Status == core.StatusFailed {
+		if result.Status == core.StatusFailed && !result.ExpectFail {
 			status = core.StatusFailed
-		} else {
+		} else if result.Status != core.StatusFailed {
 			ctx.addBindings(result.Bindings, specCase.ID.HeadingPath)
 		}
 
@@ -519,15 +519,9 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 
 func applyExpectFail(result core.CaseResult) core.CaseResult {
 	result.ExpectFail = true
-	switch result.Status {
-	case core.StatusFailed:
-		// Expected failure: flip to passed but keep message/expected/actual for rendering
-		result.Status = core.StatusPassed
-		result.Events = []core.Event{
-			{Type: core.EventCaseStarted, ID: result.ID, Label: result.Label},
-			{Type: core.EventCasePassed, ID: result.ID, Label: result.Label},
-		}
-	case core.StatusPassed:
+	if result.Status == core.StatusPassed {
+		// Unexpected success — this is a real failure
+		result.ExpectFail = false
 		result.Status = core.StatusFailed
 		result.Message = "expected failure but case passed"
 		result.Events = []core.Event{
@@ -535,6 +529,7 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 			{Type: core.EventCaseFailed, ID: result.ID, Label: result.Label, Message: result.Message},
 		}
 	}
+	// When failed: keep status as failed, keep all failure details, just mark ExpectFail
 	return result
 }
 
@@ -721,7 +716,7 @@ func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 
 	summary.CasesTotal += len(result.Cases)
 	for _, item := range result.Cases {
-		if item.Status == core.StatusPassed {
+		if item.Status == core.StatusPassed || item.ExpectFail {
 			summary.CasesPassed++
 		} else {
 			summary.CasesFailed++

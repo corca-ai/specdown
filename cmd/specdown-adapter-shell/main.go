@@ -205,7 +205,6 @@ func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 			return adapterprotocol.Response{
 				ID:       id,
 				Type:     "failed",
-				Message:  fmt.Sprintf("output mismatch for: $ %s", step.Command),
 				Expected: expected,
 				Actual:   actual,
 			}
