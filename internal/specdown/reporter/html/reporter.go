@@ -248,9 +248,14 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		return markdownToHTML(node.Markdown())
 	}
 
+	statusClass := string(result.Status)
+	if result.ExpectFail {
+		statusClass = "expect-fail"
+	}
+
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block `)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	out.WriteString(template.HTMLEscapeString(statusClass))
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
@@ -262,8 +267,12 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(source))
 	out.WriteString(`</code>`)
-	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
+	showDiff := result.Status == core.StatusFailed || result.ExpectFail
+	if showDiff && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
+	}
+	if result.ExpectFail {
+		out.WriteString(`<div class="expect-fail-label">expected failure</div>`)
 	}
 	if len(result.Bindings) > 0 {
 		out.WriteString(`<div class="exec-bindings">`)
@@ -791,6 +800,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .exec-block.failed > .exec-source:not(.resolved) {
       border-left-color: var(--fail-mark);
       background: var(--fail-bg);
+    }
+
+    .exec-block.expect-fail > .exec-source:not(.resolved) {
+      border-left-color: var(--muted);
+      background: var(--note-bg);
+    }
+
+    .expect-fail-label {
+      margin-top: 0.35rem;
+      font-size: 0.82rem;
+      font-style: italic;
+      color: var(--muted);
     }
 
     .exec-bindings {

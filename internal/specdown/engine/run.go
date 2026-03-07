@@ -518,8 +518,10 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 }
 
 func applyExpectFail(result core.CaseResult) core.CaseResult {
+	result.ExpectFail = true
 	switch result.Status {
 	case core.StatusFailed:
+		// Expected failure: flip to passed but keep message/expected/actual for rendering
 		result.Status = core.StatusPassed
 		result.Events = []core.Event{
 			{Type: core.EventCaseStarted, ID: result.ID, Label: result.Label},

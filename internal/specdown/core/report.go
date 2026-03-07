@@ -38,6 +38,7 @@ type CaseResult struct {
 	RenderedCells  []string  `json:"renderedCells,omitempty"`
 	RowNumber      int       `json:"rowNumber,omitempty"`
 	Status         Status    `json:"status"`
+	ExpectFail     bool      `json:"expectFail,omitempty"`
 	Message        string    `json:"message,omitempty"`
 	Expected       string    `json:"expected,omitempty"`
 	Actual         string    `json:"actual,omitempty"`
