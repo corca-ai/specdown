@@ -316,8 +316,34 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 	cases := make([]core.CaseResult, 0, len(plan.Cases))
 	status := core.StatusPassed
 	timeoutMs := plan.Document.Frontmatter.Timeout
+	hooks := plan.Hooks
 
-	for _, specCase := range plan.Cases {
+	var prevPath []string
+	for i, specCase := range plan.Cases {
+		currPath := specCase.ID.HeadingPath
+
+		// Run setup hooks at section boundaries
+		for _, hook := range hooks {
+			if hook.Kind != core.HookSetup {
+				continue
+			}
+			if !shouldRunHook(hook, prevPath, currPath) {
+				continue
+			}
+			hookBindings, err := runHook(hook, registry, host, sessions, setupSessions, bindings, timeoutMs)
+			if err != nil {
+				status = core.StatusFailed
+			} else {
+				for _, b := range hookBindings {
+					bindings = append(bindings, scopedBinding{
+						Binding:     b,
+						HeadingPath: append([]string(nil), hook.HeadingPath...),
+						Order:       len(bindings),
+					})
+				}
+			}
+		}
+
 		result, err := runSingleCase(specCase, registry, host, sessions, setupSessions, bindings, timeoutMs)
 		if err != nil {
 			return nil, "", err
@@ -325,17 +351,114 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 		cases = append(cases, result)
 		if result.Status == core.StatusFailed {
 			status = core.StatusFailed
-			continue
+		} else {
+			for _, binding := range result.Bindings {
+				bindings = append(bindings, scopedBinding{
+					Binding:     binding,
+					HeadingPath: append([]string(nil), specCase.ID.HeadingPath...),
+					Order:       len(bindings),
+				})
+			}
 		}
-		for _, binding := range result.Bindings {
-			bindings = append(bindings, scopedBinding{
-				Binding:     binding,
-				HeadingPath: append([]string(nil), specCase.ID.HeadingPath...),
-				Order:       len(bindings),
-			})
+
+		// Run teardown hooks at section boundaries
+		var nextPath []string
+		if i+1 < len(plan.Cases) {
+			nextPath = plan.Cases[i+1].ID.HeadingPath
 		}
+		for _, hook := range hooks {
+			if hook.Kind != core.HookTeardown {
+				continue
+			}
+			if !shouldRunTeardownHook(hook, currPath, nextPath) {
+				continue
+			}
+			if _, err := runHook(hook, registry, host, sessions, setupSessions, bindings, timeoutMs); err != nil {
+				status = core.StatusFailed
+			}
+		}
+
+		prevPath = currPath
 	}
 	return cases, status, nil
+}
+
+func shouldRunHook(hook core.HookSpec, prevPath, currPath []string) bool {
+	if !headingPathPrefix(hook.HeadingPath, currPath) {
+		return false
+	}
+	if !hook.Each {
+		return !headingPathPrefix(hook.HeadingPath, prevPath)
+	}
+	depth := len(hook.HeadingPath)
+	if len(currPath) <= depth {
+		return false
+	}
+	if !headingPathPrefix(hook.HeadingPath, prevPath) || len(prevPath) <= depth {
+		return true
+	}
+	return currPath[depth] != prevPath[depth]
+}
+
+func shouldRunTeardownHook(hook core.HookSpec, currPath, nextPath []string) bool {
+	if !headingPathPrefix(hook.HeadingPath, currPath) {
+		return false
+	}
+	if !hook.Each {
+		return !headingPathPrefix(hook.HeadingPath, nextPath)
+	}
+	depth := len(hook.HeadingPath)
+	if len(currPath) <= depth {
+		return false
+	}
+	if !headingPathPrefix(hook.HeadingPath, nextPath) || len(nextPath) <= depth {
+		return true
+	}
+	return currPath[depth] != nextPath[depth]
+}
+
+func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, setupSessions map[string]bool, bindings []scopedBinding, timeoutMs int) ([]core.Binding, error) {
+	synthetic := core.CaseSpec{
+		ID: core.SpecID{
+			File:        "_hook",
+			HeadingPath: hook.HeadingPath,
+		},
+		Kind:     core.CaseKindCode,
+		Block:    hook.Block,
+		Template: hook.Source,
+	}
+
+	adapter, err := registry.adapterFor(synthetic)
+	if err != nil {
+		return nil, err
+	}
+
+	visible := visibleBindings(bindings, hook.HeadingPath)
+	prepared, err := prepareCase(synthetic, visible)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := sessionFor(sessions, host, adapter.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	if !setupSessions[adapter.Config.Name] {
+		setupSessions[adapter.Config.Name] = true
+		if err := session.Setup(); err != nil {
+			return nil, err
+		}
+	}
+
+	result, err := session.RunCase(synthetic, prepared, visible, timeoutMs)
+	if err != nil {
+		return nil, err
+	}
+	if result.Status == core.StatusFailed {
+		return nil, fmt.Errorf("%s hook failed: %s", hook.Kind, result.Message)
+	}
+	return result.Bindings, nil
 }
 
 func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, setupSessions map[string]bool, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {

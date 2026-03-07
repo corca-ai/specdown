@@ -473,6 +473,128 @@ func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
 	}
 }
 
+func TestRunExecutesSetupEachHooksAtSectionBoundaries(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "hook.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := strings.Join([]string{
+		"# Hook Test",
+		"",
+		"## Group",
+		"",
+		"<!-- setup:each -->",
+		"```run:board",
+		"create-board",
+		"```",
+		"",
+		"### Scenario A",
+		"",
+		"```run:board -> $a",
+		"create-board",
+		"```",
+		"",
+		"### Scenario B",
+		"",
+		"```run:board -> $b",
+		"create-board",
+		"```",
+		"",
+	}, "\n")
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// 2 cases (Scenario A and B), setup:each hook runs before each but isn't counted as a case
+	if report.Summary.CasesPassed != 2 {
+		t.Fatalf("expected 2 passed cases, got %+v", report.Summary)
+	}
+	if report.Summary.CasesFailed != 0 {
+		t.Fatalf("expected 0 failed, got %+v", report.Summary)
+	}
+}
+
+func TestRunExecutesSetupOnceHook(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "hook-once.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := strings.Join([]string{
+		"# Hook Once",
+		"",
+		"<!-- setup -->",
+		"```run:board",
+		"create-board",
+		"```",
+		"",
+		"## Section A",
+		"",
+		"```run:board -> $a",
+		"create-board",
+		"```",
+		"",
+		"## Section B",
+		"",
+		"```run:board -> $b",
+		"create-board",
+		"```",
+		"",
+	}, "\n")
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if report.Summary.CasesPassed != 2 {
+		t.Fatalf("expected 2 passed cases, got %+v", report.Summary)
+	}
+}
+
+func TestRunFixtureCallWithParams(t *testing.T) {
+	root := t.TempDir()
+	specPath := filepath.Join(root, "specs", "fixture-call.spec.md")
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := strings.Join([]string{
+		"# Fixture Call",
+		"",
+		"## Setup",
+		"",
+		"```run:board -> $boardName",
+		"create-board",
+		"```",
+		"",
+		"## Check",
+		"",
+		"<!-- fixture:board-exists(board=board-1, exists=yes) -->",
+		"",
+	}, "\n")
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if report.Summary.CasesPassed != 2 {
+		t.Fatalf("expected 2 passed cases, got %+v", report.Summary)
+	}
+}
+
 func helperAdapterConfig() config.Config {
 	executable, err := os.Executable()
 	if err != nil {
@@ -690,9 +812,13 @@ func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]a
 		return nil, &helperError{message: "fixture row shape mismatch"}
 	}
 
-	values := make(map[string]string, len(item.Columns))
+	values := make(map[string]string, len(item.Columns)+len(item.FixtureParams))
 	for index, column := range item.Columns {
 		values[column] = item.Cells[index]
+	}
+	// Fixture call params override column values
+	for k, v := range item.FixtureParams {
+		values[k] = v
 	}
 
 	switch item.Fixture {

@@ -28,9 +28,18 @@ type CaseSpec struct {
 	References    []string
 }
 
+type HookSpec struct {
+	Kind        HookKind
+	Each        bool
+	HeadingPath []string
+	Block       BlockSpec
+	Source      string
+}
+
 type DocumentPlan struct {
 	Document    Document
 	Cases       []CaseSpec
+	Hooks       []HookSpec
 	AlloyModels []AlloyModelSpec
 	AlloyChecks []AlloyCheckSpec
 }
@@ -70,6 +79,7 @@ func CompileDocuments(docs []Document) (Plan, error) {
 
 func CompileDocument(doc Document) (DocumentPlan, error) {
 	cases := executableCases(doc)
+	hooks := extractHooks(doc)
 	alloyModels, alloyChecks, err := compileAlloy(doc)
 	if err != nil {
 		return DocumentPlan{}, err
@@ -97,6 +107,7 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 	return DocumentPlan{
 		Document:    doc,
 		Cases:       cases,
+		Hooks:       hooks,
 		AlloyModels: alloyModels,
 		AlloyChecks: alloyChecks,
 	}, nil
@@ -206,6 +217,22 @@ func headingPathPrefix(prefix []string, current []string) bool {
 	return true
 }
 
+func extractHooks(doc Document) []HookSpec {
+	var hooks []HookSpec
+	for _, node := range doc.Nodes {
+		if h, ok := node.(HookNode); ok {
+			hooks = append(hooks, HookSpec{
+				Kind:        h.Hook,
+				Each:        h.Each,
+				HeadingPath: append([]string(nil), h.HeadingPath...),
+				Block:       h.Block,
+				Source:      h.Source,
+			})
+		}
+	}
+	return hooks
+}
+
 func executableCases(doc Document) []CaseSpec {
 	cases := make([]CaseSpec, 0)
 	for _, node := range doc.Nodes {
@@ -214,6 +241,8 @@ func executableCases(doc Document) []CaseSpec {
 			cases = appendCodeCase(cases, current)
 		case TableNode:
 			cases = appendTableCases(cases, current)
+		case FixtureCallNode:
+			cases = appendFixtureCallCase(cases, current)
 		}
 	}
 	return cases
@@ -228,6 +257,18 @@ func appendCodeCase(cases []CaseSpec, block CodeBlockNode) []CaseSpec {
 		Kind:     CaseKindCode,
 		Block:    block.Block,
 		Template: block.Source,
+	})
+}
+
+func appendFixtureCallCase(cases []CaseSpec, node FixtureCallNode) []CaseSpec {
+	if node.ID == nil {
+		return cases
+	}
+	return append(cases, CaseSpec{
+		ID:            *node.ID,
+		Kind:          CaseKindTableRow,
+		Fixture:       node.Fixture,
+		FixtureParams: node.FixtureParams,
 	})
 }
 

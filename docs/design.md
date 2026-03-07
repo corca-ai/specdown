@@ -309,10 +309,46 @@ Rules:
 ```markdown
 <!-- setup -->
 <!-- teardown -->
+<!-- setup:each -->
+<!-- teardown:each -->
 ```
 
-These directives apply to the entire current heading subtree.
-The responsibility for converting them into actual hooks lies with the runtime adapter.
+These directives must be followed by an executable code block that serves as the hook body.
+They apply to the current heading subtree.
+
+- `setup` / `teardown`: run once before the first case and after the last case in the scope.
+- `setup:each` / `teardown:each`: run before the first case and after the last case of each immediate child section.
+
+Example:
+
+````markdown
+## Scenario Group
+
+<!-- setup:each -->
+```run:api
+login u0
+```
+
+<!-- teardown:each -->
+```run:api
+reset u0
+```
+
+### Scenario A
+
+```run:api
+do-action-a
+```
+
+### Scenario B
+
+```run:api
+do-action-b
+```
+````
+
+In this example, `login u0` runs before Scenario A and before Scenario B.
+`reset u0` runs after Scenario A and after Scenario B.
 
 
 ## Table-Based Specifications
@@ -339,6 +375,27 @@ Rules:
 - Each fixture adapter must explicitly validate the required columns
 - An unknown fixture is a compile-time error
 - Each row becomes an independent test case and an independent report row
+
+### Parameterized Fixture Call (Tableless Fixture)
+
+A fixture directive with parameters can be used without a following table.
+This creates a single assertion case using only `fixtureParams`, with empty `columns` and `cells`.
+
+```markdown
+<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+```
+
+This is useful for inline assertions that don't warrant a full table:
+
+```markdown
+The plan changes to STANDARD after subscription.
+<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+
+The next billing date is set.
+<!-- fixture:check-user(field=nextBillingDate, expected=2025-03-03) -->
+```
+
+A fixture directive without parameters and without a table is a compile-time error.
 
 ### Cell Escaping
 

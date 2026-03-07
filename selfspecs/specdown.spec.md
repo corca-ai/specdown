@@ -194,7 +194,7 @@ CFG
 
 ### Fixture without table
 
-A fixture directive not followed by a table must be rejected.
+A fixture directive without parameters and not followed by a table must be rejected.
 
 ```verify:shell
 mkdir -p .tmp-test
@@ -203,6 +203,50 @@ cat <<'CFG' > .tmp-test/fnt-cfg.json
 {"include":["fnt.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
 CFG
 ! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
+```
+
+A fixture directive with parameters but no table is valid (parameterized fixture call).
+
+```run:shell
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/fixture-call.spec.md
+# Fixture Call
+
+Some prose.
+<!-- fixture:check(field=plan, expected=STANDARD) -->
+
+More prose.
+SPEC
+cat <<'CFG' > .tmp-test/fixture-call-cfg.json
+{"include":["fixture-call.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":[],"fixtures":["check"]}]}
+CFG
+specdown run -config .tmp-test/fixture-call-cfg.json -dry-run 2>&1
+```
+
+### Hook directive without code block
+
+A setup or teardown directive not followed by a code block must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n<!-- setup:each -->\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
+cat <<'CFG' > .tmp-test/hook-bad-cfg.json
+{"include":["hook-bad.spec.md"],"adapters":[]}
+CFG
+! specdown run -config .tmp-test/hook-bad-cfg.json 2>/dev/null
+```
+
+### Hook directive with code block
+
+A setup or teardown directive followed by an executable code block must parse successfully.
+
+```run:shell
+mkdir -p .tmp-test
+printf '# Hook Test\n\n## Group\n\n<!-- setup:each -->\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
+cat <<'CFG' > .tmp-test/hook-good-cfg.json
+{"include":["hook-good.spec.md"],"adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+CFG
+specdown run -config .tmp-test/hook-good-cfg.json -dry-run 2>&1
 ```
 
 ## Executable Blocks
@@ -308,6 +352,35 @@ The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 Fixtures can accept parameters via `(key=value)` syntax.
 Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
 Multiple parameters are comma-separated: `<!-- fixture:name(key1=val1, key2=val2) -->`.
+
+### Parameterized fixture call
+
+A fixture directive with parameters but no following table creates a single
+assertion case. The adapter receives a `runCase` with `kind: "tableRow"`,
+the fixture name, `fixtureParams` populated, and empty `columns`/`cells`.
+
+This is useful for inline assertions that don't warrant a full table:
+
+```markdown
+<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+```
+
+A fixture directive without parameters and without a table is a compile-time error.
+
+## Setup / Teardown Hooks
+
+Hooks run adapter commands at section boundaries.
+A hook directive must be followed by an executable code block.
+
+| Directive | Meaning |
+|-----------|---------|
+| `<!-- setup -->` | Run once before the first case in the heading subtree |
+| `<!-- teardown -->` | Run once after the last case in the heading subtree |
+| `<!-- setup:each -->` | Run before the first case of each immediate child section |
+| `<!-- teardown:each -->` | Run after the last case of each immediate child section |
+
+Hooks are not counted as test cases. Their results do not appear in the
+case list, but a hook failure marks the document as failed.
 
 ## Adapter Protocol
 

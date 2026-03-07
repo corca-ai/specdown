@@ -344,6 +344,150 @@ func TestUnescapeCell(t *testing.T) {
 	}
 }
 
+func TestParseDocumentAllowsFixtureWithParamsAndNoTable(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"Some prose.",
+		"<!-- fixture:check-user(field=plan, expected=STANDARD) -->",
+		"",
+		"More prose.",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var calls []FixtureCallNode
+	for _, node := range doc.Nodes {
+		if fc, ok := node.(FixtureCallNode); ok {
+			calls = append(calls, fc)
+		}
+	}
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 fixture call, got %d", len(calls))
+	}
+	if calls[0].Fixture != "check-user" {
+		t.Fatalf("unexpected fixture %q", calls[0].Fixture)
+	}
+	if calls[0].FixtureParams["field"] != "plan" || calls[0].FixtureParams["expected"] != "STANDARD" {
+		t.Fatalf("unexpected params %#v", calls[0].FixtureParams)
+	}
+	if calls[0].ID == nil || calls[0].ID.Ordinal != 1 {
+		t.Fatalf("unexpected ID %#v", calls[0].ID)
+	}
+}
+
+func TestParseDocumentRejectsFixtureWithoutParamsAndNoTable(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+		"# Bad",
+		"",
+		"<!-- fixture:board-exists -->",
+		"",
+		"not a table",
+		"",
+	}, "\n"))
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "must be followed by a table") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestParseDocumentParsesHookDirectives(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"## Group",
+		"",
+		"<!-- setup:each -->",
+		"```run:api",
+		"login u0",
+		"```",
+		"",
+		"<!-- teardown:each -->",
+		"```run:api",
+		"reset u0",
+		"```",
+		"",
+		"### Scenario A",
+		"",
+		"Prose here.",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var hooks []HookNode
+	for _, node := range doc.Nodes {
+		if h, ok := node.(HookNode); ok {
+			hooks = append(hooks, h)
+		}
+	}
+	if len(hooks) != 2 {
+		t.Fatalf("expected 2 hooks, got %d", len(hooks))
+	}
+	if hooks[0].Hook != HookSetup || !hooks[0].Each {
+		t.Fatalf("expected setup:each, got %v each=%v", hooks[0].Hook, hooks[0].Each)
+	}
+	if hooks[0].Block.Kind != BlockKindRun || hooks[0].Block.Target != "api" {
+		t.Fatalf("unexpected block %#v", hooks[0].Block)
+	}
+	if hooks[0].Source != "login u0" {
+		t.Fatalf("unexpected source %q", hooks[0].Source)
+	}
+	if hooks[1].Hook != HookTeardown || !hooks[1].Each {
+		t.Fatalf("expected teardown:each, got %v each=%v", hooks[1].Hook, hooks[1].Each)
+	}
+}
+
+func TestParseDocumentParsesNonEachHook(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"<!-- setup -->",
+		"```run:shell",
+		"init-db",
+		"```",
+		"",
+	}, "\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var hooks []HookNode
+	for _, node := range doc.Nodes {
+		if h, ok := node.(HookNode); ok {
+			hooks = append(hooks, h)
+		}
+	}
+	if len(hooks) != 1 {
+		t.Fatalf("expected 1 hook, got %d", len(hooks))
+	}
+	if hooks[0].Hook != HookSetup || hooks[0].Each {
+		t.Fatalf("expected setup (non-each), got %v each=%v", hooks[0].Hook, hooks[0].Each)
+	}
+}
+
+func TestParseDocumentRejectsHookWithoutCodeBlock(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+		"# Bad",
+		"",
+		"<!-- setup:each -->",
+		"",
+		"Just prose.",
+		"",
+	}, "\n"))
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "must be followed by a code block") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",

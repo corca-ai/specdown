@@ -63,6 +63,10 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		ordinal       int
 		fixture       string
 		fixtureParams map[string]string
+		fixtureRaw    string
+		hookKind      HookKind
+		hookEach      bool
+		hookRaw       string
 	)
 
 	for i := 0; i < len(lines); {
@@ -71,8 +75,16 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		if ref, ok, err := parseAlloyRefDirective(line); err != nil {
 			return Document{}, fmt.Errorf("%s: %w", relativePath, err)
 		} else if ok {
-			if fixture != "" {
-				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+			if hookKind != "" {
+				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+			}
+			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+				return Document{}, err
+			} else if flushed {
+				nodes = append(nodes, node)
+				fixture = ""
+				fixtureParams = nil
+				fixtureRaw = ""
 			}
 			ordinal++
 			ref.Raw = line
@@ -87,21 +99,93 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			continue
 		}
 
+		if hk, he, ok := parseHookDirective(line); ok {
+			if hookKind != "" {
+				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+			}
+			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+				return Document{}, err
+			} else if flushed {
+				nodes = append(nodes, node)
+				fixture = ""
+				fixtureParams = nil
+				fixtureRaw = ""
+			}
+			hookKind = hk
+			hookEach = he
+			hookRaw = line
+			i++
+			continue
+		}
+
 		if nextFixture, nextParams, ok := parseFixtureDirective(line); ok {
-			if fixture != "" {
-				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+			if hookKind != "" {
+				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+			}
+			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+				return Document{}, err
+			} else if flushed {
+				nodes = append(nodes, node)
+				fixture = ""
+				fixtureParams = nil
+				fixtureRaw = ""
 			}
 			fixture = nextFixture
 			fixtureParams = nextParams
+			fixtureRaw = line
 			i++
 			continue
 		}
 
 		if isFenceStart(line) {
-			if fixture != "" {
-				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+				return Document{}, err
+			} else if flushed {
+				nodes = append(nodes, node)
+				fixture = ""
+				fixtureParams = nil
+				fixtureRaw = ""
 			}
 			info := parseFenceInfo(line)
+
+			if hookKind != "" {
+				if modelName, ok := parseAlloyModelInfo(info); ok {
+					_ = modelName
+					return Document{}, fmt.Errorf("%s: %s directive must be followed by an executable code block", relativePath, hookKind)
+				}
+				block, err := parseBlockSpec(info)
+				if err != nil {
+					return Document{}, fmt.Errorf("%s: %w", relativePath, err)
+				}
+				if !block.Executable() {
+					return Document{}, fmt.Errorf("%s: %s directive must be followed by an executable code block", relativePath, hookKind)
+				}
+				end := -1
+				for j := i + 1; j < len(lines); j++ {
+					if isFenceEnd(lines[j]) {
+						end = j
+						break
+					}
+				}
+				if end == -1 {
+					return Document{}, fmt.Errorf("%s: unclosed fenced code block", relativePath)
+				}
+				raw := hookRaw + strings.Join(lines[i:end+1], "")
+				source := strings.Join(lines[i+1:end], "")
+				nodes = append(nodes, HookNode{
+					Hook:        hookKind,
+					Each:        hookEach,
+					Block:       block,
+					Source:      strings.TrimSuffix(source, "\n"),
+					Raw:         raw,
+					HeadingPath: append([]string(nil), headingPath...),
+				})
+				hookKind = ""
+				hookEach = false
+				hookRaw = ""
+				i = end + 1
+				continue
+			}
 
 			if modelName, ok := parseAlloyModelInfo(info); ok {
 				end := -1
@@ -164,6 +248,9 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		}
 
 		if isTableStart(lines, i) {
+			if hookKind != "" {
+				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+			}
 			table, next, err := parseTableNode(relativePath, lines, i, fixture, fixtureParams, &ordinal, headingPath)
 			if err != nil {
 				return Document{}, err
@@ -171,13 +258,22 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			nodes = append(nodes, table)
 			fixture = ""
 			fixtureParams = nil
+			fixtureRaw = ""
 			i = next
 			continue
 		}
 
 		if level, text, ok := parseHeading(line); ok {
-			if fixture != "" {
-				return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+			if hookKind != "" {
+				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+			}
+			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+				return Document{}, err
+			} else if flushed {
+				nodes = append(nodes, node)
+				fixture = ""
+				fixtureParams = nil
+				fixtureRaw = ""
 			}
 			if title == "" {
 				title = text
@@ -203,6 +299,9 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			} else if ok {
 				break
 			}
+			if _, _, ok := parseHookDirective(lines[i]); ok {
+				break
+			}
 			if _, _, ok := parseFixtureDirective(lines[i]); ok {
 				break
 			}
@@ -216,14 +315,27 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		if fixture != "" {
-			return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+		if hookKind != "" {
+			return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+		}
+		if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+			return Document{}, err
+		} else if flushed {
+			nodes = append(nodes, node)
+			fixture = ""
+			fixtureParams = nil
+			fixtureRaw = ""
 		}
 		nodes = append(nodes, ProseNode{Raw: raw})
 	}
 
-	if fixture != "" {
-		return Document{}, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+	if hookKind != "" {
+		return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
+	}
+	if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+		return Document{}, err
+	} else if flushed {
+		nodes = append(nodes, node)
 	}
 
 	if title == "" {
@@ -302,6 +414,7 @@ func parseFenceInfo(line string) string {
 var fixtureDirectivePattern = regexp.MustCompile(`^\s*<!--\s*fixture:([A-Za-z0-9_-]+)(?:\(([^)]*)\))?\s*-->\s*$`)
 var alloyModelInfoPattern = regexp.MustCompile(`^alloy:model\(([A-Za-z_][A-Za-z0-9_-]*)\)$`)
 var alloyRefDirectivePattern = regexp.MustCompile(`^\s*<!--\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*-->\s*$`)
+var hookDirectivePattern = regexp.MustCompile(`^\s*<!--\s*(setup|teardown)(?::(each))?\s*-->\s*$`)
 
 func parseFixtureDirective(line string) (string, map[string]string, bool) {
 	matches := fixtureDirectivePattern.FindStringSubmatch(line)
@@ -328,6 +441,35 @@ func parseFixtureParams(raw string) map[string]string {
 		}
 	}
 	return params
+}
+
+func parseHookDirective(line string) (HookKind, bool, bool) {
+	matches := hookDirectivePattern.FindStringSubmatch(line)
+	if matches == nil {
+		return "", false, false
+	}
+	return HookKind(matches[1]), matches[2] == "each", true
+}
+
+func tryFlushFixture(fixture string, fixtureParams map[string]string, fixtureRaw string, relativePath string, ordinal *int, headingPath []string) (FixtureCallNode, bool, error) {
+	if fixture == "" {
+		return FixtureCallNode{}, false, nil
+	}
+	if len(fixtureParams) == 0 {
+		return FixtureCallNode{}, false, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+	}
+	*ordinal++
+	return FixtureCallNode{
+		Fixture:       fixture,
+		FixtureParams: fixtureParams,
+		Raw:           fixtureRaw,
+		HeadingPath:   append([]string(nil), headingPath...),
+		ID: &SpecID{
+			File:        relativePath,
+			HeadingPath: append([]string(nil), headingPath...),
+			Ordinal:     *ordinal,
+		},
+	}, true, nil
 }
 
 func parseAlloyModelInfo(info string) (string, bool) {

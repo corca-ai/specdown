@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -227,6 +228,10 @@ func renderNode(node core.Node, documentPath string, caseResults map[string]core
 		return renderAlloyRef(current, alloyResults)
 	case core.TableNode:
 		return renderTable(current, caseResults)
+	case core.HookNode:
+		return renderHookBlock(current), nil
+	case core.FixtureCallNode:
+		return renderFixtureCall(current, caseResults), nil
 	default:
 		return "", fmt.Errorf("unknown node type %T", node)
 	}
@@ -452,6 +457,62 @@ func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.All
 	out.WriteString(`<p class="exec-block-footer">`)
 	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
 	out.WriteString(`</p>`)
+	out.WriteString(`</section>`)
+	return out.String()
+}
+
+func renderHookBlock(node core.HookNode) string {
+	label := string(node.Hook)
+	if node.Each {
+		label += ":each"
+	}
+	var out strings.Builder
+	out.WriteString(`<section class="exec-block hook-block">`)
+	out.WriteString(`<div class="exec-source">`)
+	out.WriteString(`<code>`)
+	out.WriteString(template.HTMLEscapeString(node.Source))
+	out.WriteString(`</code>`)
+	out.WriteString(`</div>`)
+	out.WriteString(`<p class="exec-block-footer">`)
+	out.WriteString(template.HTMLEscapeString(label + " · " + node.Block.Descriptor()))
+	out.WriteString(`</p>`)
+	out.WriteString(`</section>`)
+	return out.String()
+}
+
+func renderFixtureCall(node core.FixtureCallNode, caseResults map[string]core.CaseResult) string {
+	if node.ID == nil {
+		return ""
+	}
+	result, ok := caseResults[node.ID.Key()]
+	if !ok {
+		return ""
+	}
+
+	var out strings.Builder
+	out.WriteString(`<section class="exec-block fixture-call `)
+	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	out.WriteString(`" id="`)
+	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
+	out.WriteString(`">`)
+	out.WriteString(`<div class="exec-source">`)
+	out.WriteString(`<code>`)
+	label := node.Fixture
+	if len(node.FixtureParams) > 0 {
+		var params []string
+		for k, v := range node.FixtureParams {
+			params = append(params, k+"="+v)
+		}
+		sort.Strings(params)
+		label += "(" + strings.Join(params, ", ") + ")"
+	}
+	out.WriteString(template.HTMLEscapeString(label))
+	out.WriteString(`</code>`)
+	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
+		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
+	}
+	out.WriteString(`</div>`)
+	out.WriteString(`<p class="exec-block-footer">fixture</p>`)
 	out.WriteString(`</section>`)
 	return out.String()
 }

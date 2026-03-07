@@ -129,6 +129,36 @@ func (n TableNode) Markdown() string {
 	return n.Raw
 }
 
+type HookKind string
+
+const (
+	HookSetup    HookKind = "setup"
+	HookTeardown HookKind = "teardown"
+)
+
+type HookNode struct {
+	Hook        HookKind  `json:"hook"`
+	Each        bool      `json:"each"`
+	Block       BlockSpec `json:"block"`
+	Source      string    `json:"source"`
+	Raw         string    `json:"raw"`
+	HeadingPath []string  `json:"headingPath,omitempty"`
+}
+
+func (HookNode) isNode()            {}
+func (n HookNode) Markdown() string { return n.Raw }
+
+type FixtureCallNode struct {
+	Fixture       string            `json:"fixture"`
+	FixtureParams map[string]string `json:"fixtureParams"`
+	Raw           string            `json:"raw"`
+	HeadingPath   []string          `json:"headingPath,omitempty"`
+	ID            *SpecID           `json:"id,omitempty"`
+}
+
+func (FixtureCallNode) isNode()            {}
+func (n FixtureCallNode) Markdown() string { return n.Raw }
+
 type Frontmatter struct {
 	Timeout int `json:"timeout,omitempty"` // milliseconds, 0 = no limit
 }
