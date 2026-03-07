@@ -262,6 +262,9 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	if result.RenderedSource != "" {
 		source = result.RenderedSource
 	}
+	if strings.HasPrefix(result.Block, "doctest:") {
+		source = doctestCommandsOnly(source)
+	}
 	out.WriteString(`<div class="exec-source">`)
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(source))
@@ -530,6 +533,16 @@ func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCh
 	return "", nil
 }
 
+
+func doctestCommandsOnly(source string) string {
+	var commands []string
+	for _, line := range strings.Split(source, "\n") {
+		if strings.HasPrefix(line, "$ ") {
+			commands = append(commands, line)
+		}
+	}
+	return strings.Join(commands, "\n")
+}
 
 var mdConverter = goldmark.New(goldmark.WithExtensions(extension.Table))
 
