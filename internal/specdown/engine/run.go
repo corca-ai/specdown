@@ -311,40 +311,27 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 }
 
 func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session) ([]core.CaseResult, core.Status, error) {
-	setupSessions := make(map[string]bool)
-	bindings := make([]scopedBinding, 0)
+	ctx := &caseRunContext{
+		registry:      registry,
+		host:          host,
+		sessions:      sessions,
+		setupSessions: make(map[string]bool),
+		bindings:      make([]scopedBinding, 0),
+		timeoutMs:     plan.Document.Frontmatter.Timeout,
+		hooks:         plan.Hooks,
+	}
 	cases := make([]core.CaseResult, 0, len(plan.Cases))
 	status := core.StatusPassed
-	timeoutMs := plan.Document.Frontmatter.Timeout
-	hooks := plan.Hooks
 
 	var prevPath []string
 	for i, specCase := range plan.Cases {
 		currPath := specCase.ID.HeadingPath
 
-		// Run setup hooks at section boundaries
-		for _, hook := range hooks {
-			if hook.Kind != core.HookSetup {
-				continue
-			}
-			if !shouldRunHook(hook, prevPath, currPath) {
-				continue
-			}
-			hookBindings, err := runHook(hook, registry, host, sessions, setupSessions, bindings, timeoutMs)
-			if err != nil {
-				status = core.StatusFailed
-			} else {
-				for _, b := range hookBindings {
-					bindings = append(bindings, scopedBinding{
-						Binding:     b,
-						HeadingPath: append([]string(nil), hook.HeadingPath...),
-						Order:       len(bindings),
-					})
-				}
-			}
+		if failed := ctx.runSetupHooks(prevPath, currPath); failed {
+			status = core.StatusFailed
 		}
 
-		result, err := runSingleCase(specCase, registry, host, sessions, setupSessions, bindings, timeoutMs)
+		result, err := runSingleCase(specCase, ctx.registry, ctx.host, ctx.sessions, ctx.setupSessions, ctx.bindings, ctx.timeoutMs)
 		if err != nil {
 			return nil, "", err
 		}
@@ -352,35 +339,69 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 		if result.Status == core.StatusFailed {
 			status = core.StatusFailed
 		} else {
-			for _, binding := range result.Bindings {
-				bindings = append(bindings, scopedBinding{
-					Binding:     binding,
-					HeadingPath: append([]string(nil), specCase.ID.HeadingPath...),
-					Order:       len(bindings),
-				})
-			}
+			ctx.addBindings(result.Bindings, specCase.ID.HeadingPath)
 		}
 
-		// Run teardown hooks at section boundaries
 		var nextPath []string
 		if i+1 < len(plan.Cases) {
 			nextPath = plan.Cases[i+1].ID.HeadingPath
 		}
-		for _, hook := range hooks {
-			if hook.Kind != core.HookTeardown {
-				continue
-			}
-			if !shouldRunTeardownHook(hook, currPath, nextPath) {
-				continue
-			}
-			if _, err := runHook(hook, registry, host, sessions, setupSessions, bindings, timeoutMs); err != nil {
-				status = core.StatusFailed
-			}
+		if failed := ctx.runTeardownHooks(currPath, nextPath); failed {
+			status = core.StatusFailed
 		}
 
 		prevPath = currPath
 	}
 	return cases, status, nil
+}
+
+type caseRunContext struct {
+	registry      adapterRegistry
+	host          adapterhost.Host
+	sessions      map[string]*adapterhost.Session
+	setupSessions map[string]bool
+	bindings      []scopedBinding
+	timeoutMs     int
+	hooks         []core.HookSpec
+}
+
+func (c *caseRunContext) addBindings(newBindings []core.Binding, headingPath []string) {
+	for _, b := range newBindings {
+		c.bindings = append(c.bindings, scopedBinding{
+			Binding:     b,
+			HeadingPath: append([]string(nil), headingPath...),
+			Order:       len(c.bindings),
+		})
+	}
+}
+
+func (c *caseRunContext) runSetupHooks(prevPath, currPath []string) bool {
+	failed := false
+	for _, hook := range c.hooks {
+		if hook.Kind != core.HookSetup || !shouldRunHook(hook, prevPath, currPath) {
+			continue
+		}
+		hookBindings, err := runHook(hook, c.registry, c.host, c.sessions, c.setupSessions, c.bindings, c.timeoutMs)
+		if err != nil {
+			failed = true
+		} else {
+			c.addBindings(hookBindings, hook.HeadingPath)
+		}
+	}
+	return failed
+}
+
+func (c *caseRunContext) runTeardownHooks(currPath, nextPath []string) bool {
+	failed := false
+	for _, hook := range c.hooks {
+		if hook.Kind != core.HookTeardown || !shouldRunTeardownHook(hook, currPath, nextPath) {
+			continue
+		}
+		if _, err := runHook(hook, c.registry, c.host, c.sessions, c.setupSessions, c.bindings, c.timeoutMs); err != nil {
+			failed = true
+		}
+	}
+	return failed
 }
 
 func shouldRunHook(hook core.HookSpec, prevPath, currPath []string) bool {

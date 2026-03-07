@@ -126,9 +126,6 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 				return Document{}, err
 			} else if flushed {
 				nodes = append(nodes, node)
-				fixture = ""
-				fixtureParams = nil
-				fixtureRaw = ""
 			}
 			fixture = nextFixture
 			fixtureParams = nextParams

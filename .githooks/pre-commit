@@ -5,6 +5,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 exec direnv exec . bash -c '
   set -e
+  golangci-lint run
   go test ./...
   go build -o specdown ./cmd/specdown/
   go build -o specdown-adapter-shell ./cmd/specdown-adapter-shell/

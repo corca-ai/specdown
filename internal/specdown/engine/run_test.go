@@ -823,48 +823,60 @@ func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]a
 
 	switch item.Fixture {
 	case "board-exists":
-		name := values["board"]
-		shouldExist := parseHelperExists(values["exists"])
-		_, exists := state.boards[name]
-		if shouldExist == exists {
-			return nil, nil
-		}
-		return nil, helperBoardExistsFailure(name, shouldExist)
+		return helperFixtureBoardExists(state, values)
 	case "card-exists":
-		boardName := values["board"]
-		cardName := values["card"]
-		shouldExist := parseHelperExists(values["exists"])
-		board, err := helperBoardFor(state, boardName)
-		if err != nil {
-			return nil, err
-		}
-		_, exists := board.cards[cardName]
-		if shouldExist == exists {
-			return nil, nil
-		}
-		return nil, helperCardExistsFailure(boardName, cardName, shouldExist)
+		return helperFixtureCardExists(state, values)
 	case "card-column":
-		boardName := values["board"]
-		cardName := values["card"]
-		expectedColumn := values["column"]
-		board, err := helperBoardFor(state, boardName)
-		if err != nil {
-			return nil, err
-		}
-		card := board.cards[cardName]
-		if card == nil {
-			return nil, helperCardExistsFailure(boardName, cardName, true)
-		}
-		if card.column == expectedColumn {
-			return nil, nil
-		}
-		return nil, &helperFailure{
-			message:  "column mismatch for card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName),
-			expected: expectedColumn,
-			actual:   card.column,
-		}
+		return helperFixtureCardColumn(state, values)
 	default:
 		return nil, &helperError{message: "unsupported fixture " + strconvQuote(item.Fixture)}
+	}
+}
+
+func helperFixtureBoardExists(state *helperState, values map[string]string) ([]adapterprotocol.Binding, error) {
+	name := values["board"]
+	shouldExist := parseHelperExists(values["exists"])
+	_, exists := state.boards[name]
+	if shouldExist == exists {
+		return nil, nil
+	}
+	return nil, helperBoardExistsFailure(name, shouldExist)
+}
+
+func helperFixtureCardExists(state *helperState, values map[string]string) ([]adapterprotocol.Binding, error) {
+	boardName := values["board"]
+	cardName := values["card"]
+	shouldExist := parseHelperExists(values["exists"])
+	board, err := helperBoardFor(state, boardName)
+	if err != nil {
+		return nil, err
+	}
+	_, exists := board.cards[cardName]
+	if shouldExist == exists {
+		return nil, nil
+	}
+	return nil, helperCardExistsFailure(boardName, cardName, shouldExist)
+}
+
+func helperFixtureCardColumn(state *helperState, values map[string]string) ([]adapterprotocol.Binding, error) {
+	boardName := values["board"]
+	cardName := values["card"]
+	expectedColumn := values["column"]
+	board, err := helperBoardFor(state, boardName)
+	if err != nil {
+		return nil, err
+	}
+	card := board.cards[cardName]
+	if card == nil {
+		return nil, helperCardExistsFailure(boardName, cardName, true)
+	}
+	if card.column == expectedColumn {
+		return nil, nil
+	}
+	return nil, &helperFailure{
+		message:  "column mismatch for card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName),
+		expected: expectedColumn,
+		actual:   card.column,
 	}
 }
 
