@@ -469,11 +469,11 @@ cat <<'ADAPTER' > .tmp-test/diag-adapter.sh
 #!/bin/sh
 # A minimal adapter that fails with expected/actual/label
 while IFS= read -r line; do
-  type=$(echo "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
+  type=$(printf '%s' "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
   case "$type" in
     setup|teardown) ;;
     runCase)
-      echo "{\"id\":1,\"type\":\"failed\",\"message\":\"content mismatch\",\"expected\":\"alpha\\nbeta\",\"actual\":\"alpha\\ngamma\",\"label\":\"diag row\"}"
+      printf '%s\n' '{"id":1,"type":"failed","message":"content mismatch","expected":"alpha\\nbeta","actual":"alpha\\ngamma","label":"diag row"}'
       ;;
   esac
 done
