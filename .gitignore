@@ -3,5 +3,6 @@
 /specdown-adapter-shell
 org.alloytools.alloy.dist.jar
 .envrc
+mise.toml
 .tmp-test/
 .playwright-cli/
