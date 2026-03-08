@@ -1500,7 +1500,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       position: relative;
       padding-top: 0.02em;
       padding-bottom: 0.02em;
-      ruby-align: start;
     }
     ruby.inline-expect.failed rt {
       display: block;
@@ -1551,7 +1550,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       position: relative;
       padding-top: 0.02em;
       padding-bottom: 0.02em;
-      ruby-align: start;
     }
     ruby.inline-fixture rt {
       display: block;
