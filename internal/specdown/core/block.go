@@ -45,7 +45,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		return BlockSpec{}, nil
 	}
 
-	if trimmed == "expect" || strings.HasPrefix(trimmed, "alloy:") {
+	if strings.HasPrefix(trimmed, "alloy:") {
 		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
 	}
 

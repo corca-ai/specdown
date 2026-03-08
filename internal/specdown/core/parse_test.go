@@ -121,13 +121,22 @@ func TestParseDocumentRejectsFixtureDirectiveWithoutTable(t *testing.T) {
 	}
 }
 
-func TestParseDocumentRejectsUnsupportedReservedBlock(t *testing.T) {
-	_, err := ParseDocument("bad.spec.md", "```expect\n${value} matches /x/\n```\n")
-	if err == nil {
-		t.Fatal("expected parse error")
-	}
-	if !strings.Contains(err.Error(), "unsupported spec block") {
+func TestParseDocumentTreatsExpectAsPlainCodeBlock(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", "# T\n\n```expect\n${value} matches /x/\n```\n")
+	if err != nil {
 		t.Fatalf("unexpected error %v", err)
+	}
+	found := false
+	for _, node := range doc.Nodes {
+		if cb, ok := node.(CodeBlockNode); ok && cb.Block.Raw == "expect" {
+			if cb.Block.Executable() {
+				t.Fatal("expect block should not be executable")
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected to find an expect code block")
 	}
 }
 

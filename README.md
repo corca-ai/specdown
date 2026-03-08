@@ -31,6 +31,7 @@ go build -o specdown ./cmd/specdown
 ## Documentation
 
 - [Self-Spec](selfspecs/index.spec.md) — the executable reference (start here)
+- [Live Report](https://corca-ai.github.io/specdown/) — self-spec execution results
 - [Writing Good Specs](docs/guide-writing.md) — best practices
 - [Build & Run](docs/build.md) — building from source
 - [Agent Guide](AGENTS.md) — project layout, working rules, and conventions

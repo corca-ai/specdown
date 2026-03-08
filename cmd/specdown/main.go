@@ -23,6 +23,11 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "init":
+		if err := initProject(); err != nil {
+			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
+			os.Exit(1)
+		}
 	case "run":
 		if err := run(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
@@ -139,9 +144,55 @@ func alloyDump(args []string) error {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  specdown init")
 	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-out report.html] [-filter pattern] [-jobs N] [-dry-run]")
 	fmt.Fprintln(os.Stderr, "  specdown alloy dump [-config specdown.json]")
 	fmt.Fprintln(os.Stderr, "  specdown version")
+}
+
+func initProject() error {
+	if _, err := os.Stat("specdown.json"); err == nil {
+		return fmt.Errorf("specdown.json already exists")
+	}
+
+	if err := os.MkdirAll("specs", 0o755); err != nil {
+		return err
+	}
+
+	configJSON := `{
+  "entry": "specs/index.spec.md",
+  "adapters": [],
+  "reporters": [
+    { "builtin": "html", "outFile": ".artifacts/specdown/report.html" },
+    { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
+  ]
+}
+`
+	if err := os.WriteFile("specdown.json", []byte(configJSON), 0o644); err != nil {
+		return err
+	}
+
+	indexMD := "# My Project\n\n- [Example](example.spec.md)\n"
+	if err := os.WriteFile("specs/index.spec.md", []byte(indexMD), 0o644); err != nil {
+		return err
+	}
+
+	exampleMD := `# Example
+
+This is a sample spec. Add executable blocks and fixture tables to make it live.
+
+## Getting Started
+
+Prose paragraphs are preserved in the HTML report.
+Only executable blocks and fixture tables are run.
+`
+	if err := os.WriteFile("specs/example.spec.md", []byte(exampleMD), 0o644); err != nil {
+		return err
+	}
+
+	fmt.Println("Created specdown.json, specs/index.spec.md, specs/example.spec.md")
+	fmt.Println("Run: specdown run")
+	return nil
 }
 
 func writeArtifacts(report core.Report, reportPath string, cfg config.Config) error {

@@ -53,10 +53,37 @@ The dry-run output lists discovered specs.
 echo "${dryOutput}" | grep -q "spec"
 ```
 
+## Init
+
+`specdown init` scaffolds a new project with a config file, entry file, and example spec.
+
+```run:shell -> $initOutput
+rm -rf .tmp-test/init-test && mkdir -p .tmp-test/init-test && cd .tmp-test/init-test && specdown init 2>&1
+```
+
+```verify:shell
+test -f .tmp-test/init-test/specdown.json
+test -f .tmp-test/init-test/specs/index.spec.md
+test -f .tmp-test/init-test/specs/example.spec.md
+```
+
+Running init again in the same directory must fail (no overwrite).
+
+```verify:shell
+cd .tmp-test/init-test && ! specdown init 2>/dev/null
+```
+
+The generated project must be runnable immediately.
+
+```verify:shell
+cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep -q "spec"
+```
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
+| `specdown init` | Scaffold a new project |
 | `specdown run` | Parse, execute, and generate reports in one pass |
 | `specdown version` | Print the build version |
 | `specdown alloy dump` | Generate Alloy model `.als` files without running adapters |

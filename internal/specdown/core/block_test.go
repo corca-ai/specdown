@@ -123,7 +123,7 @@ func TestParseBlockSpecRejectsExpectFailWithCaptures(t *testing.T) {
 }
 
 func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
-	cases := []string{"run:", "verify:", "test:", "run:board ->", "run:board -> boardName", "expect", "alloy:model(board)"}
+	cases := []string{"run:", "verify:", "test:", "run:board ->", "run:board -> boardName", "alloy:model(board)"}
 	for _, input := range cases {
 		if _, err := parseBlockSpec(input); err == nil {
 			t.Fatalf("expected parse error for %q", input)
