@@ -267,6 +267,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	if result.ExpectFail {
 		out.WriteString(`<div class="expect-fail-label">expected failure</div>`)
 	}
+	renderVisibleBindings(&out, result.VisibleBindings)
 	renderBindings(&out, result.Bindings)
 	out.WriteString(`</div>`)
 	out.WriteString(`<p class="exec-block-footer">`)
@@ -287,6 +288,23 @@ func renderCodeSource(out *strings.Builder, result core.CaseResult) {
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
 	}
+}
+
+func renderVisibleBindings(out *strings.Builder, bindings []core.Binding) {
+	if len(bindings) == 0 {
+		return
+	}
+	out.WriteString(`<div class="exec-bindings visible-bindings">`)
+	for i, b := range bindings {
+		if i > 0 {
+			out.WriteString(`, `)
+		}
+		out.WriteString(`$`)
+		out.WriteString(template.HTMLEscapeString(b.Name))
+		out.WriteString(`=`)
+		out.WriteString(template.HTMLEscapeString(b.Value))
+	}
+	out.WriteString(`</div>`)
 }
 
 func renderBindings(out *strings.Builder, bindings []core.Binding) {

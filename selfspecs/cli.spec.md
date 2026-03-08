@@ -109,6 +109,7 @@ echo "$help" | grep -q "alloy dump"
 | `-filter` | (none) | Heading path substring filter |
 | `-jobs` | `1` | Number of spec files to run in parallel |
 | `-dry-run` | `false` | Parse and validate only |
+| `-show-bindings` | `false` | Print resolved variable bindings for each case |
 
 ## Filter
 

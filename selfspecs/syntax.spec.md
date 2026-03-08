@@ -125,6 +125,60 @@ $ touch /tmp/specdown-test/file.txt
 $ test -f /tmp/specdown-test/file.txt
 ```
 
+### Wildcard Matching
+
+A line containing exactly `...` in the expected output matches zero or more
+lines in the actual output. This is useful when output contains timestamps,
+PIDs, temporary paths, or other values that change between runs.
+
+```doctest:shell
+$ echo hello && date && echo goodbye
+hello
+...
+goodbye
+```
+
+A wildcard at the end matches any trailing output.
+
+```doctest:shell
+$ printf 'header\ndetail1\ndetail2'
+header
+...
+```
+
+A wildcard at the start matches any leading output.
+
+```doctest:shell
+$ printf 'preamble\nresult'
+...
+result
+```
+
+A lone `...` matches any output.
+
+```doctest:shell
+$ date
+...
+```
+
+Multiple wildcards can appear in a single expected block.
+
+```doctest:shell
+$ printf 'a\nb\nc\nd\ne'
+a
+...
+c
+...
+e
+```
+
+When no `...` line is present, matching is still exact (backward compatible).
+
+```doctest:shell !fail
+$ echo hello
+world
+```
+
 ## Expected Failures
 
 Any executable block can be marked with `!fail` to indicate that failure

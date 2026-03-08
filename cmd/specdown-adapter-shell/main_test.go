@@ -47,3 +47,38 @@ func TestParseDoctestSourceEmpty(t *testing.T) {
 		t.Fatalf("expected 0 steps, got %d", len(steps))
 	}
 }
+
+func TestMatchWithWildcard(t *testing.T) {
+	tests := []struct {
+		name     string
+		actual   string
+		expected string
+		match    bool
+	}{
+		{"exact match", "hello", "hello", true},
+		{"exact mismatch", "hello", "world", false},
+		{"wildcard only", "anything\ngoes\nhere", "...", true},
+		{"wildcard at end", "hello\nworld\nextra", "hello\n...", true},
+		{"wildcard at start", "extra\nhello\nworld", "...\nworld", true},
+		{"wildcard in middle", "hello\nskip\nthis\nworld", "hello\n...\nworld", true},
+		{"wildcard no middle lines", "hello\nworld", "hello\n...\nworld", true},
+		{"wildcard mismatch", "hello\nskip\nfoo", "hello\n...\nworld", false},
+		{"multiple wildcards", "a\nb\nc\nd\ne", "a\n...\nc\n...\ne", true},
+		{"no wildcard exact", "a\nb", "a\nb", true},
+		{"no wildcard mismatch", "a\nb", "a\nc", false},
+		{"empty both", "", "", true},
+		{"wildcard empty actual", "", "...", true},
+		{"leading wildcard match", "x\ny\nhello", "...\nhello", true},
+		{"trailing exact required", "hello\nworld", "hello\n...\nfoo", false},
+		{"consecutive wildcards", "a\nb\nc", "a\n...\n...\nc", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchWithWildcard(tt.actual, tt.expected)
+			if got != tt.match {
+				t.Errorf("matchWithWildcard(%q, %q) = %v, want %v", tt.actual, tt.expected, got, tt.match)
+			}
+		})
+	}
+}

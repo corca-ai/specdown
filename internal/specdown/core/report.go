@@ -50,6 +50,7 @@ type CaseResult struct {
 	Expected       string    `json:"expected,omitempty"`
 	Actual         string    `json:"actual,omitempty"`
 	Bindings       []Binding      `json:"bindings,omitempty"`
+	VisibleBindings []Binding     `json:"visibleBindings,omitempty"`
 	Steps          []DoctestStep  `json:"steps,omitempty"`
 	Events         []Event        `json:"events,omitempty"`
 }

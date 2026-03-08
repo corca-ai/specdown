@@ -509,6 +509,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 	if err != nil {
 		return result, err
 	}
+	result.VisibleBindings = visible
 
 	if specCase.Block.ExpectFail {
 		result = applyExpectFail(result)

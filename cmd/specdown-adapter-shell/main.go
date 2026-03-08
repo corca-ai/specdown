@@ -214,7 +214,7 @@ func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 			Actual:   actual,
 			Status:   stepStatus(actual, expected),
 		})
-		if actual != expected {
+		if !matchWithWildcard(actual, expected) {
 			return adapterprotocol.Response{
 				ID:    id,
 				Type:  "failed",
@@ -231,10 +231,62 @@ func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 }
 
 func stepStatus(actual, expected string) string {
-	if actual == expected {
+	if matchWithWildcard(actual, expected) {
 		return "passed"
 	}
 	return "failed"
+}
+
+// matchWithWildcard checks if actual matches expected, where a line
+// containing exactly "..." in expected matches zero or more lines in actual.
+func matchWithWildcard(actual, expected string) bool {
+	expectedLines := strings.Split(expected, "\n")
+	if !hasWildcardLine(expectedLines) {
+		return actual == expected
+	}
+	actualLines := strings.Split(actual, "\n")
+	return matchLines(actualLines, expectedLines, 0, 0)
+}
+
+func hasWildcardLine(lines []string) bool {
+	for _, line := range lines {
+		if line == "..." {
+			return true
+		}
+	}
+	return false
+}
+
+func skipWildcards(expected []string, ei int) int {
+	for ei < len(expected) && expected[ei] == "..." {
+		ei++
+	}
+	return ei
+}
+
+func matchLines(actual, expected []string, ai, ei int) bool {
+	for ei < len(expected) {
+		if expected[ei] != "..." {
+			if ai >= len(actual) || actual[ai] != expected[ei] {
+				return false
+			}
+			ai++
+			ei++
+			continue
+		}
+		ei = skipWildcards(expected, ei)
+		if ei >= len(expected) {
+			return true
+		}
+		for ai <= len(actual) {
+			if matchLines(actual, expected, ai, ei) {
+				return true
+			}
+			ai++
+		}
+		return false
+	}
+	return ai >= len(actual)
 }
 
 func runTableRowCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {

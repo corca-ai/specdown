@@ -120,6 +120,7 @@ func run(args []string) error {
 	filter := fs.String("filter", "", "Run only cases whose heading path contains this string")
 	jobs := fs.Int("jobs", 1, "Number of spec files to run in parallel")
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
+	showBindings := fs.Bool("show-bindings", false, "Print resolved variable bindings for each case")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -150,6 +151,10 @@ func run(args []string) error {
 	if *dryRun {
 		printDryRun(report)
 		return nil
+	}
+
+	if *showBindings {
+		printBindings(report)
 	}
 
 	reportPath := resolveReportPath(configDir, cfg, *outPath)
@@ -409,6 +414,23 @@ func printAlloyFailures(checks []core.AlloyCheckResult) {
 		fmt.Fprintf(os.Stderr, "  FAIL  %s  [alloy:%s#%s]\n", path, c.Model, c.Assertion)
 		if c.Message != "" {
 			fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
+		}
+	}
+}
+
+func printBindings(report core.Report) {
+	for _, doc := range report.Results {
+		for _, c := range doc.Cases {
+			if len(c.VisibleBindings) == 0 {
+				continue
+			}
+			path := strings.Join(c.ID.HeadingPath, " > ")
+			kind := c.Block + c.Fixture
+			var pairs []string
+			for _, b := range c.VisibleBindings {
+				pairs = append(pairs, fmt.Sprintf("$%s=%s", b.Name, b.Value))
+			}
+			fmt.Fprintf(os.Stderr, "  BIND  %s  [%s]  %s\n", path, kind, strings.Join(pairs, ", "))
 		}
 	}
 }
