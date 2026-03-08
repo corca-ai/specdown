@@ -25,6 +25,7 @@ type CaseSpec struct {
 	FixtureParams map[string]string
 	Template      string
 	ExpectValue   string
+	ExpectFail    bool
 	Columns       []string
 	Cells         []string
 	RowNumber     int
@@ -270,6 +271,7 @@ func appendInlineCases(cases []CaseSpec, node ProseNode) []CaseSpec {
 				Kind:        CaseKindInlineExpect,
 				Template:    inline.ExpectExpr,
 				ExpectValue: inline.ExpectValue,
+				ExpectFail:  inline.ExpectFail,
 			})
 		case InlineFixture:
 			cases = append(cases, CaseSpec{

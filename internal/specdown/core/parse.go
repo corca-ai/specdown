@@ -653,7 +653,7 @@ func parseHeading(line string) (int, string, bool) {
 	return level, text, true
 }
 
-var inlineExpectPattern = regexp.MustCompile("`expect:\\s*(.+?)\\s*==\\s*(.+?)\\s*`")
+var inlineExpectPattern = regexp.MustCompile("`expect:\\s*(.+?)\\s*==\\s*(.+?)\\s*(!fail\\s*)?`")
 var inlineFixturePattern = regexp.MustCompile("`fixture:([A-Za-z0-9_-]+)\\(([^)]*)\\)`")
 
 // insideCodeSpan checks whether a match at [start, end) in raw
@@ -687,11 +687,13 @@ func parseInlineElements(raw string, relativePath string, ordinal *int, headingP
 			continue
 		}
 		*ordinal++
+		expectFail := loc[6] >= 0 && loc[7] > loc[6]
 		elements = append(elements, InlineElement{
 			Kind:        InlineExpect,
 			Raw:         raw[loc[0]:loc[1]],
 			ExpectExpr:  strings.TrimSpace(raw[loc[2]:loc[3]]),
 			ExpectValue: strings.TrimSpace(raw[loc[4]:loc[5]]),
+			ExpectFail:  expectFail,
 			ID: &SpecID{
 				File:        relativePath,
 				HeadingPath: append([]string(nil), headingPath...),

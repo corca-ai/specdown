@@ -333,8 +333,17 @@ as a test case and appears green (pass) or red (fail) in the HTML report.
 The count is `expect: ${count} == 3` items.
 ```
 
+For example, one plus one is `expect: 2 == 2`.
+
 When the actual value does not match the expected value, the inline assertion
 fails and the report shows both the actual value and the expected value.
+
+Adding `!fail` at the end marks the assertion as an expected failure.
+The spec passes when the assertion fails, and fails if it unexpectedly succeeds.
+This is useful for documenting known mismatches or negative examples inline.
+
+This deliberately wrong assertion passes because it is marked as expected failure:
+`expect: hello == goodbye !fail`.
 
 ### Inline fixture call
 

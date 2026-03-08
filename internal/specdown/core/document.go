@@ -70,6 +70,7 @@ type InlineElement struct {
 	Raw           string            `json:"raw"`
 	ExpectExpr    string            `json:"expectExpr,omitempty"`
 	ExpectValue   string            `json:"expectValue,omitempty"`
+	ExpectFail    bool              `json:"expectFail,omitempty"`
 	Fixture       string            `json:"fixture,omitempty"`
 	FixtureParams map[string]string `json:"fixtureParams,omitempty"`
 	ID            *SpecID           `json:"id,omitempty"`

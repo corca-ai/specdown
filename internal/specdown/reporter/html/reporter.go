@@ -694,13 +694,20 @@ func filterInlinesByKind(inlines []core.InlineElement, kind core.InlineKind) []c
 
 func renderInlineExpectSpan(cr core.CaseResult) string {
 	var out strings.Builder
-	if cr.Status == core.StatusPassed {
+	switch {
+	case cr.ExpectFail:
+		out.WriteString(`<span class="inline-expect expect-fail" title="`)
+		out.WriteString(template.HTMLEscapeString("expected failure: " + cr.Message))
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(cr.Actual))
+		out.WriteString(` <span class="inline-expected">(expected failure)</span></span>`)
+	case cr.Status == core.StatusPassed:
 		out.WriteString(`<span class="inline-expect passed" title="`)
 		out.WriteString(template.HTMLEscapeString("expected " + cr.Expected))
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
 		out.WriteString(`</span>`)
-	} else {
+	default:
 		out.WriteString(`<span class="inline-expect failed" title="`)
 		out.WriteString(template.HTMLEscapeString(cr.Message))
 		out.WriteString(`">`)
@@ -1377,6 +1384,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .inline-expect.failed {
       background: var(--fail-bg);
       color: var(--fail-ink);
+    }
+
+    .inline-expect.expect-fail {
+      background: var(--pass-bg);
+      color: var(--pass-ink);
+      text-decoration: line-through;
+      text-decoration-color: var(--muted);
     }
 
     .inline-expected {

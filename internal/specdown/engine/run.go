@@ -488,7 +488,11 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 		if err != nil {
 			return variableFailure(specCase, err), nil
 		}
-		return runInlineExpect(prepared, visible), nil
+		result := runInlineExpect(prepared, visible)
+		if specCase.ExpectFail {
+			result = applyExpectFail(result)
+		}
+		return result, nil
 	}
 
 	adapter, err := registry.adapterFor(specCase)
