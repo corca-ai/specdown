@@ -221,6 +221,24 @@ Fixtures can accept parameters via `(key=value)` syntax.
 Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
 Multiple parameters are comma-separated: `> fixture:name(key1=val1, key2=val2)`.
 
+Parameters let one fixture definition handle many scenarios.
+Instead of registering separate fixtures for each endpoint or mode,
+register a single generic fixture and pass the differences as parameters:
+
+```markdown
+> fixture:check(endpoint=/api/users, mode=object)
+| field | expected |
+| name  | alice    |
+
+> fixture:check(endpoint=/api/orders, mode=array, count=2)
+| index | status  |
+| 0     | SUCCESS |
+| 1     | PENDING |
+```
+
+The adapter reads `fixtureParams.endpoint` and `fixtureParams.mode`
+to decide how to fetch and validate, eliminating per-endpoint fixture code.
+
 ### Parameterized fixture call
 
 A fixture directive with parameters but no following table creates a single

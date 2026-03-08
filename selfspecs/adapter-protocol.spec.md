@@ -16,6 +16,9 @@ Any language works as long as it reads JSON from stdin and writes JSON to stdout
 
 A single adapter process handles multiple `runCase` requests during one spec run.
 The adapter can maintain process-local state across requests.
+Use this to cache data: for example, when a fixture table has many rows
+that all query the same endpoint, fetch once on the first row
+and reuse the cached response for subsequent rows.
 
 ## Request Format
 
@@ -72,7 +75,7 @@ The adapter can process values directly without additional substitution.
 | `message` | Error description (failed only) |
 | `expected` | Expected value for structured diff (optional) |
 | `actual` | Actual value for structured diff (optional) |
-| `label` | Human-readable row identifier, overrides default (optional) |
+| `label` | Human-readable row identifier for debugging, overrides the default `row N` format (optional) |
 | `bindings` | Captured variables to pass to subsequent cases (passed only) |
 | `steps` | Per-command results for doctest blocks (optional, see below) |
 
