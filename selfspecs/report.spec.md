@@ -134,7 +134,7 @@ cat <<'SPEC' > .tmp-test/diag.spec.md
 SPEC
 printf '# T\n\n- [Diag](diag.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/diag.json
-{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"},{"builtin":"json","outFile":"report.json"}]}
+{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":".tmp-test/diag-report.html"},{"builtin":"json","outFile":".tmp-test/report.json"}]}
 CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
 ```
@@ -149,10 +149,10 @@ found
 The JSON report must contain the expected and actual fields, and the adapter label.
 
 ```doctest:shell
-$ grep -q '"expected"' report.json && echo found
+$ grep -q '"expected"' .tmp-test/report.json && echo found
 found
-$ grep -q '"actual"' report.json && echo found
+$ grep -q '"actual"' .tmp-test/report.json && echo found
 found
-$ grep -q '"diag row"' report.json && echo found
+$ grep -q '"diag row"' .tmp-test/report.json && echo found
 found
 ```
