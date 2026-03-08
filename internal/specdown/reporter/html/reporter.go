@@ -748,13 +748,13 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
 		out.WriteString(`</span>`)
 	default:
-		out.WriteString(`<ruby class="inline-expect failed" title="`)
+		out.WriteString(`<span class="inline-expect failed" title="`)
 		out.WriteString(template.HTMLEscapeString(cr.Message))
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<rp>(</rp><rt>`)
+		out.WriteString(`<span class="annotation">`)
 		out.WriteString(template.HTMLEscapeString(cr.Expected))
-		out.WriteString(`</rt><rp>)</rp></ruby>`)
+		out.WriteString(`</span></span>`)
 	}
 	return out.String()
 }
@@ -763,7 +763,7 @@ func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) stri
 	var out strings.Builder
 	if cr.Actual != "" {
 		// Ruby: fixture name as annotation, actual value as main content
-		out.WriteString(`<ruby class="inline-fixture `)
+		out.WriteString(`<span class="inline-fixture `)
 		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
 		out.WriteString(`" title="`)
 		if cr.Status == core.StatusFailed && cr.Message != "" {
@@ -773,9 +773,9 @@ func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) stri
 		}
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<rp>(</rp><rt>`)
+		out.WriteString(`<span class="annotation">`)
 		out.WriteString(template.HTMLEscapeString(inline.Fixture))
-		out.WriteString(`</rt><rp>)</rp></ruby>`)
+		out.WriteString(`</span></span>`)
 	} else {
 		out.WriteString(`<span class="inline-fixture `)
 		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
@@ -1501,17 +1501,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       padding-top: 0.02em;
       padding-bottom: 0.02em;
     }
-    ruby.inline-expect.failed rt {
-      display: block;
+
+    .inline-expect.failed > .annotation,
+    .inline-fixture > .annotation {
       position: absolute;
       left: 0;
       bottom: 100%;
-      margin-bottom: 0;
       font-size: 0.8em;
       line-height: 1;
       color: var(--muted);
       font-style: italic;
       white-space: nowrap;
+      pointer-events: none;
     }
 
     .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed) {
@@ -1521,8 +1522,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       content: "";
       position: absolute;
       left: -0.85rem;
-      top: 50%;
-      transform: translateY(-50%);
+      top: 0.55em;
       width: 0.38rem;
       height: 0.38rem;
       border-radius: 50%;
@@ -1546,22 +1546,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       color: var(--fail-ink);
     }
 
-    ruby.inline-fixture {
+    .inline-fixture:has(.annotation) {
       position: relative;
       padding-top: 0.02em;
       padding-bottom: 0.02em;
-    }
-    ruby.inline-fixture rt {
-      display: block;
-      position: absolute;
-      left: 0;
-      bottom: 100%;
-      margin-bottom: 0;
-      font-size: 0.8em;
-      line-height: 1;
-      color: var(--muted);
-      font-style: italic;
-      white-space: nowrap;
     }
 
     /* ── Cell styles ── */
