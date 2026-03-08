@@ -1633,7 +1633,23 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
   const update = () => {
     frame = 0;
-    const offset = window.scrollY + Math.min(window.innerHeight * 0.22, 180);
+
+    // Shadow on the bottommost stuck heading (computed first for offset)
+    let stuckLast = null;
+    for (const item of stickyHeadings) {
+      if (Math.abs(item.el.getBoundingClientRect().top - item.top) < 2) {
+        stuckLast = item.el;
+      }
+    }
+    if (prevStuckLast !== stuckLast) {
+      prevStuckLast?.classList.remove('stuck-last');
+      stuckLast?.classList.add('stuck-last');
+      prevStuckLast = stuckLast;
+    }
+
+    // Use sticky header stack bottom as offset so short sections aren't overshot
+    const stickyBottom = stuckLast ? stuckLast.getBoundingClientRect().bottom : 0;
+    const offset = window.scrollY + Math.max(stickyBottom + 20, 50);
 
     // Find active link among all links (H2 + H3+)
     let active = allItems[0];
@@ -1675,19 +1691,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     for (const entry of h2Entries) {
       entry.li.classList.toggle('expanded', entry === activeH2);
-    }
-
-    // Shadow on the bottommost stuck heading
-    let stuckLast = null;
-    for (const item of stickyHeadings) {
-      if (Math.abs(item.el.getBoundingClientRect().top - item.top) < 2) {
-        stuckLast = item.el;
-      }
-    }
-    if (prevStuckLast !== stuckLast) {
-      prevStuckLast?.classList.remove('stuck-last');
-      stuckLast?.classList.add('stuck-last');
-      prevStuckLast = stuckLast;
     }
   };
 
