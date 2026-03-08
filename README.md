@@ -10,18 +10,11 @@ specdown run
 
 ### Binary (recommended)
 
-Download from [Releases](https://github.com/corca-ai/specdown/releases/latest):
-
 ```sh
-# macOS (Apple Silicon)
-curl -sSfL https://github.com/corca-ai/specdown/releases/latest/download/specdown_*_darwin_arm64.tar.gz | tar xz -C /usr/local/bin specdown
-
-# macOS (Intel)
-curl -sSfL https://github.com/corca-ai/specdown/releases/latest/download/specdown_*_darwin_amd64.tar.gz | tar xz -C /usr/local/bin specdown
-
-# Linux (amd64)
-curl -sSfL https://github.com/corca-ai/specdown/releases/latest/download/specdown_*_linux_amd64.tar.gz | tar xz -C /usr/local/bin specdown
+curl -sSfL https://raw.githubusercontent.com/corca-ai/specdown/main/install.sh | sh
 ```
+
+Or download directly from [Releases](https://github.com/corca-ai/specdown/releases/latest).
 
 ### go install
 
