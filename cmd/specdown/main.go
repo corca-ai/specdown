@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	_ "embed"
+
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/engine"
@@ -16,6 +18,9 @@ import (
 )
 
 var version = "dev"
+
+//go:embed skills/specdown/SKILL.md
+var skillSpecdown string
 
 func main() {
 	if len(os.Args) < 2 {
@@ -33,6 +38,8 @@ func main() {
 		err = run(os.Args[2:])
 	case "alloy":
 		err = alloyCmd(os.Args[2:])
+	case "install":
+		err = installSkillsCmd(os.Args[2:])
 	case "version", "--version", "-version":
 		fmt.Println(version)
 	default:
@@ -206,12 +213,44 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "specdown — Markdown-first executable specifications")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  init        Scaffold a new project (creates specdown.json and example specs)")
-	fmt.Fprintln(os.Stderr, "  run         Execute specs and generate HTML/JSON reports")
-	fmt.Fprintln(os.Stderr, "  alloy dump  Export embedded Alloy models as .als files")
-	fmt.Fprintln(os.Stderr, "  version     Print the specdown version")
+	fmt.Fprintln(os.Stderr, "  init            Scaffold a new project (creates specdown.json and example specs)")
+	fmt.Fprintln(os.Stderr, "  run             Execute specs and generate HTML/JSON reports")
+	fmt.Fprintln(os.Stderr, "  install skills  Install Claude Code skills for this project")
+	fmt.Fprintln(os.Stderr, "  alloy dump      Export embedded Alloy models as .als files")
+	fmt.Fprintln(os.Stderr, "  version         Print the specdown version")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run 'specdown <command> --help' for details on a specific command.")
+}
+
+func installSkillsCmd(args []string) error {
+	if len(args) == 0 || hasHelpFlag(args) {
+		fmt.Fprintln(os.Stderr, "Usage: specdown install skills")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Install Claude Code skills for this project.")
+		fmt.Fprintln(os.Stderr, "Creates .claude/skills/specdown/SKILL.md in the current directory.")
+		return nil
+	}
+	if args[0] != "skills" {
+		return fmt.Errorf("unknown install target %q\nhint: run 'specdown install --help'", args[0])
+	}
+
+	dir := filepath.Join(".claude", "skills", "specdown")
+	dest := filepath.Join(dir, "SKILL.md")
+
+	if _, err := os.Stat(dest); err == nil {
+		return fmt.Errorf("%s already exists", dest)
+	}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(dest, []byte(skillSpecdown), 0o644); err != nil {
+		return err
+	}
+
+	fmt.Printf("Created %s\n", dest)
+	fmt.Println("Use /specdown in Claude Code to run and fix specs.")
+	return nil
 }
 
 func initProject() error {
