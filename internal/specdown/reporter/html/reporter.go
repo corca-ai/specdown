@@ -1178,12 +1178,12 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       & :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
 
       /* scroll-margin-top on non-sticky section wrappers.
-         section.sN contains h(N+1). Values = bottom of the stuck heading
-         (= next heading level's top) so content clears the full sticky stack.
-         The heading itself remains visible because it is sticky. */
-      & .s2 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
-      & .s3 { scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
-      & .s4, & .s5, & .s6 { scroll-margin-top: calc(13.7rem + 4px + var(--safe-top)); }
+         section.sN contains h(N+1). Values = the heading's sticky top,
+         so the heading sits exactly at its sticky threshold on navigation.
+         Content's own margin-top (~1rem+) provides clearance below. */
+      & .s2 { scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
+      & .s3 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
+      & .s4, & .s5, & .s6 { scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
     }
 
     .status {
