@@ -23,4 +23,4 @@ Run executable specifications and fix failures.
 
 ## Writing and Editing Specs
 
-When you need to write or edit a spec file, first read `docs/guide-writing.md` for best practices and patterns. For syntax reference, find and read the spec syntax file (usually named `syntax.spec.md`).
+When you need to write or edit a spec file, read `${CLAUDE_SKILL_DIR}/guide-writing.md` for best practices and patterns.

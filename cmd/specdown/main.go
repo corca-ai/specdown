@@ -22,6 +22,9 @@ var version = "dev"
 //go:embed skills/specdown/SKILL.md
 var skillSpecdown string
 
+//go:embed skills/specdown/guide-writing.md
+var skillWritingGuide string
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -247,8 +250,13 @@ func installSkillsCmd(args []string) error {
 	if err := os.WriteFile(dest, []byte(skillSpecdown), 0o644); err != nil {
 		return err
 	}
+	guideDest := filepath.Join(dir, "guide-writing.md")
+	if err := os.WriteFile(guideDest, []byte(skillWritingGuide), 0o644); err != nil {
+		return err
+	}
 
 	fmt.Printf("Created %s\n", dest)
+	fmt.Printf("Created %s\n", guideDest)
 	fmt.Println("Use /specdown in Claude Code to run and fix specs.")
 	return nil
 }
