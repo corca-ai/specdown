@@ -807,20 +807,16 @@ func renderDoctestPassedOutput(out *strings.Builder, step core.DoctestStep) {
 		if !seg.Wildcard {
 			out.WriteString(template.HTMLEscapeString(seg.Text))
 		} else {
-			n := strings.Count(seg.Text, "\n") + 1
-			if seg.Text == "" {
-				n = 0
-			}
 			unit := "lines"
-			if n == 1 {
+			if seg.Lines == 1 {
 				unit = "line"
 			}
-			summary := fmt.Sprintf("... (%d %s)", n, unit)
+			summary := fmt.Sprintf("... (%d %s)", seg.Lines, unit)
 			out.WriteString(`<details class="wildcard-fold"><summary>`)
 			out.WriteString(template.HTMLEscapeString(summary))
-			out.WriteString(`</summary>`)
+			out.WriteString(`</summary><span class="wildcard-expanded">`)
 			out.WriteString(template.HTMLEscapeString(seg.Text))
-			out.WriteString(`</details>`)
+			out.WriteString(`</span></details>`)
 		}
 	}
 	out.WriteString(`</div>`)
@@ -830,6 +826,7 @@ func renderDoctestPassedOutput(out *strings.Builder, step core.DoctestStep) {
 // either literally matched or absorbed by a "..." wildcard.
 type wildcardSegment struct {
 	Text     string
+	Lines    int
 	Wildcard bool
 }
 
@@ -937,6 +934,7 @@ func buildSegments(actualLines []string, mapping []bool) []wildcardSegment {
 		}
 		segments = append(segments, wildcardSegment{
 			Text:     text,
+			Lines:    j - i,
 			Wildcard: isWild,
 		})
 		i = j
@@ -1246,8 +1244,14 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
     .wildcard-fold > summary::-webkit-details-marker { display: none; }
     .wildcard-fold[open] > summary {
+      display: block;
       color: var(--muted);
       opacity: 0.6;
+    }
+    .wildcard-expanded {
+      border-left: 2px solid var(--pass-mark);
+      padding-left: 0.6em;
+      display: inline-block;
     }
 
     .expect-fail-label {
