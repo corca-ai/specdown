@@ -113,7 +113,7 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 
 func specStatusClass(result core.DocumentResult) string {
 	for _, item := range result.Cases {
-		if item.Status == core.StatusFailed && !item.ExpectFail {
+		if item.Status == core.StatusFailed {
 			return "failed"
 		}
 	}
@@ -149,11 +149,7 @@ func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
 	}
 
 	for _, item := range result.Cases {
-		status := item.Status
-		if item.ExpectFail && status == core.StatusFailed {
-			status = core.StatusPassed
-		}
-		mark(item.ID.HeadingPath, status)
+		mark(item.ID.HeadingPath, item.Status)
 	}
 	for _, item := range result.AlloyChecks {
 		mark(item.ID.HeadingPath, item.Status)

@@ -162,14 +162,14 @@ func run(args []string) error {
 		return err
 	}
 
-	if report.Summary.SpecsFailed > 0 || report.Summary.CasesFailed > 0 || report.Summary.AlloyChecksFailed > 0 {
+	if report.Summary.SpecsFailed > 0 {
 		printFailures(report)
 		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, report.Summary.AlloyChecksFailed)
 		fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
 		return fmt.Errorf("spec run failed")
 	}
 
-	fmt.Printf("PASS %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsPassed, report.Summary.CasesPassed, report.Summary.AlloyChecksPassed)
+	fmt.Printf("PASS %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, report.Summary.AlloyChecksTotal)
 	fmt.Printf("report: %s\n", reportPath)
 	return nil
 }
@@ -378,7 +378,7 @@ func printFailures(report core.Report) {
 
 func printCaseFailures(cases []core.CaseResult) {
 	for _, c := range cases {
-		if c.Status != core.StatusFailed || c.ExpectFail {
+		if c.Status != core.StatusFailed {
 			continue
 		}
 		printCaseFailure(c)

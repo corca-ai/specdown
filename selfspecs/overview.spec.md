@@ -53,7 +53,8 @@ $ echo hello
 hello
 ```
 
-This block intentionally mismatches. It appears red, but `!fail` makes it count as a pass:
+This block intentionally mismatches. It appears red and counts as a failure,
+but `!fail` prevents it from causing a non-zero exit code:
 
 ```doctest:shell !fail
 $ echo hello

@@ -182,11 +182,12 @@ world
 ## Expected Failures
 
 Any executable block can be marked with `!fail` to indicate that failure
-is the expected outcome. The spec passes when the adapter reports failure,
-and fails if the adapter unexpectedly succeeds.
-
-This is useful for documenting error cases, showing what invalid input
-looks like, or including negative examples in a spec without breaking CI.
+is the expected outcome. When the adapter reports failure as expected,
+the case is rendered identically to a regular failure — red styling,
+failure stats, and red dot markers in the ToC all apply.
+The only difference is the exit code: a spec run exits 0
+when expected failures are the only failures present.
+If the adapter unexpectedly succeeds, the case is a real failure.
 
 `!fail` blocks do not support variable capture (`-> $name`).
 
@@ -339,12 +340,11 @@ When the actual value does not match the expected value, the inline assertion
 fails and the report shows both the actual value and the expected value.
 
 Adding `!fail` at the end marks the assertion as an expected failure.
-The spec still passes when the assertion fails, but the inline value renders
-identically to a regular failure — with a red background and a red dot marker
-on the containing block. The only difference is that expected failures do not
-cause a non-zero exit code.
+The inline value renders identically to a regular failure — red background,
+red dot marker, and failure stats all apply. The only difference is
+that expected failures do not cause a non-zero exit code.
 
-This deliberately wrong assertion passes because it is marked as expected failure:
+This deliberately wrong assertion is an expected failure:
 `expect: hello == goodbye !fail`.
 
 ### Inline fixture call
