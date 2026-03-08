@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -22,40 +23,78 @@ func main() {
 		os.Exit(2)
 	}
 
+	var err error
 	switch os.Args[1] {
+	case "help", "--help", "-help", "-h":
+		usage()
 	case "init":
-		if err := initProject(); err != nil {
-			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
-			os.Exit(1)
-		}
+		err = initCmd(os.Args[2:])
 	case "run":
-		if err := run(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
-			os.Exit(1)
-		}
+		err = run(os.Args[2:])
 	case "alloy":
-		if err := alloyCmd(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
-			os.Exit(1)
-		}
+		err = alloyCmd(os.Args[2:])
 	case "version", "--version", "-version":
 		fmt.Println(version)
 	default:
-		// Check for --version anywhere
-		for _, arg := range os.Args[1:] {
-			if arg == "--version" || arg == "-version" {
-				fmt.Println(version)
-				return
-			}
-		}
-		usage()
-		os.Exit(2)
+		unknownCmd(os.Args[1:])
 	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func unknownCmd(args []string) {
+	for _, arg := range args {
+		if arg == "--version" || arg == "-version" {
+			fmt.Println(version)
+			return
+		}
+	}
+	fmt.Fprintf(os.Stderr, "specdown: unknown command %q\n\n", args[0])
+	usage()
+	os.Exit(2)
+}
+
+func initCmd(args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Fprintln(os.Stderr, "Usage: specdown init")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Scaffold a new specdown project in the current directory.")
+		fmt.Fprintln(os.Stderr, "Creates specdown.json, specs/index.spec.md, and specs/example.spec.md.")
+		return nil
+	}
+	return initProject()
+}
+
+func configLoadErr(err error) error {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr
+	}
+	return err
+}
+
+func hasHelpFlag(args []string) bool {
+	for _, a := range args {
+		if a == "-help" || a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	return false
 }
 
 func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: specdown run [flags]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Execute spec files and generate HTML/JSON reports.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+	}
 
 	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
 	outPath := fs.String("out", "", "Output HTML report path")
@@ -64,11 +103,17 @@ func run(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 
 	cfg, configDir, err := config.Load(*configPath)
 	if err != nil {
+		if os.IsNotExist(configLoadErr(err)) {
+			return fmt.Errorf("%w\nhint: run 'specdown init' to create a new project, or use -config to specify a config file", err)
+		}
 		return err
 	}
 
@@ -106,23 +151,38 @@ func run(args []string) error {
 }
 
 func alloyCmd(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: specdown alloy dump [-config specdown.json]")
+	if len(args) == 0 || (len(args) == 1 && hasHelpFlag(args)) {
+		fmt.Fprintln(os.Stderr, "Usage: specdown alloy <subcommand>")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Subcommands:")
+		fmt.Fprintln(os.Stderr, "  dump  Export embedded Alloy models as .als files")
+		return nil
 	}
 
 	switch args[0] {
 	case "dump":
 		return alloyDump(args[1:])
 	default:
-		return fmt.Errorf("unknown alloy subcommand %q", args[0])
+		return fmt.Errorf("unknown alloy subcommand %q\nhint: run 'specdown alloy --help' for available subcommands", args[0])
 	}
 }
 
 func alloyDump(args []string) error {
 	fs := flag.NewFlagSet("alloy dump", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: specdown alloy dump [flags]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Export embedded Alloy models from spec files as .als files.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+	}
 	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 
@@ -143,11 +203,15 @@ func alloyDump(args []string) error {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  specdown init")
-	fmt.Fprintln(os.Stderr, "  specdown run [-config specdown.json] [-out report.html] [-filter pattern] [-jobs N] [-dry-run]")
-	fmt.Fprintln(os.Stderr, "  specdown alloy dump [-config specdown.json]")
-	fmt.Fprintln(os.Stderr, "  specdown version")
+	fmt.Fprintln(os.Stderr, "specdown — Markdown-first executable specifications")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Commands:")
+	fmt.Fprintln(os.Stderr, "  init        Scaffold a new project (creates specdown.json and example specs)")
+	fmt.Fprintln(os.Stderr, "  run         Execute specs and generate HTML/JSON reports")
+	fmt.Fprintln(os.Stderr, "  alloy dump  Export embedded Alloy models as .als files")
+	fmt.Fprintln(os.Stderr, "  version     Print the specdown version")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Run 'specdown <command> --help' for details on a specific command.")
 }
 
 func initProject() error {
