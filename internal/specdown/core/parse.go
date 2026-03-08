@@ -225,10 +225,14 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 
 			raw := strings.Join(lines[i:end+1], "")
 			source := strings.Join(lines[i+1:end], "")
+			trimmedSource := strings.TrimSuffix(source, "\n")
 			node := CodeBlockNode{
 				Block:  block,
-				Source: strings.TrimSuffix(source, "\n"),
+				Source: trimmedSource,
 				Raw:    raw,
+			}
+			if block.Executable() && block.Kind != BlockKindDoctest {
+				node.Caption, _ = extractCaption(trimmedSource)
 			}
 			if block.Executable() {
 				ordinal++
@@ -721,6 +725,39 @@ func parseInlineElements(raw string, relativePath string, ordinal *int, headingP
 	}
 
 	return elements
+}
+
+// commentPrefixes maps common comment markers to check for intent lines.
+var commentPrefixes = []string{"# ", "// ", "-- "}
+
+// extractCaption checks if the first line of source is a comment and returns
+// the caption text and the remaining source with the comment line stripped.
+// If no caption is found, returns empty string and the original source unchanged.
+func extractCaption(source string) (caption string, rest string) {
+	if source == "" {
+		return "", source
+	}
+	firstNewline := strings.IndexByte(source, '\n')
+	var firstLine string
+	if firstNewline < 0 {
+		firstLine = source
+	} else {
+		firstLine = source[:firstNewline]
+	}
+	trimmed := strings.TrimSpace(firstLine)
+	for _, prefix := range commentPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			caption = strings.TrimSpace(trimmed[len(prefix):])
+			if caption == "" {
+				return "", source
+			}
+			if firstNewline < 0 {
+				return caption, ""
+			}
+			return caption, source[firstNewline+1:]
+		}
+	}
+	return "", source
 }
 
 func nextHeadingPath(current []string, level int, text string) []string {

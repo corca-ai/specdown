@@ -32,6 +32,41 @@ The parser must recognize `run`, `verify`, `test`, and `doctest` as executable b
 | test:login | test | login |
 | doctest:shell | doctest | shell |
 
+## Intent Captions
+
+If the first line of a `run:`, `verify:`, or `test:` block is a comment,
+specdown extracts it as the block's **intent caption**.
+
+In the HTML report, blocks with a caption are rendered collapsed:
+only the caption text and pass/fail indicator are visible. A `▶` marker
+on the right side lets readers expand the block to see the full code.
+Failed blocks auto-expand so failures are never hidden.
+
+This makes specs readable for non-technical stakeholders without
+removing any detail for developers.
+
+The comment prefixes recognized are `# `, `// `, and `-- `.
+Only the text after the prefix becomes the caption;
+the prefix itself and leading/trailing whitespace are stripped.
+
+Doctest blocks never get captions — they use a different rendering model
+with command/output pairs.
+
+Here is an example: the following block's first line is a comment,
+so the report will render it collapsed with the caption
+"Demonstrate intent caption" and a pass/fail indicator.
+
+```run:shell
+# Demonstrate intent caption
+echo "This block is collapsed in the report"
+```
+
+A block without a leading comment renders normally (not collapsed):
+
+```run:shell
+echo "This block has no caption and renders fully visible"
+```
+
 ## Variable Capture
 
 A block can capture its output into a variable with `-> $varName`.

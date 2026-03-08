@@ -84,6 +84,28 @@ The report must include anchor links for sections.
 grep -q 'id="section-' .tmp-test/report.html
 ```
 
+### Intent Captions
+
+Blocks whose first line is a comment render collapsed in the report.
+The caption text appears in an `exec-caption-text` span inside a
+`<summary>` element, with an expand marker on the right.
+The containing section gets the `has-caption` class.
+
+The verify block above ("The report should not require JS…") starts with
+a `#` comment, so the self-report itself contains a caption block.
+
+```verify:shell
+grep -q 'has-caption' .artifacts/specdown/self-report.html
+```
+
+```verify:shell
+grep -q 'exec-caption-text' .artifacts/specdown/self-report.html
+```
+
+```verify:shell
+grep -q 'exec-expand-marker' .artifacts/specdown/self-report.html
+```
+
 ## Output Files
 
 | File | Description |

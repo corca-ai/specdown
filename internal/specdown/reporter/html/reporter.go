@@ -264,18 +264,45 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block `)
 	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	if node.Caption != "" {
+		out.WriteString(` has-caption`)
+	}
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
-	out.WriteString(`<div class="exec-source">`)
-	if strings.HasPrefix(result.Block, "doctest:") && len(result.Steps) > 0 {
-		renderDoctestSteps(&out, result.Steps)
+
+	if node.Caption != "" {
+		// Collapsible block: summary shows caption, code is hidden by default.
+		// Failed blocks auto-expand so failures are never hidden.
+		out.WriteString(`<details class="exec-detail"`)
+		if result.Status == core.StatusFailed {
+			out.WriteString(` open`)
+		}
+		out.WriteString(`>`)
+		out.WriteString(`<summary class="exec-source">`)
+		out.WriteString(`<span class="exec-caption-text">`)
+		out.WriteString(template.HTMLEscapeString(node.Caption))
+		out.WriteString(`</span>`)
+		out.WriteString(`<span class="exec-expand-marker"></span>`)
+		out.WriteString(`</summary>`)
+		out.WriteString(`<div class="exec-source exec-source-body">`)
+		renderCodeSourceStripped(&out, result)
+		renderVisibleBindings(&out, result.VisibleBindings)
+		renderBindings(&out, result.Bindings)
+		out.WriteString(`</div>`)
+		out.WriteString(`</details>`)
 	} else {
-		renderCodeSource(&out, result)
+		out.WriteString(`<div class="exec-source">`)
+		if strings.HasPrefix(result.Block, "doctest:") && len(result.Steps) > 0 {
+			renderDoctestSteps(&out, result.Steps)
+		} else {
+			renderCodeSource(&out, result)
+		}
+		renderVisibleBindings(&out, result.VisibleBindings)
+		renderBindings(&out, result.Bindings)
+		out.WriteString(`</div>`)
 	}
-	renderVisibleBindings(&out, result.VisibleBindings)
-	renderBindings(&out, result.Bindings)
-	out.WriteString(`</div>`)
+
 	out.WriteString(`<p class="exec-block-footer">`)
 	out.WriteString(template.HTMLEscapeString(result.Block))
 	out.WriteString(`</p>`)
@@ -294,6 +321,33 @@ func renderCodeSource(out *strings.Builder, result core.CaseResult) {
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
 	}
+}
+
+// renderCodeSourceStripped renders the code block with the first comment line
+// (the caption) stripped from the displayed source.
+func renderCodeSourceStripped(out *strings.Builder, result core.CaseResult) {
+	source := result.Template
+	if result.RenderedSource != "" {
+		source = result.RenderedSource
+	}
+	source = stripFirstCommentLine(source)
+	if source != "" {
+		out.WriteString(`<code>`)
+		out.WriteString(template.HTMLEscapeString(source))
+		out.WriteString(`</code>`)
+	}
+	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
+		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
+	}
+}
+
+// stripFirstCommentLine removes the first line if it is a comment.
+func stripFirstCommentLine(source string) string {
+	idx := strings.IndexByte(source, '\n')
+	if idx < 0 {
+		return ""
+	}
+	return source[idx+1:]
 }
 
 func renderVisibleBindings(out *strings.Builder, bindings []core.Binding) {
@@ -1225,6 +1279,61 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-block.failed > .exec-source:not(.resolved) {
+      border-left-color: var(--fail-mark);
+      background: var(--fail-bg);
+    }
+
+    /* ── Collapsible blocks with intent captions ── */
+    .exec-detail {
+      border-radius: 0.2rem;
+    }
+
+    .exec-detail > summary.exec-source {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      list-style: none;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      white-space: normal;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    .exec-detail > summary.exec-source::-webkit-details-marker { display: none; }
+    .exec-detail > summary.exec-source::marker { display: none; content: ""; }
+
+    .exec-detail:not([open]) > summary.exec-source {
+      border-radius: 0.2rem;
+    }
+
+    .exec-expand-marker::after {
+      content: "\25B6";
+      font-size: 0.7rem;
+      color: var(--muted);
+      transition: transform 0.15s ease;
+      display: inline-block;
+    }
+
+    .exec-detail[open] > summary .exec-expand-marker::after {
+      transform: rotate(90deg);
+    }
+
+    .exec-source-body {
+      border-top: 1px solid var(--rule);
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    .exec-block.passed > .exec-detail > summary.exec-source,
+    .exec-block.passed > .exec-detail > .exec-source-body {
+      border-left-color: var(--pass-mark);
+      background: var(--pass-bg);
+    }
+
+    .exec-block.failed > .exec-detail > summary.exec-source,
+    .exec-block.failed > .exec-detail > .exec-source-body {
       border-left-color: var(--fail-mark);
       background: var(--fail-bg);
     }

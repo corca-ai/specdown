@@ -89,10 +89,11 @@ func (n ProseNode) Markdown() string {
 }
 
 type CodeBlockNode struct {
-	Block  BlockSpec `json:"block"`
-	Source string    `json:"source"`
-	Raw    string    `json:"raw"`
-	ID     *SpecID   `json:"id,omitempty"`
+	Block   BlockSpec `json:"block"`
+	Source  string    `json:"source"`
+	Raw     string    `json:"raw"`
+	Caption string    `json:"caption,omitempty"`
+	ID      *SpecID   `json:"id,omitempty"`
 }
 
 func (CodeBlockNode) isNode() {}
