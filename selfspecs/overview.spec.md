@@ -25,7 +25,7 @@ The following are excluded from the v1 scope.
 
 - Replacing all tests with a Markdown DSL
 - Automatically proving that the implementation is fully equivalent to the formal model
-- Embedding Playwright, Vitest, Jest, or Bun test into the core
+- Embedding Playwright, Vitest, Jest, or Bun's test runner into the core
 - Including project-specific DSLs such as DOM selectors, shell transcripts, or editor actions in the core
 
 ## Three Layers of Specification

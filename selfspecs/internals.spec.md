@@ -46,6 +46,9 @@ Adapters are responsible for:
 - Interpreting block semantics (`run:*`, `verify:*`, `test:*`, `doctest:*`)
 - Interpreting column semantics of fixture tables
 - Connecting to external execution environments
-- Rendering results as HTML/JSON
+
+Reporters are responsible for:
+
+- Rendering execution results as HTML/JSON from the event stream
 
 Core must not know about any specific test framework, product-specific filesystem layouts, product-specific command vocabularies, or the adapter implementation language.

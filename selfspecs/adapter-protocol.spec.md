@@ -125,7 +125,6 @@ Capabilities are declared in config, not negotiated at runtime.
 - Only protocol messages are written to stdout; stderr is for diagnostic output
 - Adapters may ignore `setup`/`teardown` (no response required)
 - Built-in adapters follow the same protocol contract
-- The adapter process stays alive during a spec run and can maintain process-local state (e.g., created resources, session tokens)
 
 ## Writing an Adapter
 
