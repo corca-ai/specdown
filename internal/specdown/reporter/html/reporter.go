@@ -696,11 +696,13 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 	var out strings.Builder
 	switch {
 	case cr.ExpectFail:
-		out.WriteString(`<span class="inline-expect expect-fail" title="`)
+		out.WriteString(`<ruby class="inline-expect expect-fail" title="`)
 		out.WriteString(template.HTMLEscapeString("expected failure: " + cr.Message))
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(` <span class="inline-expected">(expected failure)</span></span>`)
+		out.WriteString(`<rp>(</rp><rt>expected `)
+		out.WriteString(template.HTMLEscapeString(cr.Expected))
+		out.WriteString(`</rt><rp>)</rp></ruby>`)
 	case cr.Status == core.StatusPassed:
 		out.WriteString(`<span class="inline-expect passed" title="`)
 		out.WriteString(template.HTMLEscapeString("expected " + cr.Expected))
@@ -1130,7 +1132,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .spec + .spec { padding-top: 2rem; }
 
     .spec-body {
-      line-height: 1.82;
+      line-height: 1.9;
 
       & > :first-child { margin-top: 0; }
 
@@ -1387,10 +1389,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .inline-expect.expect-fail {
-      background: var(--pass-bg);
-      color: var(--pass-ink);
-      text-decoration: line-through;
-      text-decoration-color: var(--muted);
+      background: var(--fail-bg);
+      color: var(--fail-ink);
+    }
+    .inline-expect.expect-fail rt {
+      font-size: 0.7em;
+      color: var(--muted);
+      font-style: italic;
     }
 
     .inline-expected {
