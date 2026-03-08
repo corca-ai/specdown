@@ -700,7 +700,7 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 		out.WriteString(template.HTMLEscapeString("expected failure: " + cr.Message))
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<rp>(</rp><rt>expected `)
+		out.WriteString(`<rp>(</rp><rt>`)
 		out.WriteString(template.HTMLEscapeString(cr.Expected))
 		out.WriteString(`</rt><rp>)</rp></ruby>`)
 	case cr.Status == core.StatusPassed:
@@ -1391,11 +1391,18 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .inline-expect.expect-fail {
       background: var(--fail-bg);
       color: var(--fail-ink);
+      position: relative;
     }
     .inline-expect.expect-fail rt {
-      font-size: 0.7em;
+      position: absolute;
+      left: 0;
+      bottom: 100%;
+      margin-bottom: 0.1em;
+      font-size: 0.65em;
+      line-height: 1;
       color: var(--muted);
       font-style: italic;
+      white-space: nowrap;
     }
 
     .inline-expected {
