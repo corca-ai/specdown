@@ -20,7 +20,6 @@ Read the following documents before starting work.
 ## Working Rules
 
 - Treat the self-specs (`selfspecs/`) as the source of truth for behavior and architecture.
-- Every testable claim in a selfspec must be followed by a verification block (`doctest:`, `verify:`, or fixture table). Prose without verification is a gap.
 - Maintain the responsibility boundary between `core` and `adapter`.
 - Documentation and examples must follow current design terminology exactly.
   - executable block
