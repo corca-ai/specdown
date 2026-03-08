@@ -1164,7 +1164,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .content { min-width: 0; }
 
     .report-title {
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, AppleMyungjo, Batang, "Noto Serif KR", serif;
       font-size: 2.8rem;
       line-height: 1.15;
       letter-spacing: -0.01em;
@@ -1199,7 +1199,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       /* Sticky headings stack below each other.
          All levels share em-based padding so height = font-size × 2 + 1px border. */
       & :is(h2, h3, h4, h5, h6) {
-        font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+        font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, AppleMyungjo, Batang, "Noto Serif KR", serif;
         line-height: 1.15;
         padding: 0.5em 0 0.35em;
         margin-top: 0.75em;
