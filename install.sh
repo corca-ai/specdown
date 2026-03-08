@@ -41,4 +41,10 @@ curl -sSfL "$URL" -o "$TMP/$ARCHIVE"
 tar xzf "$TMP/$ARCHIVE" -C "$TMP"
 install "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 
-echo "Installed $INSTALL_DIR/$BINARY"
+ADAPTER="specdown-adapter-shell"
+if [ -f "$TMP/$ADAPTER" ]; then
+  install "$TMP/$ADAPTER" "$INSTALL_DIR/$ADAPTER"
+  echo "Installed $INSTALL_DIR/$BINARY and $INSTALL_DIR/$ADAPTER"
+else
+  echo "Installed $INSTALL_DIR/$BINARY"
+fi

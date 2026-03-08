@@ -25,7 +25,7 @@ go install github.com/corca-ai/specdown/cmd/specdown@latest
 ### From source
 
 ```sh
-go build -o specdown ./cmd/specdown
+go build -o bin/specdown ./cmd/specdown
 ```
 
 ## Documentation

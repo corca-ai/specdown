@@ -412,12 +412,31 @@ func summarizeCounterexample(command receiptCommand) string {
 	return strings.Join(lines, "\n")
 }
 
+func alloyCacheDir() (string, error) {
+	cacheDir := os.Getenv("XDG_CACHE_HOME")
+	if cacheDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("determine home directory: %w", err)
+		}
+		cacheDir = filepath.Join(home, ".cache")
+	}
+	return filepath.Join(cacheDir, "specdown"), nil
+}
+
 func (r Runner) ensureAlloyJar() (_ string, err error) {
-	jarPath := filepath.Join(r.BaseDir, alloyJarName)
+	cacheDir, err := alloyCacheDir()
+	if err != nil {
+		return "", err
+	}
+	jarPath := filepath.Join(cacheDir, alloyJarName)
 	if _, err := os.Stat(jarPath); err == nil {
 		return jarPath, nil
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat alloy jar: %w", err)
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", fmt.Errorf("create cache dir: %w", err)
 	}
 
 	client := r.HTTPClient
@@ -435,18 +454,26 @@ func (r Runner) ensureAlloyJar() (_ string, err error) {
 		return "", fmt.Errorf("download alloy jar: unexpected status %s", response.Status)
 	}
 
-	file, err := os.Create(jarPath)
+	tmp, err := os.CreateTemp(cacheDir, alloyJarName+".*.tmp")
 	if err != nil {
-		return "", fmt.Errorf("create alloy jar: %w", err)
+		return "", fmt.Errorf("create temp file for alloy jar: %w", err)
 	}
+	tmpPath := tmp.Name()
 	defer func() {
-		if cerr := file.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close alloy jar: %w", cerr)
+		if err != nil {
+			_ = os.Remove(tmpPath)
 		}
 	}()
 
-	if _, err = io.Copy(file, response.Body); err != nil {
+	if _, err = io.Copy(tmp, response.Body); err != nil {
+		_ = tmp.Close()
 		return "", fmt.Errorf("write alloy jar: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return "", fmt.Errorf("close alloy jar: %w", err)
+	}
+	if err = os.Rename(tmpPath, jarPath); err != nil {
+		return "", fmt.Errorf("rename alloy jar: %w", err)
 	}
 	return jarPath, nil
 }

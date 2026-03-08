@@ -13,13 +13,14 @@ After this, Go is available whenever you enter the project directory.
 ## Build
 
 ```sh
-go build -o ~/.local/bin/specdown ./cmd/specdown
+go build -o bin/specdown ./cmd/specdown
+go build -o bin/specdown-adapter-shell ./cmd/specdown-adapter-shell
 ```
 
 For release builds, inject the version via `ldflags`.
 
 ```sh
-go build -trimpath -ldflags="-s -w -X main.version=v0.7.0" -o specdown ./cmd/specdown
+go build -trimpath -ldflags="-s -w -X main.version=v0.7.0" -o bin/specdown ./cmd/specdown
 ```
 
 ## Run
