@@ -30,132 +30,35 @@ Neither replaces the other. The power is in combining them in the same document.
 
 ### 1. Property and Implementation Side by Side
 
-Place an Alloy `check` and a fixture table in the same section. When a `check` exists in the model block, the HTML report links the result automatically — no `alloy:ref` needed.
-
-````markdown
-## Card Ownership
-
-A card belongs to exactly one board.
-
-```alloy:model(board)
-assert cardOwnership { all c: Card | one c.board }
-check cardOwnership for 5
-```
-
-> fixture:card-exists
-| board | card | exists |
-| --- | --- | --- |
-| board-1 | card-1 | yes |
-````
+Place an `alloy:model` block with a `check` statement and a fixture table in the same section. Readers see both the design guarantee and the implementation confirmation together. When a `check` exists in the model block, the HTML report links the result automatically — no `alloy:ref` needed.
 
 ### 2. Counterexample Harvesting
 
-When Alloy finds a counterexample, fix the model, then add the counterexample as a fixture row to prevent regression.
-
-````markdown
-Counterexample found: archived columns lose board membership.
-
-> fixture:move-card
-| card | target | result | note |
-| --- | --- | --- | --- |
-| card-1 | archived-col | reject | from counterexample |
-````
+When Alloy finds a counterexample, fix the model, then add the counterexample as a fixture row to prevent regression. Document the counterexample in prose so future readers know why the row exists.
 
 ### 3. Exhaustive Classification
 
-Use Alloy to prove cases are complete and mutually exclusive, then test one representative per case.
-
-````markdown
-```alloy:model(access)
-assert complete { all u: User, p: Path |
-  owner[u,p] or admin[u,p] or public[u,p] or denied[u,p]
-}
-assert exclusive { all u: User, p: Path |
-  owner[u,p] implies not (admin[u,p] or public[u,p] or denied[u,p])
-  -- (same for each case)
-}
-check complete for 6
-check exclusive for 6
-```
-
-Four cases, proven complete. One row per case is sufficient.
-
-> fixture:access(user=alice)
-| path | decision |
-| --- | --- |
-| /alice/private | allow |
-| /public/readme | allow |
-| /bob/private | deny |
-````
+Use Alloy to prove the set of cases is complete and mutually exclusive, then test one representative per case. Two assertions — one for completeness, one for mutual exclusivity — together guarantee that the fixture table covers every case with minimal rows.
 
 ### 4. Invariant Leverage
 
-Prove one strong invariant implies several weaker properties. Only test the strong invariant; document why weaker tests are absent.
-
-````markdown
-```alloy:model(board)
-assert inv_implies_no_gaps {
-  all b: Board | positionInvariant[b] implies noGaps[b]
-}
-assert inv_implies_no_dupes {
-  all b: Board | positionInvariant[b] implies noDuplicatePos[b]
-}
-check inv_implies_no_gaps for 6
-check inv_implies_no_dupes for 6
-```
-
-Both follow from positionInvariant. Only verify the invariant:
-
-```verify:board
-GET /boards/${boardId}/columns
-positions = [0, 1, 2]
-```
-````
+Prove that one strong invariant implies several weaker properties. Then only test the strong invariant in implementation checks and skip the rest. Document why the weaker tests are absent — the Alloy proofs serve as the justification.
 
 ### 5. Transition Safety Net
 
-Model state transitions in Alloy to prove which are impossible. Test valid paths and a minimal set of invalid ones.
-
-````markdown
-```alloy:model(card)
-abstract sig Status {}
-one sig Draft, Active, Archived, Deleted extends Status {}
-sig Card { var status: one Status }
-
-assert deletedIsTerminal {
-  always all c: Card | c.status = Deleted implies c.status' = Deleted
-}
-check deletedIsTerminal for 5 but 8 steps
-```
-
-> fixture:card-transition
-| from | to | result |
-| --- | --- | --- |
-| Draft | Active | ok |
-| Active | Archived | ok |
-| Deleted | Active | reject |
-````
+Model state transitions in Alloy to prove which transitions are impossible. Executable blocks test the valid paths and a minimal set of invalid ones. No need to test every impossible pair; Alloy covers the rest.
 
 ### 6. Composition Safety
 
-Test modules individually. Use Alloy to verify their combination has no unintended gaps. Testing every combination of states is impractical — Alloy covers the combinatorial space.
+Test each module individually with executable blocks. Use Alloy to verify that their combination does not open unintended gaps. Testing every combination of states is impractical — Alloy covers the combinatorial space.
 
 ### 7. Failure-Driven Modeling
 
-When an executable block discovers a bug, add the missing constraint to the Alloy model. Let Alloy search for further violations. The cycle: failure reveals a missing assumption, model is strengthened, Alloy finds more cases, new fixture rows are added.
+When an executable block discovers a bug, add the missing constraint to the Alloy model. Then let Alloy search for further violations. The cycle: implementation failure reveals a missing assumption, model is strengthened, Alloy finds more cases, new fixture rows are added.
 
 ### 8. Equivalence Shield
 
-When refactoring, prove old and new models are equivalent. Reuse existing checks unchanged.
-
-````markdown
-```alloy:model(migration)
-assert v1_equiv_v2 {
-  all u: User, d: Doc | canAccessV1[u,d] iff canAccessV2[u,d]
-}
-check v1_equiv_v2 for 6
-```
-````
+When refactoring, prove the old and new models are equivalent in Alloy. Then reuse existing executable blocks and fixture tables unchanged to confirm the implementation matches.
 
 ## Alloy Pitfalls
 
@@ -167,29 +70,13 @@ If the model's facts are contradictory, every assertion passes trivially. Always
 
 In temporal Alloy (models with `var` fields), `fact` and `assert` bodies are evaluated in the initial state only. To express a constraint that must hold in every state, wrap the body with `always`.
 
-```alloy
--- Wrong: only constrains the initial state
-fact { all d: Doc | lone d.editor }
-
--- Correct: constrains every state
-fact { always all d: Doc | lone d.editor }
-```
-
 ### Missing `var` when using prime
 
 The prime operator (`e'`) refers to the value of `e` in the next state. Without `var`, the field is static and `e' = e` always holds, making the assertion vacuously true.
 
 ### Scope too small
 
-`check ... for 3` searches only instances with up to 3 atoms per signature. Properties that only fail with 4+ interacting elements will not be caught. Use a scope of 5-7 as a practical default.
-
-```alloy
--- Too small
-check deletedIsTerminal for 3
-
--- Practical default
-check deletedIsTerminal for 5 but 8 steps
-```
+`check ... for 3` searches only instances with up to 3 atoms per signature. Properties that only fail with 4+ interacting elements will not be caught. Use a scope of 5-7 as a practical default. For temporal models, also set an adequate step bound (e.g. `check ... for 5 but 8 steps`).
 
 ## Anti-Patterns
 

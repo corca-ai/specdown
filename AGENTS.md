@@ -20,10 +20,4 @@
 - [Validation Rules](selfspecs/validation.spec.md) — parse-time error checking
 - [Alloy Language Reference](docs/alloy-reference.md) — Alloy syntax and semantics
 
-## Working Rules
-
-- Self-specs are the source of truth. Code must match them.
-- Maintain the `core` / `adapter` boundary.
-- Fix outdated terminology on discovery.
-
-`CLAUDE.md` is a symlink to `AGENTS.md`.
+Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
