@@ -9,6 +9,7 @@
 - [Adapter Protocol](adapter-protocol.spec.md)
 - [Alloy Models](alloy.spec.md)
 - [HTML Report](report.spec.md)
+- [Best Practices](best-practices.spec.md)
 
 ## Internals
 

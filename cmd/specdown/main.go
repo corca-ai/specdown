@@ -22,6 +22,7 @@ var version = "dev"
 //go:embed skills/specdown/SKILL.md
 var skillSpecdown string
 
+//go:generate cp ../../selfspecs/best-practices.spec.md skills/specdown/guide-writing.md
 //go:embed skills/specdown/guide-writing.md
 var skillWritingGuide string
 

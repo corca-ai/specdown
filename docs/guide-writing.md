@@ -1,1 +1,0 @@
-../cmd/specdown/skills/specdown/guide-writing.md

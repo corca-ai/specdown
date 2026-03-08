@@ -13,7 +13,7 @@ Read the following documents before starting work.
 ### User Guide
 
 - [Specdown Self-Spec](selfspecs/specdown.spec.md) — executable reference for syntax, config, CLI, adapter protocol, and report behavior
-- [Writing Good Specs](docs/guide-writing.md) — best practices and Alloy/E2E patterns
+- [Best Practices](selfspecs/best-practices.spec.md) — patterns, pitfalls, and anti-patterns
 - [Adapter Protocol](selfspecs/adapter-protocol.spec.md) — protocol reference and adapter examples
 - [Alloy Language Reference](docs/alloy-reference.md) — syntax and semantics of the Alloy language
 
