@@ -1620,9 +1620,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   const specSections = Array.from(document.querySelectorAll('.toc-spec'));
   const specEntries = specSections
     .map((section) => {
-      const firstAnchor = section.querySelector('.toc-item[data-anchor]');
-      if (!firstAnchor) return null;
-      const heading = document.getElementById(firstAnchor.getAttribute('data-anchor'));
+      const titleLink = section.querySelector('.toc-spec-title');
+      if (!titleLink) return null;
+      const id = decodeURIComponent(titleLink.getAttribute('href').slice(1));
+      const heading = document.getElementById(id);
       if (!heading) return null;
       return { section, heading };
     })
