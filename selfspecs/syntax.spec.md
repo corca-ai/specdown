@@ -38,7 +38,7 @@ If the first line of a `run:`, `verify:`, or `test:` block is a comment,
 specdown extracts it as the block's **intent caption**.
 
 In the HTML report, blocks with a caption are rendered collapsed:
-only the caption text and pass/fail indicator are visible. A `▶` marker
+only the caption text and pass/fail indicator are visible. A `>` marker
 on the right side lets readers expand the block to see the full code.
 Failed blocks auto-expand so failures are never hidden.
 

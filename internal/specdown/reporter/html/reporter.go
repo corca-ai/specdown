@@ -1513,11 +1513,13 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       white-space: nowrap;
     }
 
-    .inline-expect.failed::before,
-    .inline-fixture.failed::before {
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed) {
+      position: relative;
+    }
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed)::before {
       content: "";
       position: absolute;
-      left: -0.75rem;
+      left: -0.85rem;
       top: 50%;
       transform: translateY(-50%);
       width: 0.38rem;
