@@ -1392,13 +1392,15 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       background: var(--fail-bg);
       color: var(--fail-ink);
       position: relative;
+      padding-top: 0.02em;
+      padding-bottom: 0.02em;
     }
     .inline-expect.expect-fail rt {
       position: absolute;
       left: 0;
       bottom: 100%;
-      margin-bottom: 0.1em;
-      font-size: 0.65em;
+      margin-bottom: 0;
+      font-size: 0.8em;
       line-height: 1;
       color: var(--muted);
       font-style: italic;
@@ -1516,14 +1518,15 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .site-footer {
       max-width: 52rem;
       margin: 3rem auto 0;
-      padding: 0 1rem 2.5rem;
+      padding: 0 1rem 4rem;
       text-align: center;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       color: var(--muted);
     }
     .site-footer hr {
       border: none;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--muted);
+      opacity: 0.4;
       margin-bottom: 0.75rem;
     }
     .site-footer a {
