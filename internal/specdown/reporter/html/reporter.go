@@ -1500,6 +1500,24 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       .content-header { order: 1; }
       .content-body { order: 3; }
     }
+
+    .site-footer {
+      max-width: 52rem;
+      margin: 3rem auto 0;
+      padding: 0 1rem 2.5rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .site-footer hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin-bottom: 0.75rem;
+    }
+    .site-footer a {
+      color: var(--muted);
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -1547,6 +1565,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       </div>
     </div>
   </main>
+  <footer class="site-footer">
+    <hr>
+    <p><a href="https://github.com/corca-ai/specdown">github.com/corca-ai/specdown</a> · written by ak@corca.ai</p>
+  </footer>
 <script>
 (() => {
   const allLinks = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
