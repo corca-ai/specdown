@@ -1052,6 +1052,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     *, *::before, *::after { box-sizing: border-box; margin: 0; }
 
     /* ── Body ── */
+    html { background: var(--bg); }
     body {
       font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
       color: var(--ink);
@@ -1226,7 +1227,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       & li { margin: 0.25rem 0; }
       & ul, & ol { padding-left: 1.5rem; }
 
-      & h2 { font-size: 2.5rem; top: var(--safe-top); z-index: 4; }
+      & h2 { font-size: 2.5rem; top: 0; padding-top: calc(0.5em + var(--safe-top)); z-index: 4; }
       & h3 { font-size: 1.85rem; top: calc(5rem + 1px + var(--safe-top)); z-index: 3; }
       & h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; }
       & :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
