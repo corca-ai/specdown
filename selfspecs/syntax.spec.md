@@ -339,8 +339,10 @@ When the actual value does not match the expected value, the inline assertion
 fails and the report shows both the actual value and the expected value.
 
 Adding `!fail` at the end marks the assertion as an expected failure.
-The spec passes when the assertion fails, and fails if it unexpectedly succeeds.
-This is useful for documenting known mismatches or negative examples inline.
+The spec still passes when the assertion fails, but the inline value renders
+identically to a regular failure — with a red background and a red dot marker
+on the containing block. The only difference is that expected failures do not
+cause a non-zero exit code.
 
 This deliberately wrong assertion passes because it is marked as expected failure:
 `expect: hello == goodbye !fail`.
@@ -354,6 +356,12 @@ the fixture name, and `fixtureParams` populated with empty `columns`/`cells`.
 ```markdown
 The file `fixture:file-check(path=/tmp/data.txt, exists=yes)` was created.
 ```
+
+When the adapter returns an `actual` value in its passed response, the inline
+fixture displays the actual value as the main content with the fixture name
+shown as a small ruby annotation above it.
+
+For example, a + b is `fixture:echo-value(value=3)`.
 
 Multiple inline elements can appear in the same paragraph.
 

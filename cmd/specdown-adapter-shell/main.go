@@ -328,8 +328,12 @@ func runTableRowCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 		}
 	}
 
-	return adapterprotocol.Response{
+	resp := adapterprotocol.Response{
 		ID:   id,
 		Type: "passed",
 	}
+	if actual := strings.TrimSpace(stdout.String()); actual != "" {
+		resp.Actual = actual
+	}
+	return resp
 }

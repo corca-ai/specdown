@@ -262,6 +262,7 @@ func applyResponse(result *core.CaseResult, expectedID int, response adapterprot
 	switch response.Type {
 	case "passed":
 		result.Status = core.StatusPassed
+		result.Actual = response.Actual
 		result.Bindings = coreBindings(response.Bindings)
 		result.Steps = coreDoctestSteps(response.Steps)
 		result.Events = append(result.Events, core.Event{

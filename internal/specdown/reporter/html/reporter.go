@@ -273,9 +273,6 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	} else {
 		renderCodeSource(&out, result)
 	}
-	if result.ExpectFail {
-		out.WriteString(`<div class="expect-fail-label">expected failure</div>`)
-	}
 	renderVisibleBindings(&out, result.VisibleBindings)
 	renderBindings(&out, result.Bindings)
 	out.WriteString(`</div>`)
@@ -694,16 +691,8 @@ func filterInlinesByKind(inlines []core.InlineElement, kind core.InlineKind) []c
 
 func renderInlineExpectSpan(cr core.CaseResult) string {
 	var out strings.Builder
-	switch {
-	case cr.ExpectFail:
-		out.WriteString(`<ruby class="inline-expect expect-fail" title="`)
-		out.WriteString(template.HTMLEscapeString("expected failure: " + cr.Message))
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<rp>(</rp><rt>`)
-		out.WriteString(template.HTMLEscapeString(cr.Expected))
-		out.WriteString(`</rt><rp>)</rp></ruby>`)
-	case cr.Status == core.StatusPassed:
+	switch cr.Status {
+	case core.StatusPassed:
 		out.WriteString(`<span class="inline-expect passed" title="`)
 		out.WriteString(template.HTMLEscapeString("expected " + cr.Expected))
 		out.WriteString(`">`)
@@ -723,17 +712,34 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 
 func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) string {
 	var out strings.Builder
-	out.WriteString(`<span class="inline-fixture `)
-	out.WriteString(template.HTMLEscapeString(string(cr.Status)))
-	out.WriteString(`" title="`)
-	if cr.Status == core.StatusFailed && cr.Message != "" {
-		out.WriteString(template.HTMLEscapeString(cr.Message))
+	if cr.Actual != "" {
+		// Ruby: fixture name as annotation, actual value as main content
+		out.WriteString(`<ruby class="inline-fixture `)
+		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
+		out.WriteString(`" title="`)
+		if cr.Status == core.StatusFailed && cr.Message != "" {
+			out.WriteString(template.HTMLEscapeString(cr.Message))
+		} else {
+			out.WriteString(template.HTMLEscapeString(inline.Raw))
+		}
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(cr.Actual))
+		out.WriteString(`<rp>(</rp><rt>`)
+		out.WriteString(template.HTMLEscapeString(inline.Fixture))
+		out.WriteString(`</rt><rp>)</rp></ruby>`)
 	} else {
-		out.WriteString(template.HTMLEscapeString(inline.Raw))
+		out.WriteString(`<span class="inline-fixture `)
+		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
+		out.WriteString(`" title="`)
+		if cr.Status == core.StatusFailed && cr.Message != "" {
+			out.WriteString(template.HTMLEscapeString(cr.Message))
+		} else {
+			out.WriteString(template.HTMLEscapeString(inline.Raw))
+		}
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(inline.Fixture))
+		out.WriteString(`</span>`)
 	}
-	out.WriteString(`">`)
-	out.WriteString(template.HTMLEscapeString(inline.Fixture))
-	out.WriteString(`</span>`)
 	return out.String()
 }
 
@@ -1263,13 +1269,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       display: inline-block;
     }
 
-    .expect-fail-label {
-      margin-top: 0.35rem;
-      font-size: 0.82rem;
-      font-style: italic;
-      color: var(--muted);
-    }
-
     .exec-bindings {
       margin-top: 0.35rem;
       font-size: 0.85rem;
@@ -1388,34 +1387,15 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       color: var(--fail-ink);
     }
 
-    .inline-expect.expect-fail {
-      background: var(--fail-bg);
-      color: var(--fail-ink);
-      position: relative;
-      padding-top: 0.02em;
-      padding-bottom: 0.02em;
-    }
-    .inline-expect.expect-fail rt {
-      position: absolute;
-      left: 0;
-      bottom: 100%;
-      margin-bottom: 0;
-      font-size: 0.8em;
-      line-height: 1;
-      color: var(--muted);
-      font-style: italic;
-      white-space: nowrap;
-    }
-
     .inline-expected {
       font-size: 0.85em;
       opacity: 0.8;
     }
 
-    .spec-body :is(p, li):has(.inline-expect.failed, .inline-expect.expect-fail) {
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed) {
       position: relative;
     }
-    .spec-body :is(p, li):has(.inline-expect.failed, .inline-expect.expect-fail)::before {
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed)::before {
       content: "";
       position: absolute;
       left: -0.85rem;
@@ -1441,6 +1421,23 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .inline-fixture.failed {
       background: var(--fail-bg);
       color: var(--fail-ink);
+    }
+
+    ruby.inline-fixture {
+      position: relative;
+      padding-top: 0.02em;
+      padding-bottom: 0.02em;
+    }
+    ruby.inline-fixture rt {
+      position: absolute;
+      left: 0;
+      bottom: 100%;
+      margin-bottom: 0;
+      font-size: 0.8em;
+      line-height: 1;
+      color: var(--muted);
+      font-style: italic;
+      white-space: nowrap;
     }
 
     /* ── Cell styles ── */
