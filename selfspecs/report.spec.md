@@ -14,18 +14,10 @@ It preserves the document structure, annotating execution results inline.
 
 ```run:shell
 mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/summary-test.spec.md
-# Summary Test
-
-```doctest:shell
-$ echo ok
-ok
-```
-SPEC
+BT=$(printf '\x60\x60\x60')
+printf '%s\n' '# Summary Test' '' "\${BT}doctest:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
 printf '# T\n\n- [Summary](summary-test.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/summary-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["./specdown-adapter-shell"],"blocks":["doctest:shell"]}],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}
-CFG
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["specdown-adapter-shell"],"blocks":["doctest:shell"]}],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}' > .tmp-test/summary-cfg.json
 specdown run -config .tmp-test/summary-cfg.json 2>&1 || true
 ```
 
