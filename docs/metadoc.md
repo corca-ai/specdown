@@ -25,5 +25,7 @@ Keep docs easy to scan and easy to trust for both humans and agents.
 - Use stable terms consistent with current architecture.
 - Remove outdated architecture terms immediately.
 - Prefer examples that match current runtime behavior.
+- In selfspecs, every testable prose claim must have a verification block immediately after it. "X produces Y" without a doctest or verify block is incomplete.
+- In guide/skill docs, patterns and pitfalls must include concrete code examples. Abstract advice without illustration is not actionable.
 
 Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
