@@ -28,6 +28,27 @@ For v1, a single `specdown.json` is sufficient.
 The `entry` field points to a Markdown file whose H1 heading becomes the report title.
 The entry file lists spec documents as Markdown links; their order determines the table of contents.
 
+```run:shell
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/entry-test.spec.md
+# My Feature
+
+Some prose.
+SPEC
+printf '# My Project Title\n\n- [Feature](entry-test.spec.md)\n' > .tmp-test/entry-index.spec.md
+cat <<'CFG' > .tmp-test/entry-test-cfg.json
+{"entry":"entry-index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"entry-report.html"}]}
+CFG
+specdown run -config .tmp-test/entry-test-cfg.json 2>&1 || true
+```
+
+The H1 heading from the entry file appears as the report title.
+
+```doctest:shell
+$ grep -o '<title>[^<]*</title>' .tmp-test/entry-report.html
+<title>My Project Title</title>
+```
+
 ## Config Fields
 
 | Field | Description |

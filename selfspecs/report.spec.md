@@ -12,6 +12,32 @@ It preserves the document structure, annotating execution results inline.
 - Failed items display message, expected/actual diff inline
 - A summary shows pass/fail counts
 
+```run:shell
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/summary-test.spec.md
+# Summary Test
+
+```doctest:shell
+$ echo ok
+ok
+```
+SPEC
+printf '# T\n\n- [Summary](summary-test.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/summary-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["./specdown-adapter-shell"],"blocks":["doctest:shell"]}],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}
+CFG
+specdown run -config .tmp-test/summary-cfg.json 2>&1 || true
+```
+
+The HTML report contains a pass/fail summary.
+
+```doctest:shell
+$ grep -q 'class="pill pass"' .tmp-test/summary-report.html && echo found
+found
+$ grep -q 'passed' .tmp-test/summary-report.html && echo found
+found
+```
+
 ## UX Principles
 
 - The body and key failure information must be readable without JavaScript
@@ -108,18 +134,25 @@ cat <<'SPEC' > .tmp-test/diag.spec.md
 SPEC
 printf '# T\n\n- [Diag](diag.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/diag.json
-{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"}]}
+{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"},{"builtin":"json","outFile":"report.json"}]}
 CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
+```
+
+The HTML report displays expected/actual values inline for diffing.
+
+```doctest:shell
+$ grep -q 'failure-diff' .tmp-test/diag-report.html && echo found
+found
 ```
 
 The JSON report must contain the expected and actual fields, and the adapter label.
 
 ```doctest:shell
-$ grep -q '"expected"' .tmp-test/report.json && echo found
+$ grep -q '"expected"' report.json && echo found
 found
-$ grep -q '"actual"' .tmp-test/report.json && echo found
+$ grep -q '"actual"' report.json && echo found
 found
-$ grep -q '"diag row"' .tmp-test/report.json && echo found
+$ grep -q '"diag row"' report.json && echo found
 found
 ```

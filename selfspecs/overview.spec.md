@@ -33,6 +33,33 @@ specdown init
 
 This creates `specdown.json`, `specs/index.spec.md`, and `specs/example.spec.md`.
 
+```doctest:shell
+$ rm -rf .tmp-test/init-overview && mkdir -p .tmp-test/init-overview && cd .tmp-test/init-overview && specdown init >/dev/null 2>&1 && echo done
+done
+$ test -f .tmp-test/init-overview/specdown.json && echo yes
+yes
+$ test -f .tmp-test/init-overview/specs/index.spec.md && echo yes
+yes
+$ test -f .tmp-test/init-overview/specs/example.spec.md && echo yes
+yes
+```
+
+### What a spec looks like
+
+This section is a working example. In the HTML report, the block below appears green:
+
+```doctest:shell
+$ echo hello
+hello
+```
+
+This block intentionally mismatches. It appears red, but `!fail` makes it count as a pass:
+
+```doctest:shell !fail
+$ echo hello
+goodbye
+```
+
 ### Run specs
 
 ```sh
@@ -42,6 +69,11 @@ specdown run
 Specs are parsed, executed via adapters, and results are rendered as an HTML report.
 Use `-dry-run` to validate syntax without executing.
 
+```doctest:shell
+$ cd .tmp-test/init-overview && specdown run -dry-run 2>&1 | grep 'spec(s)'
+total: 1 spec(s), 0 case(s), 0 alloy check(s)
+```
+
 ### Install Claude Code skill
 
 ```sh
@@ -50,30 +82,8 @@ specdown install skills
 
 This installs the `/specdown` skill with syntax reference, adapter protocol, and best practices.
 
-## What Goes in a Spec
-
-Spec files are `*.spec.md` Markdown documents.
-Prose is preserved as-is; only executable blocks, fixture tables, and Alloy model blocks are structurally interpreted.
-
-- **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, `test:`, or `doctest:` that are dispatched to adapters for execution
-- **Fixture tables** — Markdown tables preceded by a `> fixture:name` directive, where each row becomes an independent test case
-- **Alloy model blocks** — fenced code blocks with `alloy:model(name)` that embed formal verification fragments
-- **Variables** — values captured from block output with `-> $name` and referenced with `${name}` in subsequent blocks and tables
-- **Hooks** — `> setup` and `> teardown` directives that run adapter commands at section boundaries
-
 ## Why
 
-When design documents and test code are separated:
+When documents and test code are separated, properties stated in documents may not be verified, and tests verify behavior but do not explain design intent.
 
-- Properties stated in design documents may not be verified
-- Tests verify behavior but do not explain design intent
-- State-space properties are hard to cover with example-based tests alone
-- Consistency between documents, tests, and models depends on human memory
-
-specdown solves this by weaving three layers in a single document:
-
-1. **Natural language** explains design intent and rationale
-2. **Alloy models** prove structural properties exhaustively within a bounded scope
-3. **Executable blocks and fixture tables** confirm the implementation matches
-
-A project can use executable blocks and fixture tables without any formal model. Alloy is optional.
+specdown solves this by making a single Markdown document serve as prose, executable tests, and optional formal models.

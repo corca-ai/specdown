@@ -50,6 +50,18 @@ and tables using `${variableName}`.
 - Sibling sections at the same depth can share variables (in document order, only previously captured values)
 - An unresolved variable is a compile-time error
 
+Variables captured in a parent section are available in child sections.
+
+```run:shell -> $parentVar
+printf 'from-parent'
+```
+
+#### Child section
+
+```verify:shell
+test "${parentVar}" = "from-parent"
+```
+
 ### Variable escaping
 
 To output a literal `${...}`, escape it with a backslash: `\${literal}`.
