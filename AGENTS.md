@@ -7,7 +7,6 @@ The goal is to separate a reusable core from product-specific adapters.
 
 Read the following documents before starting work.
 
-- [System design](docs/design.md) — scope, terminology, package boundaries, grammar, interfaces, and phased deliverables
 - [Documentation guide](docs/metadoc.md) — rules for keeping docs short and accurate
 - [Build & Run](docs/build.md) — nix/direnv prerequisites, build commands, test, and release workflow
 
@@ -15,12 +14,12 @@ Read the following documents before starting work.
 
 - [Specdown Self-Spec](selfspecs/specdown.spec.md) — executable reference for syntax, config, CLI, adapter protocol, and report behavior
 - [Writing Good Specs](docs/guide-writing.md) — best practices and Alloy/E2E patterns
-- [Adapter Tutorial](docs/guide-adapter-tutorial.md) — how to build an adapter from scratch
+- [Adapter Protocol](selfspecs/adapter-protocol.spec.md) — protocol reference and adapter examples
 - [Alloy Language Reference](docs/alloy-reference.md) — syntax and semantics of the Alloy language
 
 ## Working Rules
 
-- Treat `docs/design.md` as the source of truth for the current architecture.
+- Treat the self-specs (`selfspecs/`) as the source of truth for behavior and architecture.
 - Maintain the responsibility boundary between `core` and `adapter`.
 - Documentation and examples must follow current design terminology exactly.
   - executable block
@@ -30,17 +29,18 @@ Read the following documents before starting work.
   - `SpecId`, `SpecEvent`
 - Fix or remove outdated terminology and legacy architecture traces immediately upon discovery.
 
-## Target Package Shape
+## Package Layout
 
-The recommended package layout for the current design is as follows.
-
-- `specdown-core`
-- `specdown-cli`
-- `specdown-adapter-protocol`
-- `specdown-reporter-html`
-- `specdown-alloy`
-- `specdown-adapter-shell`
-- `specdown-adapter-vitest`
+- `cmd/specdown/` — CLI entry point
+- `cmd/specdown-adapter-shell/` — builtin shell adapter
+- `internal/specdown/core/` — parser, AST, planning, event model
+- `internal/specdown/adapterprotocol/` — adapter process contract
+- `internal/specdown/adapterhost/` — adapter process launcher
+- `internal/specdown/engine/` — orchestrates spec execution
+- `internal/specdown/alloy/` — Alloy model extraction + runner
+- `internal/specdown/config/` — specdown.json loader
+- `internal/specdown/reporter/html/` — HTML report renderer
+- `internal/specdown/reporter/json/` — JSON report renderer
 
 ## Documentation Notes
 

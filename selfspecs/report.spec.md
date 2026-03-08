@@ -1,5 +1,8 @@
 # HTML Report
 
+The HTML report is a core deliverable.
+The goal is to show an "executed specification," not a "test log."
+
 After a spec run, the HTML report is generated as a self-contained file.
 It preserves the document structure, annotating execution results inline.
 
@@ -8,6 +11,13 @@ It preserves the document structure, annotating execution results inline.
 - Pass is shown with green, fail with red
 - Failed items display message, expected/actual diff inline
 - A summary shows pass/fail counts
+
+## UX Principles
+
+- The body and key failure information must be readable without JavaScript
+- Anchor links allow jumping directly to original headings
+- Failed rows and failed blocks support fold/unfold
+- Prose and results from the same document are not separated
 
 ```run:shell
 mkdir -p .tmp-test
@@ -34,13 +44,28 @@ $ grep -q 'Report Test' .tmp-test/report.html && echo found
 found
 ```
 
-## Output files
+The report must be readable without JavaScript (no script-gated content).
+
+```verify:shell
+# The report should not require JS for basic content visibility
+# Check that headings and prose appear outside of <script> or noscript-hidden blocks
+grep -q '<h1' .tmp-test/report.html
+```
+
+The report must include anchor links for sections.
+
+```verify:shell
+grep -q 'id="section-' .tmp-test/report.html
+```
+
+## Output Files
 
 | File | Description |
 |------|-------------|
 | `.artifacts/specdown/report.html` | Executed specification HTML report |
 | `.artifacts/specdown/report.json` | Machine-readable results |
 | `.artifacts/specdown/models/*.als` | Combined Alloy models |
+| `.artifacts/specdown/counterexamples/*` | Counterexample artifacts (on Alloy check failure) |
 
 ## Failure Diagnostics
 

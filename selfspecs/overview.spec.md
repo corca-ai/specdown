@@ -3,20 +3,82 @@
 `specdown` is a Markdown-first executable specification system.
 A single Markdown document serves as both a readable specification and an executable test.
 
-Spec files are `*.spec.md` Markdown documents.
-Prose is preserved as-is; only executable blocks, fixture tables, and Alloy model blocks are structurally interpreted.
+## Problem
 
-A spec document can contain:
+When design documents and test code are separated, the following problems recur.
 
-- **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, `test:`, or `doctest:` that are dispatched to adapters for execution
-- **Fixture tables** — Markdown tables preceded by a `> fixture:name` directive, where each row becomes an independent test case
-- **Alloy model blocks** — fenced code blocks with `alloy:model(name)` that embed formal verification fragments
-- **Variables** — values captured from block output with `-> $name` and referenced with `${name}` in subsequent blocks and tables
-- **Hooks** — `> setup` and `> teardown` directives that run adapter commands at section boundaries
+- It is difficult to track whether properties stated in design documents are actually verified
+- Tests verify behavior but do not sufficiently explain design intent and rationale
+- Security properties and state-space properties are hard to cover with example-based tests alone
+- As documents, tests, and formal models evolve separately, consistency depends on human memory
 
-After execution, specdown produces an HTML report that preserves the document structure and annotates each block and table row with pass/fail status.
+## Goals
 
-## Three layers of specification
+1. A single Markdown document serves as both a readable specification and an executable test.
+2. Alloy models are woven into the same document in literate style, connecting to formal verification.
+3. Table-based specifications (FIT style) are provided as a first-class feature.
+4. Execution results are rendered as HTML, turning the document itself into an execution report with green/red status.
+
+## Non-Goals
+
+The following are excluded from the v1 scope.
+
+- Replacing all tests with a Markdown DSL
+- Automatically proving that the implementation is fully equivalent to the formal model
+- Embedding Playwright, Vitest, Jest, or Bun test into the core
+- Including project-specific DSLs such as DOM selectors, shell transcripts, or editor actions in the core
+
+## Architecture
+
+Two pipelines diverge from a single document.
+
+```text
+Spec Document (.spec.md)
+    |
+    +-- Core
+    |     +-- heading / prose / block / table parsing
+    |     +-- variable scope computation
+    |     +-- executable unit ID assignment
+    |     +-- embedded Alloy model extraction
+    |
+    +-- Runtime Adapter
+    |     +-- test execution + event emission
+    |
+    +-- Reporter
+    |     +-- HTML / JSON artifact generation
+    |
+    +-- Alloy Runner
+          +-- model check + event emission
+```
+
+- Core structures the document and creates the execution plan
+- Runtime adapter turns each block/table into an actual test or command
+- Reporter turns execution events into human-readable output
+- Alloy runner feeds formal verification results into the same event model
+- Adapters connect as out-of-process commands
+
+## Core and Adapter Boundary
+
+Core is responsible for:
+
+- Markdown parsing and heading hierarchy
+- Extracting code blocks, directives, and tables
+- Variable binding and scope computation
+- `SpecID` generation
+- Combining embedded Alloy fragments
+- Generating a runtime-independent execution plan
+- Defining the common event schema
+
+Adapters are responsible for:
+
+- Interpreting block semantics (`run:*`, `verify:*`, `test:*`, `doctest:*`)
+- Interpreting column semantics of fixture tables
+- Connecting to external execution environments
+- Rendering results as HTML/JSON
+
+Core must not know about any specific test framework, product-specific filesystem layouts, product-specific command vocabularies, or the adapter implementation language.
+
+## Three Layers of Specification
 
 The power of specdown comes from weaving three complementary layers in a single document:
 
@@ -28,4 +90,19 @@ The power of specdown comes from weaving three complementary layers in a single 
 
 Each layer covers what the others cannot. Prose communicates intent to humans but cannot be executed. Alloy proves properties across all combinations but operates on an abstract model, not real code. Executable blocks test real code but can only cover the examples you write.
 
-When all three live in the same section, the document tells a complete story: *what* the rule is (prose), *why* it holds universally (Alloy), and *that* the implementation obeys it (executable check). A failing Alloy check reveals a design flaw before any code runs. A failing executable block reveals an implementation bug even when the model is sound. And the prose ties both results back to the design decision that motivated them.
+Co-locating explanation and test makes inconsistency visible. When the prose says "a newly created board should exist" and the executable block right below it fails, the contradiction is impossible to miss. Alloy fragments woven into the prose with `alloy:model(name)` blocks mean the reader sees the formal property next to the English explanation of why it matters.
+
+What Alloy checks is the logical consistency of the model, not the correctness of the implementation. The value is that the model catches contradictions in the spec itself — before any code is written. A project can use executable blocks and fixture tables without any formal model.
+
+## Document Format
+
+Spec files are `*.spec.md` Markdown documents.
+Prose is preserved as-is; only executable blocks, fixture tables, and Alloy model blocks are structurally interpreted.
+
+A spec document can contain:
+
+- **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, `test:`, or `doctest:` that are dispatched to adapters for execution
+- **Fixture tables** — Markdown tables preceded by a `> fixture:name` directive, where each row becomes an independent test case
+- **Alloy model blocks** — fenced code blocks with `alloy:model(name)` that embed formal verification fragments
+- **Variables** — values captured from block output with `-> $name` and referenced with `${name}` in subsequent blocks and tables
+- **Hooks** — `> setup` and `> teardown` directives that run adapter commands at section boundaries

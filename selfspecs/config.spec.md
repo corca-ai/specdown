@@ -2,6 +2,7 @@
 
 specdown uses a data-only JSON configuration file.
 The canonical config must not depend on any specific language runtime.
+For v1, a single `specdown.json` is sufficient.
 
 ```json
 {
