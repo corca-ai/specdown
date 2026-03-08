@@ -26,7 +26,7 @@ Read the following documents before starting work.
   - fixture table
   - `alloy:model(name)`
   - HTML report
-  - `SpecId`, `SpecEvent`
+  - `SpecID`, `Event`
 - Fix or remove outdated terminology and legacy architecture traces immediately upon discovery.
 
 ## Package Layout

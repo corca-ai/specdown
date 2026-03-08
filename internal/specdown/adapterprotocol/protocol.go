@@ -13,8 +13,8 @@ type Request struct {
 
 type Case struct {
 	Kind          string            `json:"kind"`
-	Block         string            `json:"block"`
-	Source        string            `json:"source"`
+	Block         string            `json:"block,omitempty"`
+	Source        string            `json:"source,omitempty"`
 	Fixture       string            `json:"fixture,omitempty"`
 	FixtureParams map[string]string `json:"fixtureParams,omitempty"`
 	Columns       []string          `json:"columns,omitempty"`

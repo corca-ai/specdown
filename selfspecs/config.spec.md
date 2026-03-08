@@ -62,3 +62,32 @@ cat <<'CFG' > .tmp-test/dup-adapter.json
 CFG
 ! specdown run -config .tmp-test/dup-adapter.json 2>/dev/null
 ```
+
+An adapter with an empty name must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":["run:x"]}]}' > .tmp-test/empty-name.json
+! specdown run -config .tmp-test/empty-name.json 2>/dev/null
+```
+
+An adapter without a command must be rejected.
+
+```verify:shell
+printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run:x"]}]}' > .tmp-test/no-cmd.json
+! specdown run -config .tmp-test/no-cmd.json 2>/dev/null
+```
+
+An adapter must declare at least one block or fixture.
+
+```verify:shell
+printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > .tmp-test/no-blocks.json
+! specdown run -config .tmp-test/no-blocks.json 2>/dev/null
+```
+
+Only `"alloy"` is supported as a models builtin. Unknown values are rejected.
+
+```verify:shell
+printf '{"entry":"i.spec.md","adapters":[],"models":{"builtin":"unknown"}}' > .tmp-test/bad-model.json
+! specdown run -config .tmp-test/bad-model.json 2>/dev/null
+```

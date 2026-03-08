@@ -85,8 +85,20 @@ cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep -q "spec"
 |---------|-------------|
 | `specdown init` | Scaffold a new project |
 | `specdown run` | Parse, execute, and generate reports in one pass |
+| `specdown install skills` | Install Claude Code skills for this project |
 | `specdown version` | Print the build version |
 | `specdown alloy dump` | Generate Alloy model `.als` files without running adapters |
+
+Every command listed above must appear in the help output.
+
+```verify:shell
+help=$(specdown --help 2>&1)
+echo "$help" | grep -q "init"
+echo "$help" | grep -q "run"
+echo "$help" | grep -q "install skills"
+echo "$help" | grep -q "version"
+echo "$help" | grep -q "alloy dump"
+```
 
 ## Flags
 

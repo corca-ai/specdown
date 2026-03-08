@@ -64,6 +64,92 @@ CFG
 ! specdown run -config .tmp-test/hook-bad-cfg.json 2>/dev/null
 ```
 
+A hook followed by a non-executable code block (e.g. plain `json`) must also be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n> setup\n\n```json\n{"a":1}\n```\n' > .tmp-test/hook-nonexec.spec.md
+printf '# T\n\n- [HNE](hook-nonexec.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-nonexec-cfg.json
+! specdown run -config .tmp-test/hook-nonexec-cfg.json 2>/dev/null
+```
+
+## Table structure
+
+A table header must define at least one column.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n> fixture:x\n\n|||\n|---|\n|a|\n' > .tmp-test/table-nocol.spec.md
+printf '# T\n\n- [TC](table-nocol.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"fixtures":["x"]}]}' > .tmp-test/table-nocol-cfg.json
+! specdown run -config .tmp-test/table-nocol-cfg.json 2>/dev/null
+```
+
+A table must define at least one data row.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n> fixture:x\n\n| a |\n|---|\n' > .tmp-test/table-norow.spec.md
+printf '# T\n\n- [TR](table-norow.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"fixtures":["x"]}]}' > .tmp-test/table-norow-cfg.json
+! specdown run -config .tmp-test/table-norow-cfg.json 2>/dev/null
+```
+
+## Block specification
+
+A block info string with a known prefix but no target must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```run:\necho hello\n```\n' > .tmp-test/no-target.spec.md
+printf '# T\n\n- [NT](no-target.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/no-target-cfg.json
+! specdown run -config .tmp-test/no-target-cfg.json 2>/dev/null
+```
+
+Duplicate capture names in a single block must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```run:shell -> $a, $a\necho hello\n```\n' > .tmp-test/dup-capture.spec.md
+printf '# T\n\n- [DC](dup-capture.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}' > .tmp-test/dup-capture-cfg.json
+! specdown run -config .tmp-test/dup-capture-cfg.json 2>/dev/null
+```
+
+Doctest blocks do not support variable capture.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```doctest:shell -> $x\n$ echo hi\nhi\n```\n' > .tmp-test/doctest-capture.spec.md
+printf '# T\n\n- [DTC](doctest-capture.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["doctest:shell"]}]}' > .tmp-test/doctest-capture-cfg.json
+! specdown run -config .tmp-test/doctest-capture-cfg.json 2>/dev/null
+```
+
+`!fail` blocks do not support variable capture.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n```run:shell !fail -> $x\nexit 1\n```\n' > .tmp-test/fail-capture.spec.md
+printf '# T\n\n- [FC](fail-capture.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}' > .tmp-test/fail-capture-cfg.json
+! specdown run -config .tmp-test/fail-capture-cfg.json 2>/dev/null
+```
+
+## Alloy validation
+
+An `alloy:ref` directive referencing an unknown model must be rejected.
+
+```verify:shell
+mkdir -p .tmp-test
+printf '# Bad\n\n> alloy:ref(nonexistent#check, scope=5)\n' > .tmp-test/bad-ref.spec.md
+printf '# T\n\n- [BR](bad-ref.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/bad-ref-cfg.json
+! specdown run -config .tmp-test/bad-ref-cfg.json 2>/dev/null
+```
+
 ## Unresolved variable
 
 Referencing a variable that was never captured must produce an error.
