@@ -1605,12 +1605,14 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   const allLinks = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
   if (!allLinks.length) return;
 
+  // Cache offsetTop at load time — sticky positioning makes offsetTop
+  // unreliable once headings are stuck during scroll.
   const allItems = allLinks
     .map((link) => {
       const id = decodeURIComponent(link.getAttribute('href').slice(1));
       const heading = document.getElementById(id);
       if (!heading) return null;
-      return { link, heading };
+      return { link, heading, top: heading.offsetTop };
     })
     .filter(Boolean);
 
@@ -1625,7 +1627,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       const id = decodeURIComponent(titleLink.getAttribute('href').slice(1));
       const heading = document.getElementById(id);
       if (!heading) return null;
-      return { section, heading };
+      return { section, heading, top: heading.offsetTop };
     })
     .filter(Boolean);
 
@@ -1637,7 +1639,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       const anchor = li.getAttribute('data-anchor');
       const heading = document.getElementById(anchor);
       if (!heading) return null;
-      return { li, heading };
+      return { li, heading, top: heading.offsetTop };
     })
     .filter(Boolean);
 
@@ -1671,7 +1673,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     // Find active link among all links (H2 + H3+)
     let active = allItems[0];
     for (const item of allItems) {
-      if (item.heading.offsetTop <= offset) {
+      if (item.top <= offset) {
         active = item;
         continue;
       }
@@ -1685,7 +1687,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     // Find active spec section
     let activeSpec = specEntries[0];
     for (const entry of specEntries) {
-      if (entry.heading.offsetTop <= offset) {
+      if (entry.top <= offset) {
         activeSpec = entry;
         continue;
       }
@@ -1699,7 +1701,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     // Find active H2 section and expand it
     let activeH2 = h2Entries[0];
     for (const entry of h2Entries) {
-      if (entry.heading.offsetTop <= offset) {
+      if (entry.top <= offset) {
         activeH2 = entry;
         continue;
       }
@@ -1715,6 +1717,36 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     if (frame) return;
     frame = window.requestAnimationFrame(update);
   };
+
+  // Build a lookup from heading id to cached top for programmatic scrolling.
+  // Native anchor navigation is unreliable for sticky-positioned headings
+  // because the browser uses the stuck position instead of the flow position.
+  const cachedTops = new Map();
+  for (const item of allItems) {
+    const id = item.link.getAttribute('href').slice(1);
+    cachedTops.set(id, item.top);
+  }
+  for (const entry of specEntries) {
+    const titleLink = entry.section.querySelector('.toc-spec-title');
+    if (titleLink) {
+      const id = titleLink.getAttribute('href').slice(1);
+      cachedTops.set(id, entry.top);
+    }
+  }
+
+  document.querySelector('.toc')?.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    const id = decodeURIComponent(link.getAttribute('href').slice(1));
+    const top = cachedTops.get(id);
+    if (top === undefined) return;
+    e.preventDefault();
+    const el = document.getElementById(id);
+    const margin = el ? parseFloat(getComputedStyle(el).scrollMarginTop) || 0 : 0;
+    window.scrollTo({ top: top - margin, behavior: 'instant' });
+    history.pushState(null, '', '#' + id);
+    schedule();
+  });
 
   window.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener('resize', schedule);
