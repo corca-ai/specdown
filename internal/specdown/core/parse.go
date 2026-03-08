@@ -373,10 +373,10 @@ func parseFenceInfo(line string) string {
 	return strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
 }
 
-var fixtureDirectivePattern = regexp.MustCompile(`^\s*<!--\s*fixture:([A-Za-z0-9_-]+)(?:\(([^)]*)\))?\s*-->\s*$`)
+var fixtureDirectivePattern = regexp.MustCompile(`^\s*>\s*fixture:([A-Za-z0-9_-]+)(?:\(([^)]*)\))?\s*$`)
 var alloyModelInfoPattern = regexp.MustCompile(`^alloy:model\(([A-Za-z_][A-Za-z0-9_-]*)\)$`)
-var alloyRefDirectivePattern = regexp.MustCompile(`^\s*<!--\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*-->\s*$`)
-var hookDirectivePattern = regexp.MustCompile(`^\s*<!--\s*(setup|teardown)(?::(each))?\s*-->\s*$`)
+var alloyRefDirectivePattern = regexp.MustCompile(`^\s*>\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*$`)
+var hookDirectivePattern = regexp.MustCompile(`^\s*>\s*(setup|teardown)(?::(each))?\s*$`)
 
 func parseFixtureDirective(line string) (string, map[string]string, bool) {
 	matches := fixtureDirectivePattern.FindStringSubmatch(line)
@@ -444,7 +444,7 @@ func parseAlloyModelInfo(info string) (string, bool) {
 
 func parseAlloyRefDirective(line string) (AlloyRefNode, bool, error) {
 	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, "<!--") || !strings.Contains(trimmed, "alloy:ref(") {
+	if !strings.HasPrefix(trimmed, ">") || !strings.Contains(trimmed, "alloy:ref(") {
 		return AlloyRefNode{}, false, nil
 	}
 

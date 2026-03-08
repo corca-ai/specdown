@@ -23,7 +23,8 @@ The `<target>` is defined by the adapter, not the core.
 
 The parser must recognize `run`, `verify`, `test`, and `doctest` as executable block kinds.
 
-<!-- fixture:block-kind -->
+> fixture:block-kind
+
 | info | kind | target |
 | --- | --- | --- |
 | run:shell | run | shell |
@@ -35,7 +36,7 @@ The parser must recognize `run`, `verify`, `test`, and `doctest` as executable b
 
 A block can capture its output into a variable with `-> $varName`.
 
-<!-- fixture:block-kind -->
+> fixture:block-kind
 | info | kind | target |
 | --- | --- | --- |
 | run:shell -> $id | run | shell |
@@ -177,7 +178,7 @@ gamma
 
 A Markdown table becomes executable when preceded by a fixture directive.
 
-The directive is an HTML comment of the form `<!-- fixture:name -->`.
+The directive is a blockquote of the form `> fixture:name`.
 The first row is the header. Each subsequent row is an independent test case.
 Fixture names are defined by the adapter, not the core.
 
@@ -195,7 +196,7 @@ before sending to the adapter.
 Adapters always receive unescaped values.
 The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 
-<!-- fixture:cell-escape -->
+> fixture:cell-escape
 | input | expected |
 | --- | --- |
 | hello | hello |
@@ -206,7 +207,7 @@ The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 
 Fixtures can accept parameters via `(key=value)` syntax.
 Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
-Multiple parameters are comma-separated: `<!-- fixture:name(key1=val1, key2=val2) -->`.
+Multiple parameters are comma-separated: `> fixture:name(key1=val1, key2=val2)`.
 
 ### Parameterized fixture call
 
@@ -217,7 +218,7 @@ the fixture name, `fixtureParams` populated, and empty `columns`/`cells`.
 This is useful for inline assertions that don't warrant a full table:
 
 ```markdown
-<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+> fixture:check-user(field=plan, expected=STANDARD)
 ```
 
 A fixture directive without parameters and without a table is a compile-time error.
@@ -229,10 +230,10 @@ A hook directive must be followed by an executable code block.
 
 | Directive | Meaning |
 |-----------|---------|
-| `<!-- setup -->` | Run once before the first case in the heading subtree |
-| `<!-- teardown -->` | Run once after the last case in the heading subtree |
-| `<!-- setup:each -->` | Run before the first case of each immediate child section |
-| `<!-- teardown:each -->` | Run after the last case of each immediate child section |
+| `> setup` | Run once before the first case in the heading subtree |
+| `> teardown` | Run once after the last case in the heading subtree |
+| `> setup:each` | Run before the first case of each immediate child section |
+| `> teardown:each` | Run after the last case of each immediate child section |
 
 Hooks are not counted as test cases. Their results do not appear in the
 case list, but a hook failure marks the document as failed.
@@ -241,7 +242,7 @@ A setup or teardown directive followed by an executable code block must parse su
 
 ```run:shell
 mkdir -p .tmp-test
-printf '# Hook Test\n\n## Group\n\n<!-- setup:each -->\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
+printf '# Hook Test\n\n## Group\n\n> setup:each\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
 printf '# T\n\n- [Hook](hook-good.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/hook-good-cfg.json
 {"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}

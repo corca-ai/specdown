@@ -23,7 +23,7 @@ A fixture directive without parameters and not followed by a table must be rejec
 
 ```verify:shell
 mkdir -p .tmp-test
-printf '# Bad\n\n<!-- fixture:x -->\n\nJust prose.\n' > .tmp-test/fnt.spec.md
+printf '# Bad\n\n> fixture:x\n\nJust prose.\n' > .tmp-test/fnt.spec.md
 printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/fnt-cfg.json
 {"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
@@ -39,7 +39,7 @@ cat <<'SPEC' > .tmp-test/fixture-call.spec.md
 # Fixture Call
 
 Some prose.
-<!-- fixture:check(field=plan, expected=STANDARD) -->
+> fixture:check(field=plan, expected=STANDARD)
 
 More prose.
 SPEC
@@ -56,7 +56,7 @@ A setup or teardown directive not followed by a code block must be rejected.
 
 ```verify:shell
 mkdir -p .tmp-test
-printf '# Bad\n\n<!-- setup:each -->\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
+printf '# Bad\n\n> setup:each\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
 printf '# T\n\n- [Hook](hook-bad.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/hook-bad-cfg.json
 {"entry":"index.spec.md","adapters":[]}

@@ -263,7 +263,7 @@ Heading hierarchy is converted into a test suite hierarchy.
 | `#`, `##`, `###` | suite hierarchy |
 | plain prose | document body, not an execution target |
 | fenced code block | executable block or model block |
-| HTML comment directive | meta directives such as setup, teardown, fixture, alloy reference |
+| blockquote directive | meta directives such as setup, teardown, fixture, alloy reference |
 | Markdown table | execution data when combined with a fixture directive |
 
 ### Supported Blocks
@@ -306,10 +306,10 @@ Rules:
 ### Setup / Teardown
 
 ```markdown
-<!-- setup -->
-<!-- teardown -->
-<!-- setup:each -->
-<!-- teardown:each -->
+> setup
+> teardown
+> setup:each
+> teardown:each
 ```
 
 These directives must be followed by an executable code block that serves as the hook body.
@@ -323,12 +323,12 @@ Example:
 ````markdown
 ## Scenario Group
 
-<!-- setup:each -->
+> setup:each
 ```run:api
 login u0
 ```
 
-<!-- teardown:each -->
+> teardown:each
 ```run:api
 reset u0
 ```
@@ -357,7 +357,7 @@ The essence of the FIT style is preserved, but the core generalizes via a fixtur
 Example:
 
 ````markdown
-<!-- fixture:write-permission(user=alan) -->
+> fixture:write-permission(user=alan)
 | path                       | write | reason                |
 |----------------------------|-------|-----------------------|
 | /private/test.txt          | yes   | personal workspace    |
@@ -368,7 +368,7 @@ Example:
 Rules:
 
 - A table is executable only when combined with a `fixture` directive immediately above it
-- The fixture directive supports optional parameters: `<!-- fixture:name(key=value, key2=value2) -->`
+- The fixture directive supports optional parameters: `> fixture:name(key=value, key2=value2)`
 - Parameters are passed to the adapter as `fixtureParams` in the `runCase` message
 - The first row must be a header
 - Each fixture adapter must explicitly validate the required columns
@@ -381,17 +381,17 @@ A fixture directive with parameters can be used without a following table.
 This creates a single assertion case using only `fixtureParams`, with empty `columns` and `cells`.
 
 ```markdown
-<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+> fixture:check-user(field=plan, expected=STANDARD)
 ```
 
 This is useful for inline assertions that don't warrant a full table:
 
 ```markdown
 The plan changes to STANDARD after subscription.
-<!-- fixture:check-user(field=plan, expected=STANDARD) -->
+> fixture:check-user(field=plan, expected=STANDARD)
 
 The next billing date is set.
-<!-- fixture:check-user(field=nextBillingDate, expected=2025-03-03) -->
+> fixture:check-user(field=nextBillingDate, expected=2025-03-03)
 ```
 
 A fixture directive without parameters and without a table is a compile-time error.
@@ -460,20 +460,20 @@ check privateIsolation for 5
 
 ### Model Reference
 
-An explicit directive is provided so document readers can easily see which assertions have been verified.
+When a `check` statement appears in an `alloy:model` block, the reference is implicit -- the check result is automatically linked to the enclosing section in the HTML report and displayed as a status badge.
+
+An explicit directive is provided for cross-section references, where you want to display a check result defined in a different section.
 
 ```markdown
-<!-- alloy:ref(access#privateIsolation, scope=5) -->
+> alloy:ref(access#privateIsolation, scope=5)
 ```
 
 This directive serves the following purposes.
 
-- Links the current paragraph/section to a specific model check result
+- Links the current paragraph/section to a specific model check result from another section
 - Displayed as a badge or status row in the HTML report
 - Links to a corresponding counterexample artifact on failure
 - On failure, the `Message` field includes a counterexample summary extracted from the Alloy solver output (e.g., atom bindings such as `Card$0 = {Card$0}`)
-
-Natural-language blockquotes may be used freely, but the machine-readable contract is based on the above directive.
 
 
 ## Execution Result HTML View
@@ -650,9 +650,9 @@ The completion criteria for independent team handoff are as follows.
 
 Nodes follow the principle of least privilege.
 
-<!-- alloy:ref(access#writeMinimality, scope=5) -->
+> alloy:ref(access#writeMinimality, scope=5)
 
-<!-- fixture:write-permission(user=alan) -->
+> fixture:write-permission(user=alan)
 | path                       | write | reason                |
 |----------------------------|-------|-----------------------|
 | /private/test.txt          | yes   | personal workspace    |
@@ -691,7 +691,6 @@ assert privateIsolation {
 check privateIsolation for 5
 ```
 
-<!-- alloy:ref(access#privateIsolation, scope=5) -->
 ````
 
 

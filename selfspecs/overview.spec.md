@@ -9,10 +9,10 @@ Prose is preserved as-is; only executable blocks, fixture tables, and Alloy mode
 A spec document can contain:
 
 - **Executable blocks** — fenced code blocks prefixed with `run:`, `verify:`, `test:`, or `doctest:` that are dispatched to adapters for execution
-- **Fixture tables** — Markdown tables preceded by a `<!-- fixture:name -->` directive, where each row becomes an independent test case
+- **Fixture tables** — Markdown tables preceded by a `> fixture:name` directive, where each row becomes an independent test case
 - **Alloy model blocks** — fenced code blocks with `alloy:model(name)` that embed formal verification fragments
 - **Variables** — values captured from block output with `-> $name` and referenced with `${name}` in subsequent blocks and tables
-- **Hooks** — `<!-- setup -->` and `<!-- teardown -->` directives that run adapter commands at section boundaries
+- **Hooks** — `> setup` and `> teardown` directives that run adapter commands at section boundaries
 
 After execution, specdown produces an HTML report that preserves the document structure and annotates each block and table row with pass/fail status.
 

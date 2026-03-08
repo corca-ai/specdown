@@ -7,13 +7,9 @@ Fragments with the same model name are combined in document order
 into a single logical model. Only the first fragment may contain
 a `module` declaration.
 
-To link an assertion check result to the current section:
-
-```
-<!-- alloy:ref(modelName#assertionName, scope=5) -->
-```
-
-This directive displays the check result as a status badge in the HTML report.
+When a model block contains a `check` statement for an assertion, the
+reference is implicit — no separate directive is needed. The check result
+is automatically displayed as a status badge in the HTML report.
 
 ## Formal Properties
 
@@ -44,8 +40,6 @@ assert blockBelongsToOneScope {
 check blockBelongsToOneScope for 5
 ```
 
-<!-- alloy:ref(docmodel#blockBelongsToOneScope, scope=5) -->
-
 A table row must not belong to more than one heading scope.
 
 ```alloy:model(docmodel)
@@ -55,5 +49,3 @@ assert rowBelongsToOneScope {
 
 check rowBelongsToOneScope for 5
 ```
-
-<!-- alloy:ref(docmodel#rowBelongsToOneScope, scope=5) -->

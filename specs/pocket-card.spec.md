@@ -18,14 +18,14 @@ create-card "${boardName}" "write spec"
 
 A card just created must be immediately queryable within the board it was created in.
 
-<!-- fixture:card-exists -->
+> fixture:card-exists
 | board | card | exists |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | yes |
 
 A newly created card must always be placed in the `todo` column.
 
-<!-- fixture:card-column -->
+> fixture:card-column
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | todo |
@@ -42,7 +42,7 @@ move-card "${boardName}" "${cardId}" doing
 
 A card moved to `doing` must be queryable under the `doing` column in the same board.
 
-<!-- fixture:card-column -->
+> fixture:card-column
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | doing |
@@ -55,7 +55,7 @@ A completed card must be movable to `done`.
 move-card "${boardName}" "${cardId}" done
 ```
 
-<!-- fixture:card-column -->
+> fixture:card-column
 | board | card | column |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | done |
@@ -118,7 +118,7 @@ delete-card "${boardName}" "${cardId}"
 
 ### A deleted card is not queryable
 
-<!-- fixture:card-exists -->
+> fixture:card-exists
 | board | card | exists |
 | --- | --- | --- |
 | ${boardName} | ${cardId} | no |
@@ -159,8 +159,6 @@ assert cardHasExactlyOneColumn {
 check cardHasExactlyOneColumn for 5
 ```
 
-<!-- alloy:ref(board#cardHasExactlyOneColumn, scope=5) -->
-
 ### A card must belong to exactly one board
 
 It must be impossible for a card to belong to multiple boards simultaneously.
@@ -172,6 +170,4 @@ assert cardBelongsToOneBoard {
 
 check cardBelongsToOneBoard for 5
 ```
-
-<!-- alloy:ref(board#cardBelongsToOneBoard, scope=5) -->
 

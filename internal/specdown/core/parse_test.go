@@ -25,7 +25,7 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		"",
 		"### Table Check",
 		"",
-		"<!-- fixture:board-exists -->",
+		"> fixture:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| ${boardName} | yes |",
@@ -108,7 +108,7 @@ func TestParseDocumentRejectsFixtureDirectiveWithoutTable(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
-		"<!-- fixture:board-exists -->",
+		"> fixture:board-exists",
 		"",
 		"not a table",
 		"",
@@ -147,7 +147,7 @@ func TestParseDocumentSupportsAlloyModelBlocksAndReferences(t *testing.T) {
 		"assert cardExists { some Card }",
 		"```",
 		"",
-		"<!-- alloy:ref(board#cardExists, scope=5) -->",
+		"> alloy:ref(board#cardExists, scope=5)",
 		"",
 	}, "\n"))
 	if err != nil {
@@ -211,7 +211,7 @@ func TestParseDocumentParsesFixtureParams(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"<!-- fixture:write-permission(user=alan) -->",
+		"> fixture:write-permission(user=alan)",
 		"| path | write |",
 		"| --- | --- |",
 		"| /tmp | yes |",
@@ -245,7 +245,7 @@ func TestParseDocumentParsesFixtureMultipleParams(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"<!-- fixture:editor-op(type=lexical, mode=rich) -->",
+		"> fixture:editor-op(type=lexical, mode=rich)",
 		"| input | output |",
 		"| --- | --- |",
 		"| a | b |",
@@ -270,7 +270,7 @@ func TestParseDocumentFixtureWithoutParamsHasNilParams(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"<!-- fixture:board-exists -->",
+		"> fixture:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| x | yes |",
@@ -295,7 +295,7 @@ func TestParseTableCellsWithEscapedPipe(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		`<!-- fixture:check -->`,
+		`> fixture:check`,
 		`| input | expected |`,
 		`| --- | --- |`,
 		`| a\|b | a\|b |`,
@@ -349,7 +349,7 @@ func TestParseDocumentAllowsFixtureWithParamsAndNoTable(t *testing.T) {
 		"# Test",
 		"",
 		"Some prose.",
-		"<!-- fixture:check-user(field=plan, expected=STANDARD) -->",
+		"> fixture:check-user(field=plan, expected=STANDARD)",
 		"",
 		"More prose.",
 		"",
@@ -382,7 +382,7 @@ func TestParseDocumentRejectsFixtureWithoutParamsAndNoTable(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
-		"<!-- fixture:board-exists -->",
+		"> fixture:board-exists",
 		"",
 		"not a table",
 		"",
@@ -401,12 +401,12 @@ func TestParseDocumentParsesHookDirectives(t *testing.T) {
 		"",
 		"## Group",
 		"",
-		"<!-- setup:each -->",
+		"> setup:each",
 		"```run:api",
 		"login u0",
 		"```",
 		"",
-		"<!-- teardown:each -->",
+		"> teardown:each",
 		"```run:api",
 		"reset u0",
 		"```",
@@ -447,7 +447,7 @@ func TestParseDocumentParsesNonEachHook(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"<!-- setup -->",
+		"> setup",
 		"```run:shell",
 		"init-db",
 		"```",
@@ -475,7 +475,7 @@ func TestParseDocumentRejectsHookWithoutCodeBlock(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
-		"<!-- setup:each -->",
+		"> setup:each",
 		"",
 		"Just prose.",
 		"",
@@ -492,7 +492,7 @@ func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
-		"<!-- alloy:ref(board#cardExists) -->",
+		"> alloy:ref(board#cardExists)",
 		"",
 	}, "\n"))
 	if err == nil {

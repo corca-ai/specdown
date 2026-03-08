@@ -120,7 +120,7 @@ func CompileDocuments(docs []Document) (Plan, error) {
 func CompileDocument(doc Document) (DocumentPlan, error) {
 	cases := executableCases(doc)
 	hooks := extractHooks(doc)
-	alloyModels, alloyChecks, err := compileAlloy(doc)
+	alloyModels, alloyChecks, err := compileAlloy(doc, documentMaxOrdinal(doc))
 	if err != nil {
 		return DocumentPlan{}, err
 	}
@@ -188,6 +188,35 @@ func headingPathPrefix(prefix []string, current []string) bool {
 		}
 	}
 	return true
+}
+
+func documentMaxOrdinal(doc Document) int {
+	max := 0
+	for _, id := range documentOrdinals(doc) {
+		if id != nil && id.Ordinal > max {
+			max = id.Ordinal
+		}
+	}
+	return max
+}
+
+func documentOrdinals(doc Document) []*SpecID {
+	var ids []*SpecID
+	for _, node := range doc.Nodes {
+		switch n := node.(type) {
+		case CodeBlockNode:
+			ids = append(ids, n.ID)
+		case AlloyRefNode:
+			ids = append(ids, n.ID)
+		case FixtureCallNode:
+			ids = append(ids, n.ID)
+		case TableNode:
+			for i := range n.Rows {
+				ids = append(ids, n.Rows[i].ID)
+			}
+		}
+	}
+	return ids
 }
 
 func extractHooks(doc Document) []HookSpec {

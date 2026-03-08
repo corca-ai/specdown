@@ -74,16 +74,14 @@ assert cardBelongsToOneBoard {
 check cardBelongsToOneBoard for 5
 ```
 
-<!-- alloy:ref(board#cardBelongsToOneBoard, scope=5) -->
-
-<!-- fixture:card-exists -->
+> fixture:card-exists
 | board        | card      | exists |
 |--------------|-----------|--------|
 | ${boardName} | ${cardId} | yes    |
 ````
 
 The `alloy:model` block defines and checks the assertion.
-The `alloy:ref` directive links the check result to this section in the HTML report, displaying it as a status badge. Both are needed: the model block runs the check, the ref directive surfaces the result in context.
+When a `check` statement exists in the model block, the reference is implicit -- the check result is automatically linked to this section in the HTML report and displayed as a status badge. An explicit `> alloy:ref(...)` directive is only needed for cross-section references, where you want to display a check result defined in a different section.
 
 The fixture table confirms the implementation enforces the same property.
 
@@ -102,12 +100,10 @@ assert noMoveBetweenBoards {
 check noMoveBetweenBoards for 5
 ```
 
-<!-- alloy:ref(board#noMoveBetweenBoards, scope=5) -->
-
 Counterexample found: archived columns lose board membership.
 Fixed the model; pinning the case as a regression test.
 
-<!-- fixture:move-card -->
+> fixture:move-card
 | card   | target       | result | note                      |
 |--------|--------------|--------|---------------------------|
 | card-1 | same-board   | ok     | normal move               |
@@ -140,12 +136,9 @@ check exactlyFourCases for 6
 check mutuallyExclusive for 6
 ```
 
-<!-- alloy:ref(access#exactlyFourCases, scope=6) -->
-<!-- alloy:ref(access#mutuallyExclusive, scope=6) -->
-
 Four cases, proven complete. One representative per case is sufficient.
 
-<!-- fixture:access-decision(user=alice) -->
+> fixture:access-decision(user=alice)
 | path             | decision | case         |
 |------------------|----------|--------------|
 | /private/alice/a | allow    | ownerAccess  |
@@ -201,7 +194,7 @@ Executable blocks test the valid paths and a minimal set of invalid ones.
 ````markdown
 ## Card Lifecycle
 
-<!-- setup -->
+> setup
 
 ```run:api -> $cardId
 POST /cards {"title": "test", "status": "draft"}
@@ -226,9 +219,7 @@ run sanityCheck {} for 5 but 8 steps
 check deletedIsTerminal for 5 but 8 steps
 ```
 
-<!-- alloy:ref(card#deletedIsTerminal, scope=5) -->
-
-<!-- fixture:card-transition -->
+> fixture:card-transition
 | from     | to       | result |
 |----------|----------|--------|
 | Draft    | Active   | ok     |
@@ -284,8 +275,6 @@ assert compositionSafe {
 }
 check compositionSafe for 6
 ```
-
-<!-- alloy:ref(composed#compositionSafe, scope=6) -->
 ````
 
 Testing every combination of permission and quota states is impractical.

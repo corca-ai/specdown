@@ -251,7 +251,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 							Model:     "board",
 							Assertion: "cardShape",
 							Scope:     "5",
-							Raw:       "<!-- alloy:ref(board#cardShape, scope=5) -->\n",
+							Raw:       "> alloy:ref(board#cardShape, scope=5)\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
 								HeadingPath: []string{"Pocket Board", "Formal Rules"},
@@ -526,7 +526,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 							Model:     "board",
 							Assertion: "cardShape",
 							Scope:     "5",
-							Raw:       "<!-- alloy:ref(board#cardShape, scope=5) -->\n",
+							Raw:       "> alloy:ref(board#cardShape, scope=5)\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
 								HeadingPath: []string{"Pocket Board", "Formal Rules"},

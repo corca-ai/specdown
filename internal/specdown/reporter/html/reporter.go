@@ -589,7 +589,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>specdown report</title>
+  <title>{{ .Title }}</title>
   <style>
     /* ── Design tokens ── */
     :root {
@@ -1014,6 +1014,12 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       font-family: var(--font-mono);
       font-size: 0.94em;
       line-height: 1.45;
+    }
+
+    :not(pre) > code {
+      padding: 0.15em 0.35em;
+      background: var(--code-bg);
+      border-radius: 0.2rem;
     }
 
     /* ── Mobile layout ── */

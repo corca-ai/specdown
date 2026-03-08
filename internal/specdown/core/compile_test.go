@@ -50,7 +50,7 @@ func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
 		"",
 		"### Table Check",
 		"",
-		"<!-- fixture:board-exists -->",
+		"> fixture:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| ${boardName} | yes |",
@@ -119,7 +119,7 @@ func TestCompileDocumentCollectsAlloyModelsAndChecks(t *testing.T) {
 		"assert cardExists { some Card }",
 		"```",
 		"",
-		"<!-- alloy:ref(board#cardExists, scope=5) -->",
+		"> alloy:ref(board#cardExists, scope=5)",
 		"",
 	}, "\n"))
 	if err != nil {
@@ -178,7 +178,7 @@ func TestCompileDocumentRejectsAlloyReferenceToUnknownModel(t *testing.T) {
 		"",
 		"## Formal Rules",
 		"",
-		"<!-- alloy:ref(board#cardExists, scope=5) -->",
+		"> alloy:ref(board#cardExists, scope=5)",
 		"",
 	}, "\n"))
 	if err != nil {

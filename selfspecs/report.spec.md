@@ -76,7 +76,7 @@ chmod +x .tmp-test/diag-adapter.sh
 cat <<'SPEC' > .tmp-test/diag.spec.md
 # Diag Test
 
-<!-- fixture:diag -->
+> fixture:diag
 | input | output |
 | --- | --- |
 | a | b |
