@@ -1036,8 +1036,14 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     :not(pre) > code {
       padding: 0.15em 0.35em;
-      background: var(--code-bg);
+      background: #e6e6df;
       border-radius: 0.2rem;
+    }
+
+    .exec-source :not(pre) > code,
+    .exec-source > code {
+      padding: 0;
+      background: transparent;
     }
 
     /* ── Mobile layout ── */
