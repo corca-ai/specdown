@@ -13,7 +13,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 type reportView struct {

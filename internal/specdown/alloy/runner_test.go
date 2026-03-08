@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {

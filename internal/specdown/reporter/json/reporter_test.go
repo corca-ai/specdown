@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 func TestWriteEncodesReportJSON(t *testing.T) {

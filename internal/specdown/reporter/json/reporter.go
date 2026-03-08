@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 func Write(report core.Report, outPath string) (err error) {

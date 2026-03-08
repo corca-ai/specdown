@@ -1,4 +1,4 @@
-module specdown
+module github.com/corca-ai/specdown
 
 go 1.22.0
 

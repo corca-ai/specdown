@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 const (

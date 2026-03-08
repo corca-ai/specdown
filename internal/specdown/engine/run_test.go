@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"specdown/internal/specdown/adapterhost"
-	"specdown/internal/specdown/adapterprotocol"
-	"specdown/internal/specdown/config"
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
+	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
+	"github.com/corca-ai/specdown/internal/specdown/config"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {

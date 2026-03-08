@@ -8,7 +8,28 @@ specdown run
 
 ## Install
 
-Download a binary from [Releases](../../releases), or build from source:
+### Binary (recommended)
+
+Download from [Releases](https://github.com/corca-ai/specdown/releases/latest):
+
+```sh
+# macOS (Apple Silicon)
+curl -sSfL https://github.com/corca-ai/specdown/releases/latest/download/specdown_*_darwin_arm64.tar.gz | tar xz -C /usr/local/bin specdown
+
+# macOS (Intel)
+curl -sSfL https://github.com/corca-ai/specdown/releases/latest/download/specdown_*_darwin_amd64.tar.gz | tar xz -C /usr/local/bin specdown
+
+# Linux (amd64)
+curl -sSfL https://github.com/corca-ai/specdown/releases/latest/download/specdown_*_linux_amd64.tar.gz | tar xz -C /usr/local/bin specdown
+```
+
+### go install
+
+```sh
+go install github.com/corca-ai/specdown/cmd/specdown@latest
+```
+
+### From source
 
 ```sh
 go build -o specdown ./cmd/specdown

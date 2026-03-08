@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"specdown/internal/specdown/adapterprotocol"
-	"specdown/internal/specdown/config"
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
+	"github.com/corca-ai/specdown/internal/specdown/config"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 type Host struct {

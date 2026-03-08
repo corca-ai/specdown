@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"specdown/internal/specdown/adapterprotocol"
+	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 )
 
 var fixturesDir string

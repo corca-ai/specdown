@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"specdown/internal/specdown/alloy"
-	"specdown/internal/specdown/adapterhost"
-	"specdown/internal/specdown/config"
-	"specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/alloy"
+	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
+	"github.com/corca-ai/specdown/internal/specdown/config"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 // adapterEntry holds an adapter config for registry lookups.

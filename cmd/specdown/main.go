@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"specdown/internal/specdown/config"
-	"specdown/internal/specdown/core"
-	"specdown/internal/specdown/engine"
-	htmlreport "specdown/internal/specdown/reporter/html"
-	jsonreport "specdown/internal/specdown/reporter/json"
+	"github.com/corca-ai/specdown/internal/specdown/config"
+	"github.com/corca-ai/specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/engine"
+	htmlreport "github.com/corca-ai/specdown/internal/specdown/reporter/html"
+	jsonreport "github.com/corca-ai/specdown/internal/specdown/reporter/json"
 )
 
 var version = "dev"

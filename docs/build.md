@@ -59,9 +59,13 @@ GitHub Actions runs on every push to `main` and on pull requests (`.github/workf
 
 ## Release
 
-Pushing a `v*` tag triggers GitHub Actions to build Windows, macOS, and Linux binaries and attach them to the Release.
+Pushing a `v*` tag triggers [GoReleaser](https://goreleaser.com/) via GitHub Actions.
+It cross-compiles for macOS, Linux, and Windows, creates archives with checksums,
+and publishes a GitHub Release.
 
 ```sh
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
+
+Configuration is in `.goreleaser.yaml`.
