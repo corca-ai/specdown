@@ -695,13 +695,13 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
 		out.WriteString(`</span>`)
 	default:
-		out.WriteString(`<span class="inline-expect failed" title="`)
+		out.WriteString(`<ruby class="inline-expect failed" title="`)
 		out.WriteString(template.HTMLEscapeString(cr.Message))
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(` <span class="inline-expected">(expected `)
+		out.WriteString(`<rp>(</rp><rt>`)
 		out.WriteString(template.HTMLEscapeString(cr.Expected))
-		out.WriteString(`)</span></span>`)
+		out.WriteString(`</rt><rp>)</rp></ruby>`)
 	}
 	return out.String()
 }
@@ -1381,11 +1381,20 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .inline-expect.failed {
       background: var(--fail-bg);
       color: var(--fail-ink);
+      position: relative;
+      padding-top: 0.02em;
+      padding-bottom: 0.02em;
     }
-
-    .inline-expected {
-      font-size: 0.85em;
-      opacity: 0.8;
+    ruby.inline-expect.failed rt {
+      position: absolute;
+      left: 0;
+      bottom: 100%;
+      margin-bottom: 0;
+      font-size: 0.8em;
+      line-height: 1;
+      color: var(--muted);
+      font-style: italic;
+      white-space: nowrap;
     }
 
     .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed) {
