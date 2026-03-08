@@ -15,6 +15,7 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go generate ./cmd/specdown/...
       - run: go test -race ./...
 
       - uses: golangci/golangci-lint-action@v7

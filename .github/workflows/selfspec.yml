@@ -32,6 +32,7 @@ jobs:
 
       - name: Build
         run: |
+          go generate ./cmd/specdown/...
           go build -o specdown ./cmd/specdown/
           go build -o specdown-adapter-shell ./cmd/specdown-adapter-shell/
 
