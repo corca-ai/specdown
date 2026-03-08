@@ -1309,7 +1309,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .exec-expand-marker::after {
-      content: "\25B6";
+      content: ">";
       font-size: 0.7rem;
       color: var(--muted);
       transition: transform 0.15s ease;
