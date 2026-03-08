@@ -191,13 +191,13 @@ func renderDocument(result core.DocumentResult) (string, error) {
 	var sectionStack []int
 	var accBindings []core.Binding
 	for _, node := range result.Document.Nodes {
-		sectionStack = closeSections(&out, sectionStack, node)
+		sectionStack = closeSections(&out, sectionStack, node, result.Document.RelativeTo)
 		var rendered string
 		var err error
 		if prose, ok := node.(core.ProseNode); ok {
 			rendered, err = renderProseNode(prose, caseResults, accBindings)
 		} else {
-			rendered, err = renderNode(node, result.Document.RelativeTo, caseResults, alloyResults)
+			rendered, err = renderNode(node, caseResults, alloyResults)
 		}
 		if err != nil {
 			return "", err
@@ -211,7 +211,7 @@ func renderDocument(result core.DocumentResult) (string, error) {
 	return out.String(), nil
 }
 
-func closeSections(out *strings.Builder, sectionStack []int, node core.Node) []int {
+func closeSections(out *strings.Builder, sectionStack []int, node core.Node, documentPath string) []int {
 	heading, ok := node.(core.HeadingNode)
 	if !ok {
 		return sectionStack
@@ -220,14 +220,18 @@ func closeSections(out *strings.Builder, sectionStack []int, node core.Node) []i
 		out.WriteString(`</section>`)
 		sectionStack = sectionStack[:len(sectionStack)-1]
 	}
-	fmt.Fprintf(out, `<section class="s%d">`, heading.Level)
+	if len(heading.HeadingPath) > 0 {
+		fmt.Fprintf(out, `<section class="s%d" id=%q>`, heading.Level, template.HTMLEscapeString(core.HeadingAnchor(documentPath, heading.HeadingPath)))
+	} else {
+		fmt.Fprintf(out, `<section class="s%d">`, heading.Level)
+	}
 	return append(sectionStack, heading.Level)
 }
 
-func renderNode(node core.Node, documentPath string, caseResults map[string]core.CaseResult, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+func renderNode(node core.Node, caseResults map[string]core.CaseResult, alloyResults map[string]core.AlloyCheckResult) (string, error) {
 	switch current := node.(type) {
 	case core.HeadingNode:
-		return renderHeading(current, documentPath)
+		return renderHeading(current)
 	case core.ProseNode:
 		return markdownToHTML(current.Markdown())
 	case core.CodeBlockNode:
@@ -325,7 +329,7 @@ func renderBindings(out *strings.Builder, bindings []core.Binding) {
 	out.WriteString(`</div>`)
 }
 
-func renderHeading(node core.HeadingNode, documentPath string) (string, error) {
+func renderHeading(node core.HeadingNode) (string, error) {
 	html, err := markdownToHTML(node.Markdown())
 	if err != nil {
 		return "", err
@@ -336,12 +340,7 @@ func renderHeading(node core.HeadingNode, documentPath string) (string, error) {
 	}
 	openTag := fmt.Sprintf("<h%d>", node.Level)
 	closeTag := fmt.Sprintf("</h%d>", node.Level)
-	var replacement string
-	if len(node.HeadingPath) > 0 {
-		replacement = fmt.Sprintf("<h%d id=%q>", rendered, template.HTMLEscapeString(core.HeadingAnchor(documentPath, node.HeadingPath)))
-	} else {
-		replacement = fmt.Sprintf("<h%d>", rendered)
-	}
+	replacement := fmt.Sprintf("<h%d>", rendered)
 	closeReplacement := fmt.Sprintf("</h%d>", rendered)
 	result := strings.Replace(html, openTag, replacement, 1)
 	result = strings.Replace(result, closeTag, closeReplacement, 1)
@@ -1173,10 +1172,17 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       & li { margin: 0.25rem 0; }
       & ul, & ol { padding-left: 1.5rem; }
 
-      & h2 { font-size: 2.5rem; top: var(--safe-top); z-index: 4; scroll-margin-top: var(--safe-top); }
-      & h3 { font-size: 1.85rem; top: calc(5rem + 1px + var(--safe-top)); z-index: 3; scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
-      & h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
-      & :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
+      & h2 { font-size: 2.5rem; top: var(--safe-top); z-index: 4; }
+      & h3 { font-size: 1.85rem; top: calc(5rem + 1px + var(--safe-top)); z-index: 3; }
+      & h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; }
+      & :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
+
+      /* scroll-margin-top on non-sticky section wrappers (not sticky headings)
+         so native anchor navigation scrolls to the correct position. */
+      & .s2 { scroll-margin-top: var(--safe-top); }
+      & .s3 { scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
+      & .s4 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
+      & .s5, & .s6 { scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
     }
 
     .status {
@@ -1602,48 +1608,41 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   </footer>
 <script>
 (() => {
-  const allLinks = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
-  if (!allLinks.length) return;
+  // IDs live on non-sticky <section> wrappers, so offsetTop is always
+  // the true document-flow position. No caching or JS scroll needed —
+  // native anchor navigation just works.
 
-  // Cache offsetTop at load time — sticky positioning makes offsetTop
-  // unreliable once headings are stuck during scroll.
-  const allItems = allLinks
+  const resolve = (href) => {
+    const id = decodeURIComponent(href.slice(1));
+    return document.getElementById(id);
+  };
+
+  const allItems = Array.from(document.querySelectorAll('.toc-link[href^="#"]'))
     .map((link) => {
-      const id = decodeURIComponent(link.getAttribute('href').slice(1));
-      const heading = document.getElementById(id);
-      if (!heading) return null;
-      return { link, heading, top: heading.offsetTop };
+      const el = resolve(link.getAttribute('href'));
+      return el ? { link, el } : null;
     })
     .filter(Boolean);
 
   if (!allItems.length) return;
 
-  // Spec sections in the ToC
-  const specSections = Array.from(document.querySelectorAll('.toc-spec'));
-  const specEntries = specSections
+  const specEntries = Array.from(document.querySelectorAll('.toc-spec'))
     .map((section) => {
       const titleLink = section.querySelector('.toc-spec-title');
       if (!titleLink) return null;
-      const id = decodeURIComponent(titleLink.getAttribute('href').slice(1));
-      const heading = document.getElementById(id);
-      if (!heading) return null;
-      return { section, heading, top: heading.offsetTop };
+      const el = resolve(titleLink.getAttribute('href'));
+      return el ? { section, el } : null;
     })
     .filter(Boolean);
 
-  // H2 items are direct children of .toc-list with data-anchor
-  const h2Items = Array.from(document.querySelectorAll('.toc-list > .toc-item[data-anchor]'));
-
-  const h2Entries = h2Items
+  const h2Entries = Array.from(document.querySelectorAll('.toc-list > .toc-item[data-anchor]'))
     .map((li) => {
-      const anchor = li.getAttribute('data-anchor');
-      const heading = document.getElementById(anchor);
-      if (!heading) return null;
-      return { li, heading, top: heading.offsetTop };
+      const el = document.getElementById(li.getAttribute('data-anchor'));
+      return el ? { li, el } : null;
     })
     .filter(Boolean);
 
-  // Precompute sticky top values for shadow detection
+  // Shadow on the bottommost stuck heading
   const stickyHeadings = Array.from(document.querySelectorAll('.spec-body :is(h2,h3,h4,h5,h6)'))
     .map(el => ({ el, top: parseFloat(getComputedStyle(el).top) || 0 }));
   let prevStuckLast = null;
@@ -1653,7 +1652,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   const update = () => {
     frame = 0;
 
-    // Shadow on the bottommost stuck heading (computed first for offset)
     let stuckLast = null;
     for (const item of stickyHeadings) {
       if (Math.abs(item.el.getBoundingClientRect().top - item.top) < 2) {
@@ -1666,48 +1664,32 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       prevStuckLast = stuckLast;
     }
 
-    // Use sticky header stack bottom as offset so short sections aren't overshot
     const stickyBottom = stuckLast ? stuckLast.getBoundingClientRect().bottom : 0;
     const offset = window.scrollY + Math.max(stickyBottom + 20, 50);
 
-    // Find active link among all links (H2 + H3+)
     let active = allItems[0];
     for (const item of allItems) {
-      if (item.top <= offset) {
-        active = item;
-        continue;
-      }
+      if (item.el.offsetTop <= offset) { active = item; continue; }
       break;
     }
-
     for (const item of allItems) {
       item.link.classList.toggle('active', item === active);
     }
 
-    // Find active spec section
     let activeSpec = specEntries[0];
     for (const entry of specEntries) {
-      if (entry.top <= offset) {
-        activeSpec = entry;
-        continue;
-      }
+      if (entry.el.offsetTop <= offset) { activeSpec = entry; continue; }
       break;
     }
-
     for (const entry of specEntries) {
       entry.section.classList.toggle('expanded', entry === activeSpec);
     }
 
-    // Find active H2 section and expand it
     let activeH2 = h2Entries[0];
     for (const entry of h2Entries) {
-      if (entry.top <= offset) {
-        activeH2 = entry;
-        continue;
-      }
+      if (entry.el.offsetTop <= offset) { activeH2 = entry; continue; }
       break;
     }
-
     for (const entry of h2Entries) {
       entry.li.classList.toggle('expanded', entry === activeH2);
     }
@@ -1717,36 +1699,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     if (frame) return;
     frame = window.requestAnimationFrame(update);
   };
-
-  // Build a lookup from heading id to cached top for programmatic scrolling.
-  // Native anchor navigation is unreliable for sticky-positioned headings
-  // because the browser uses the stuck position instead of the flow position.
-  const cachedTops = new Map();
-  for (const item of allItems) {
-    const id = item.link.getAttribute('href').slice(1);
-    cachedTops.set(id, item.top);
-  }
-  for (const entry of specEntries) {
-    const titleLink = entry.section.querySelector('.toc-spec-title');
-    if (titleLink) {
-      const id = titleLink.getAttribute('href').slice(1);
-      cachedTops.set(id, entry.top);
-    }
-  }
-
-  document.querySelector('.toc')?.addEventListener('click', (e) => {
-    const link = e.target.closest('a[href^="#"]');
-    if (!link) return;
-    const id = decodeURIComponent(link.getAttribute('href').slice(1));
-    const top = cachedTops.get(id);
-    if (top === undefined) return;
-    e.preventDefault();
-    const el = document.getElementById(id);
-    const margin = el ? parseFloat(getComputedStyle(el).scrollMarginTop) || 0 : 0;
-    window.scrollTo({ top: top - margin, behavior: 'instant' });
-    history.pushState(null, '', '#' + id);
-    schedule();
-  });
 
   window.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener('resize', schedule);

@@ -181,7 +181,8 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 
 	t.Run("layout", func(t *testing.T) {
 		assertContains(t, html, "<h1 class=\"report-title\">My Report</h1>", "h1 report title")
-		assertContains(t, html, "<h2 id=\"section-specs-pocket-board-spec-md-pocket-board\">Pocket Board</h2>", "markdown heading in html")
+		assertContains(t, html, "id=\"section-specs-pocket-board-spec-md-pocket-board\"", "section anchor for heading")
+		assertContains(t, html, "<h2>Pocket Board</h2>", "markdown heading in html")
 		assertContains(t, html, "aria-label=\"Table of contents\"", "toc sidebar")
 		assertContains(t, html, "viewport-fit=cover", "safe-area viewport mode")
 		assertContains(t, html, "safe-area-inset-top", "safe-area css vars")
