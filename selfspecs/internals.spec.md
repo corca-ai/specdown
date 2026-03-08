@@ -1,5 +1,12 @@
 # Internals
 
+## Design Pillars
+
+- **Readable and writable by every Markdown editor** — Spec files are plain Markdown with standard fenced blocks and blockquote directives. Any editor that supports frontmatter works without plugins.
+- **Understandable by all stakeholders** — Prose, tables, and results are readable by designers, PMs, and QA — not just engineers. The document is the spec, not a wrapper around code.
+- **Adapters are ordinary processes** — Any language works. An adapter is just an executable that reads and writes NDJSON on stdin/stdout. No SDK, no plugin API, no runtime coupling.
+- **Core knows nothing about products** — The core parses Markdown and routes cases. It never imports test frameworks, knows filesystem layouts, or interprets block semantics. All domain logic lives in adapters.
+
 ## Architecture
 
 Two pipelines diverge from a single document.
