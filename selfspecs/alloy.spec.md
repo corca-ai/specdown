@@ -110,7 +110,7 @@ extracted from the Alloy solver output.
 mkdir -p .tmp-test
 printf '%s\n' '# Counterexample Test' '' '```alloy:model(cx)' 'module cx' 'sig Node { next: lone Node }' 'assert allDisconnected { all n: Node | no n.next }' 'check allDisconnected for 3' '```' > .tmp-test/cx-test.spec.md
 printf '# T\n\n- [CX](cx-test.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"},"reporters":[{"builtin":"json","outFile":".tmp-test/cx-report.json"}]}' > .tmp-test/cx-cfg.json
+printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"},"reporters":[{"builtin":"json","outFile":"cx-report.json"}]}' > .tmp-test/cx-cfg.json
 specdown run -config .tmp-test/cx-cfg.json 2>&1 || true
 ```
 

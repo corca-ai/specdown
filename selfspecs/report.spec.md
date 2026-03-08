@@ -134,7 +134,7 @@ cat <<'SPEC' > .tmp-test/diag.spec.md
 SPEC
 printf '# T\n\n- [Diag](diag.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/diag.json
-{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":".tmp-test/diag-report.html"},{"builtin":"json","outFile":".tmp-test/report.json"}]}
+{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"},{"builtin":"json","outFile":"report.json"}]}
 CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
 ```

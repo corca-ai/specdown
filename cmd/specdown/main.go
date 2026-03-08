@@ -158,7 +158,7 @@ func run(args []string) error {
 	}
 
 	reportPath := resolveReportPath(configDir, cfg, *outPath)
-	if err := writeArtifacts(report, reportPath, cfg); err != nil {
+	if err := writeArtifacts(report, reportPath, configDir, cfg); err != nil {
 		return err
 	}
 
@@ -330,13 +330,15 @@ Only executable blocks and fixture tables are run.
 	return nil
 }
 
-func writeArtifacts(report core.Report, reportPath string, cfg config.Config) error {
+func writeArtifacts(report core.Report, reportPath string, baseDir string, cfg config.Config) error {
 	if err := htmlreport.Write(report, reportPath); err != nil {
 		return err
 	}
 	jsonPath := cfg.JSONReportOutFile()
 	if jsonPath == "" {
 		jsonPath = jsonReportPath(reportPath)
+	} else {
+		jsonPath = resolvePath(baseDir, jsonPath)
 	}
 	if err := jsonreport.Write(report, jsonPath); err != nil {
 		return err
@@ -402,6 +404,14 @@ func printCaseFailure(c core.CaseResult) {
 	}
 	if c.Actual != "" {
 		fmt.Fprintf(os.Stderr, "        actual:   %s\n", c.Actual)
+	}
+	for _, step := range c.Steps {
+		if step.Status != core.StatusFailed {
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "        $ %s\n", step.Command)
+		fmt.Fprintf(os.Stderr, "        expected: %s\n", step.Expected)
+		fmt.Fprintf(os.Stderr, "        actual:   %s\n", step.Actual)
 	}
 }
 
