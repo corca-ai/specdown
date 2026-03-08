@@ -771,9 +771,7 @@ func renderDoctestSteps(out *strings.Builder, steps []core.DoctestStep) {
 		out.WriteString(`</div>`)
 		if step.Status == core.StatusPassed {
 			if step.Actual != "" {
-				out.WriteString(`<div class="doctest-output passed">`)
-				out.WriteString(template.HTMLEscapeString(step.Actual))
-				out.WriteString(`</div>`)
+				renderDoctestPassedOutput(out, step)
 			}
 		} else {
 			if step.Actual != "" {
@@ -790,6 +788,160 @@ func renderDoctestSteps(out *strings.Builder, steps []core.DoctestStep) {
 		}
 	}
 	out.WriteString(`</div>`)
+}
+
+// renderDoctestPassedOutput renders actual output for a passed step.
+// When the expected output contains "..." wildcards, the matched lines
+// are collapsed into an expandable "... (N lines)" summary.
+func renderDoctestPassedOutput(out *strings.Builder, step core.DoctestStep) {
+	segments := annotateWildcard(step.Expected, step.Actual)
+	if segments == nil {
+		// No wildcards — render as before.
+		out.WriteString(`<div class="doctest-output passed">`)
+		out.WriteString(template.HTMLEscapeString(step.Actual))
+		out.WriteString(`</div>`)
+		return
+	}
+	out.WriteString(`<div class="doctest-output passed">`)
+	for _, seg := range segments {
+		if !seg.Wildcard {
+			out.WriteString(template.HTMLEscapeString(seg.Text))
+		} else {
+			n := strings.Count(seg.Text, "\n") + 1
+			if seg.Text == "" {
+				n = 0
+			}
+			unit := "lines"
+			if n == 1 {
+				unit = "line"
+			}
+			summary := fmt.Sprintf("... (%d %s)", n, unit)
+			out.WriteString(`<details class="wildcard-fold"><summary>`)
+			out.WriteString(template.HTMLEscapeString(summary))
+			out.WriteString(`</summary>`)
+			out.WriteString(template.HTMLEscapeString(seg.Text))
+			out.WriteString(`</details>`)
+		}
+	}
+	out.WriteString(`</div>`)
+}
+
+// wildcardSegment represents a contiguous chunk of actual output,
+// either literally matched or absorbed by a "..." wildcard.
+type wildcardSegment struct {
+	Text     string
+	Wildcard bool
+}
+
+// annotateWildcard aligns expected (which may contain "..." lines)
+// against actual and returns segments. Returns nil if no wildcards.
+func annotateWildcard(expected, actual string) []wildcardSegment {
+	expectedLines := strings.Split(expected, "\n")
+	if !hasWildcardLine(expectedLines) {
+		return nil
+	}
+	actualLines := strings.Split(actual, "\n")
+	mapping := matchWildcardMapping(actualLines, expectedLines, 0, 0)
+	if mapping == nil {
+		return nil
+	}
+	return buildSegments(actualLines, mapping)
+}
+
+func hasWildcardLine(lines []string) bool {
+	for _, l := range lines {
+		if l == "..." {
+			return true
+		}
+	}
+	return false
+}
+
+// matchWildcardMapping returns a per-actual-line boolean slice where
+// true means the line was consumed by a "..." wildcard.
+func matchWildcardMapping(actual, expected []string, ai, ei int) []bool {
+	mapping := make([]bool, len(actual))
+	if !doMatch(actual, expected, ai, ei, mapping) {
+		return nil
+	}
+	return mapping
+}
+
+func skipWildcards(expected []string, ei int) int {
+	for ei < len(expected) && expected[ei] == "..." {
+		ei++
+	}
+	return ei
+}
+
+func markWildcard(mapping []bool, from, to int) {
+	for i := from; i < to; i++ {
+		mapping[i] = true
+	}
+}
+
+func snapshotMapping(mapping []bool) []bool {
+	snap := make([]bool, len(mapping))
+	copy(snap, mapping)
+	return snap
+}
+
+func doMatchWildcard(actual, expected []string, ai, ei int, mapping []bool) bool {
+	ei = skipWildcards(expected, ei)
+	if ei >= len(expected) {
+		markWildcard(mapping, ai, len(actual))
+		return true
+	}
+	for tryAi := ai; tryAi <= len(actual); tryAi++ {
+		snap := snapshotMapping(mapping)
+		markWildcard(snap, ai, tryAi)
+		if doMatch(actual, expected, tryAi, ei, snap) {
+			copy(mapping, snap)
+			return true
+		}
+	}
+	return false
+}
+
+func doMatch(actual, expected []string, ai, ei int, mapping []bool) bool {
+	for ei < len(expected) {
+		if expected[ei] == "..." {
+			return doMatchWildcard(actual, expected, ai, ei, mapping)
+		}
+		if ai >= len(actual) || actual[ai] != expected[ei] {
+			return false
+		}
+		ai++
+		ei++
+	}
+	return ai >= len(actual)
+}
+
+func collectRun(mapping []bool, start int, want bool) int {
+	j := start
+	for j < len(mapping) && mapping[j] == want {
+		j++
+	}
+	return j
+}
+
+func buildSegments(actualLines []string, mapping []bool) []wildcardSegment {
+	var segments []wildcardSegment
+	i := 0
+	for i < len(actualLines) {
+		isWild := mapping[i]
+		j := collectRun(mapping, i, isWild)
+		text := strings.Join(actualLines[i:j], "\n")
+		if j < len(actualLines) {
+			text += "\n"
+		}
+		segments = append(segments, wildcardSegment{
+			Text:     text,
+			Wildcard: isWild,
+		})
+		i = j
+	}
+	return segments
 }
 
 var mdConverter = goldmark.New(goldmark.WithExtensions(extension.Table))
@@ -1080,6 +1232,22 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
     .doctest-expected-label {
       font-size: 0.82rem;
+    }
+
+    .wildcard-fold {
+      display: inline;
+    }
+    .wildcard-fold > summary {
+      display: inline;
+      cursor: pointer;
+      color: var(--muted);
+      font-style: italic;
+      list-style: none;
+    }
+    .wildcard-fold > summary::-webkit-details-marker { display: none; }
+    .wildcard-fold[open] > summary {
+      color: var(--muted);
+      opacity: 0.6;
     }
 
     .expect-fail-label {
