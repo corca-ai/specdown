@@ -2,13 +2,18 @@
 
 ## Prerequisites
 
-A Go toolchain is required. The project uses nix + direnv to provide it automatically.
+A Go toolchain is required. The project uses [mise](https://mise.jdx.dev/) to manage it (`mise.toml`).
 
 ```sh
-direnv allow   # first time only
+mise install        # install Go version from mise.toml
 ```
 
-After this, Go is available whenever you enter the project directory.
+If `go` is not on `PATH` (common in non-interactive shells and CI agents),
+resolve it via mise:
+
+```sh
+export PATH="$(mise where go)/bin:$PATH"
+```
 
 ## Build
 

@@ -482,6 +482,15 @@ func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host
 }
 
 func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, setupSessions map[string]bool, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {
+	if specCase.Kind == core.CaseKindInlineExpect {
+		visible := visibleBindings(bindings, specCase.ID.HeadingPath)
+		prepared, err := prepareCase(specCase, visible)
+		if err != nil {
+			return variableFailure(specCase, err), nil
+		}
+		return runInlineExpect(prepared, visible), nil
+	}
+
 	adapter, err := registry.adapterFor(specCase)
 	if err != nil {
 		return core.CaseResult{}, err
@@ -516,6 +525,44 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 	}
 
 	return result, nil
+}
+
+func runInlineExpect(prepared core.CaseSpec, visible []core.Binding) core.CaseResult {
+	result := core.CaseResult{
+		ID:              prepared.ID,
+		Kind:            prepared.Kind,
+		Label:           prepared.DefaultLabel(),
+		Expected:        prepared.ExpectValue,
+		Actual:          prepared.Template,
+		VisibleBindings: visible,
+	}
+
+	result.Events = append(result.Events, core.Event{
+		Type:  core.EventCaseStarted,
+		ID:    result.ID,
+		Label: result.Label,
+	})
+
+	if prepared.Template == prepared.ExpectValue {
+		result.Status = core.StatusPassed
+		result.Events = append(result.Events, core.Event{
+			Type:  core.EventCasePassed,
+			ID:    result.ID,
+			Label: result.Label,
+		})
+	} else {
+		result.Status = core.StatusFailed
+		result.Message = fmt.Sprintf("expected %q, got %q", prepared.ExpectValue, prepared.Template)
+		result.Events = append(result.Events, core.Event{
+			Type:     core.EventCaseFailed,
+			ID:       result.ID,
+			Label:    result.Label,
+			Message:  result.Message,
+			Expected: result.Expected,
+			Actual:   result.Actual,
+		})
+	}
+	return result
 }
 
 func applyExpectFail(result core.CaseResult) core.CaseResult {
@@ -630,6 +677,18 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 			return core.CaseSpec{}, err
 		}
 		prepared.Template = rendered
+		return prepared, nil
+	case core.CaseKindInlineExpect:
+		rendered, err := renderTemplate(specCase.Template, bindings)
+		if err != nil {
+			return core.CaseSpec{}, err
+		}
+		prepared.Template = rendered
+		renderedExpect, err := renderTemplate(specCase.ExpectValue, bindings)
+		if err != nil {
+			return core.CaseSpec{}, err
+		}
+		prepared.ExpectValue = renderedExpect
 		return prepared, nil
 	case core.CaseKindTableRow:
 		rendered := make([]string, 0, len(specCase.Cells))

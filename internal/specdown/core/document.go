@@ -58,8 +58,27 @@ func (n HeadingNode) Markdown() string {
 	return n.Raw
 }
 
+type InlineKind string
+
+const (
+	InlineExpect  InlineKind = "expect"
+	InlineFixture InlineKind = "fixture"
+)
+
+type InlineElement struct {
+	Kind          InlineKind        `json:"kind"`
+	Raw           string            `json:"raw"`
+	ExpectExpr    string            `json:"expectExpr,omitempty"`
+	ExpectValue   string            `json:"expectValue,omitempty"`
+	Fixture       string            `json:"fixture,omitempty"`
+	FixtureParams map[string]string `json:"fixtureParams,omitempty"`
+	ID            *SpecID           `json:"id,omitempty"`
+}
+
 type ProseNode struct {
-	Raw string `json:"raw"`
+	Raw         string          `json:"raw"`
+	Inlines     []InlineElement `json:"inlines,omitempty"`
+	HeadingPath []string        `json:"headingPath,omitempty"`
 }
 
 func (ProseNode) isNode() {}

@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -192,13 +193,21 @@ func renderDocument(result core.DocumentResult) (string, error) {
 
 	var out strings.Builder
 	var sectionStack []int
+	var accBindings []core.Binding
 	for _, node := range result.Document.Nodes {
 		sectionStack = closeSections(&out, sectionStack, node)
-		rendered, err := renderNode(node, result.Document.RelativeTo, caseResults, alloyResults)
+		var rendered string
+		var err error
+		if prose, ok := node.(core.ProseNode); ok {
+			rendered, err = renderProseNode(prose, caseResults, accBindings)
+		} else {
+			rendered, err = renderNode(node, result.Document.RelativeTo, caseResults, alloyResults)
+		}
 		if err != nil {
 			return "", err
 		}
 		out.WriteString(rendered)
+		accBindings = accumulateNodeBindings(accBindings, node, caseResults)
 	}
 	for range sectionStack {
 		out.WriteString(`</section>`)
@@ -559,6 +568,197 @@ func renderFixtureCall(node core.FixtureCallNode, caseResults map[string]core.Ca
 func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
 	// Alloy failures are now shown inline in the model block.
 	return "", nil
+}
+
+// nodeSpecIDs returns the SpecIDs from executable nodes.
+func nodeSpecIDs(node core.Node) []*core.SpecID {
+	switch n := node.(type) {
+	case core.CodeBlockNode:
+		return []*core.SpecID{n.ID}
+	case core.TableNode:
+		ids := make([]*core.SpecID, len(n.Rows))
+		for i := range n.Rows {
+			ids[i] = n.Rows[i].ID
+		}
+		return ids
+	case core.FixtureCallNode:
+		return []*core.SpecID{n.ID}
+	case core.ProseNode:
+		var ids []*core.SpecID
+		for i := range n.Inlines {
+			ids = append(ids, n.Inlines[i].ID)
+		}
+		return ids
+	default:
+		return nil
+	}
+}
+
+func mergeBindings(bindings []core.Binding, newBindings []core.Binding) []core.Binding {
+	for _, b := range newBindings {
+		found := false
+		for i, existing := range bindings {
+			if existing.Name == b.Name {
+				bindings[i] = b
+				found = true
+				break
+			}
+		}
+		if !found {
+			bindings = append(bindings, b)
+		}
+	}
+	return bindings
+}
+
+func accumulateNodeBindings(bindings []core.Binding, node core.Node, caseResults map[string]core.CaseResult) []core.Binding {
+	for _, id := range nodeSpecIDs(node) {
+		if id == nil {
+			continue
+		}
+		if cr, ok := caseResults[id.Key()]; ok && cr.Status == core.StatusPassed {
+			bindings = mergeBindings(bindings, cr.Bindings)
+		}
+	}
+	return bindings
+}
+
+var htmlCodeExpectPattern = regexp.MustCompile(`<code>expect:\s*(.+?)\s*==\s*(.+?)\s*</code>`)
+var htmlCodeFixturePattern = regexp.MustCompile(`<code>fixture:([A-Za-z0-9_-]+)\(([^)]*)\)</code>`)
+var proseVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var htmlCodeTagPattern = regexp.MustCompile(`<code[^>]*>[^<]*</code>`)
+
+func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult, accBindings []core.Binding) (string, error) {
+	html, err := markdownToHTML(node.Markdown())
+	if err != nil {
+		return "", err
+	}
+
+	// Replace <code>expect: ... == ...</code> with inline expect result spans
+	expectIdx := 0
+	expects := filterInlinesByKind(node.Inlines, core.InlineExpect)
+	html = htmlCodeExpectPattern.ReplaceAllStringFunc(html, func(match string) string {
+		if expectIdx >= len(expects) {
+			return match
+		}
+		inline := expects[expectIdx]
+		expectIdx++
+		if inline.ID == nil {
+			return match
+		}
+		cr, ok := caseResults[inline.ID.Key()]
+		if !ok {
+			return match
+		}
+		return renderInlineExpectSpan(cr)
+	})
+
+	// Replace <code>fixture:name(params)</code> with inline fixture result spans
+	fixtureIdx := 0
+	fixtures := filterInlinesByKind(node.Inlines, core.InlineFixture)
+	html = htmlCodeFixturePattern.ReplaceAllStringFunc(html, func(match string) string {
+		if fixtureIdx >= len(fixtures) {
+			return match
+		}
+		inline := fixtures[fixtureIdx]
+		fixtureIdx++
+		if inline.ID == nil {
+			return match
+		}
+		cr, ok := caseResults[inline.ID.Key()]
+		if !ok {
+			return match
+		}
+		return renderInlineFixtureSpan(inline, cr)
+	})
+
+	// Replace ${var} in non-<code> parts with variable display spans
+	bindingMap := make(map[string]string, len(accBindings))
+	for _, b := range accBindings {
+		bindingMap[b.Name] = b.Value
+	}
+	html = replaceProseVariables(html, bindingMap)
+
+	return html, nil
+}
+
+func filterInlinesByKind(inlines []core.InlineElement, kind core.InlineKind) []core.InlineElement {
+	var result []core.InlineElement
+	for _, inline := range inlines {
+		if inline.Kind == kind {
+			result = append(result, inline)
+		}
+	}
+	return result
+}
+
+func renderInlineExpectSpan(cr core.CaseResult) string {
+	var out strings.Builder
+	if cr.Status == core.StatusPassed {
+		out.WriteString(`<span class="inline-expect passed" title="`)
+		out.WriteString(template.HTMLEscapeString("expected " + cr.Expected))
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(cr.Actual))
+		out.WriteString(`</span>`)
+	} else {
+		out.WriteString(`<span class="inline-expect failed" title="`)
+		out.WriteString(template.HTMLEscapeString(cr.Message))
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(cr.Actual))
+		out.WriteString(` <span class="inline-expected">(expected `)
+		out.WriteString(template.HTMLEscapeString(cr.Expected))
+		out.WriteString(`)</span></span>`)
+	}
+	return out.String()
+}
+
+func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) string {
+	var out strings.Builder
+	out.WriteString(`<span class="inline-fixture `)
+	out.WriteString(template.HTMLEscapeString(string(cr.Status)))
+	out.WriteString(`" title="`)
+	if cr.Status == core.StatusFailed && cr.Message != "" {
+		out.WriteString(template.HTMLEscapeString(cr.Message))
+	} else {
+		out.WriteString(template.HTMLEscapeString(inline.Raw))
+	}
+	out.WriteString(`">`)
+	out.WriteString(template.HTMLEscapeString(inline.Fixture))
+	out.WriteString(`</span>`)
+	return out.String()
+}
+
+func replaceProseVariables(html string, bindings map[string]string) string {
+	if len(bindings) == 0 {
+		return html
+	}
+	// Split by <code>...</code> segments to avoid replacing inside code spans
+	codeLocs := htmlCodeTagPattern.FindAllStringIndex(html, -1)
+	if len(codeLocs) == 0 {
+		return replaceVarRefs(html, bindings)
+	}
+	var out strings.Builder
+	lastEnd := 0
+	for _, loc := range codeLocs {
+		out.WriteString(replaceVarRefs(html[lastEnd:loc[0]], bindings))
+		out.WriteString(html[loc[0]:loc[1]])
+		lastEnd = loc[1]
+	}
+	out.WriteString(replaceVarRefs(html[lastEnd:], bindings))
+	return out.String()
+}
+
+func replaceVarRefs(text string, bindings map[string]string) string {
+	return proseVarPattern.ReplaceAllStringFunc(text, func(match string) string {
+		name := proseVarPattern.FindStringSubmatch(match)[1]
+		value, ok := bindings[name]
+		if !ok {
+			return match
+		}
+		return `<span class="inline-var" title="$` +
+			template.HTMLEscapeString(name) + `">` +
+			template.HTMLEscapeString(value) + `</span>`
+	})
 }
 
 
@@ -978,6 +1178,55 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
         background: var(--code-bg);
         font-size: 0.85rem;
       }
+    }
+
+    /* ── Inline assertions ── */
+    .inline-var {
+      font-family: var(--font-mono);
+      font-size: 0.94em;
+      padding: 0.1em 0.35em;
+      border-radius: 0.2rem;
+      background: var(--pass-bg);
+      color: var(--pass-ink);
+    }
+
+    .inline-expect {
+      font-family: var(--font-mono);
+      font-size: 0.94em;
+      padding: 0.1em 0.35em;
+      border-radius: 0.2rem;
+    }
+
+    .inline-expect.passed {
+      background: var(--pass-bg);
+      color: var(--pass-ink);
+    }
+
+    .inline-expect.failed {
+      background: var(--fail-bg);
+      color: var(--fail-ink);
+    }
+
+    .inline-expected {
+      font-size: 0.85em;
+      opacity: 0.8;
+    }
+
+    .inline-fixture {
+      font-family: var(--font-mono);
+      font-size: 0.94em;
+      padding: 0.1em 0.35em;
+      border-radius: 0.2rem;
+    }
+
+    .inline-fixture.passed {
+      background: var(--pass-bg);
+      color: var(--pass-ink);
+    }
+
+    .inline-fixture.failed {
+      background: var(--fail-bg);
+      color: var(--fail-ink);
     }
 
     /* ── Cell styles ── */

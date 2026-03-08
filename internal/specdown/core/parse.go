@@ -322,7 +322,12 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 			fixtureParams = nil
 			fixtureRaw = ""
 		}
-		nodes = append(nodes, ProseNode{Raw: raw})
+		proseNode := ProseNode{
+			Raw:         raw,
+			HeadingPath: append([]string(nil), headingPath...),
+		}
+		proseNode.Inlines = parseInlineElements(raw, relativePath, &ordinal, headingPath)
+		nodes = append(nodes, proseNode)
 	}
 
 	if hookKind != "" {
@@ -646,6 +651,74 @@ func parseHeading(line string) (int, string, bool) {
 		return 0, "", false
 	}
 	return level, text, true
+}
+
+var inlineExpectPattern = regexp.MustCompile("`expect:\\s*(.+?)\\s*==\\s*(.+?)\\s*`")
+var inlineFixturePattern = regexp.MustCompile("`fixture:([A-Za-z0-9_-]+)\\(([^)]*)\\)`")
+
+// insideCodeSpan checks whether a match at [start, end) in raw
+// is enclosed by a Markdown code span. The match itself includes its
+// surrounding backticks, so we look for additional backticks just
+// outside the match boundaries (possibly separated by a space, as in
+// the double-backtick form `` `...` ``).
+func insideCodeSpan(raw string, start, end int) bool {
+	// Immediately adjacent backtick (triple-backtick or ```)
+	if start > 0 && raw[start-1] == '`' {
+		return true
+	}
+	if end < len(raw) && raw[end] == '`' {
+		return true
+	}
+	// Double-backtick form: `` `...` `` — space then backtick
+	if start > 1 && raw[start-1] == ' ' && raw[start-2] == '`' {
+		return true
+	}
+	if end+1 < len(raw) && raw[end] == ' ' && raw[end+1] == '`' {
+		return true
+	}
+	return false
+}
+
+func parseInlineElements(raw string, relativePath string, ordinal *int, headingPath []string) []InlineElement {
+	var elements []InlineElement
+
+	for _, loc := range inlineExpectPattern.FindAllStringSubmatchIndex(raw, -1) {
+		if insideCodeSpan(raw, loc[0], loc[1]) {
+			continue
+		}
+		*ordinal++
+		elements = append(elements, InlineElement{
+			Kind:        InlineExpect,
+			Raw:         raw[loc[0]:loc[1]],
+			ExpectExpr:  strings.TrimSpace(raw[loc[2]:loc[3]]),
+			ExpectValue: strings.TrimSpace(raw[loc[4]:loc[5]]),
+			ID: &SpecID{
+				File:        relativePath,
+				HeadingPath: append([]string(nil), headingPath...),
+				Ordinal:     *ordinal,
+			},
+		})
+	}
+
+	for _, loc := range inlineFixturePattern.FindAllStringSubmatchIndex(raw, -1) {
+		if insideCodeSpan(raw, loc[0], loc[1]) {
+			continue
+		}
+		*ordinal++
+		elements = append(elements, InlineElement{
+			Kind:          InlineFixture,
+			Raw:           raw[loc[0]:loc[1]],
+			Fixture:       raw[loc[2]:loc[3]],
+			FixtureParams: parseFixtureParams(raw[loc[4]:loc[5]]),
+			ID: &SpecID{
+				File:        relativePath,
+				HeadingPath: append([]string(nil), headingPath...),
+				Ordinal:     *ordinal,
+			},
+		})
+	}
+
+	return elements
 }
 
 func nextHeadingPath(current []string, level int, text string) []string {

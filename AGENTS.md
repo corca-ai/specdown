@@ -5,7 +5,7 @@
 ## Read First
 
 - [Documentation guide](docs/metadoc.md) — rules for writing and maintaining docs
-- [Build & Run](docs/build.md) — build commands, test, and release workflow
+- [Build & Run](docs/build.md) — build commands, test, release workflow, and toolchain setup (`go` PATH resolution)
 
 ## Self-Specs (source of truth)
 

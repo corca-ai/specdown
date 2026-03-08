@@ -307,6 +307,47 @@ This is useful for inline assertions that don't warrant a full table:
 
 A fixture directive without parameters and without a table is a compile-time error.
 
+## Inline Elements
+
+Prose text can contain inline executable elements embedded in backtick code spans.
+These are evaluated during the spec run and rendered with pass/fail status in the
+HTML report.
+
+### Prose variable rendering
+
+Variables captured by earlier blocks can appear in prose text as `${name}`.
+In the HTML report, resolved variables are displayed with their actual values
+highlighted in green. Unresolved variables remain as literal `${name}` text.
+
+```markdown
+The greeting is ${greeting} and it was captured successfully.
+```
+
+### Inline expect
+
+A backtick code span of the form `` `expect: EXPR == VALUE` `` creates an inline
+equality assertion. Both sides support `${variable}` substitution. It counts
+as a test case and appears green (pass) or red (fail) in the HTML report.
+
+```markdown
+The count is `expect: ${count} == 3` items.
+```
+
+When the actual value does not match the expected value, the inline assertion
+fails and the report shows both the actual value and the expected value.
+
+### Inline fixture call
+
+A backtick code span of the form `` `fixture:name(key=value)` `` creates an inline
+fixture assertion. It reuses the adapter protocol with `kind: "tableRow"`,
+the fixture name, and `fixtureParams` populated with empty `columns`/`cells`.
+
+```markdown
+The file `fixture:file-check(path=/tmp/data.txt, exists=yes)` was created.
+```
+
+Multiple inline elements can appear in the same paragraph.
+
 ## Setup and Teardown Hooks
 
 Hooks run adapter commands at section boundaries.

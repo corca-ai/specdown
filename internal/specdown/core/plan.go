@@ -12,8 +12,9 @@ import (
 type CaseKind string
 
 const (
-	CaseKindCode     CaseKind = "code"
-	CaseKindTableRow CaseKind = "tableRow"
+	CaseKindCode         CaseKind = "code"
+	CaseKindTableRow     CaseKind = "tableRow"
+	CaseKindInlineExpect CaseKind = "inlineExpect"
 )
 
 type CaseSpec struct {
@@ -23,6 +24,7 @@ type CaseSpec struct {
 	Fixture       string
 	FixtureParams map[string]string
 	Template      string
+	ExpectValue   string
 	Columns       []string
 	Cells         []string
 	RowNumber     int
@@ -214,6 +216,10 @@ func documentOrdinals(doc Document) []*SpecID {
 			for i := range n.Rows {
 				ids = append(ids, n.Rows[i].ID)
 			}
+		case ProseNode:
+			for i := range n.Inlines {
+				ids = append(ids, n.Inlines[i].ID)
+			}
 		}
 	}
 	return ids
@@ -245,6 +251,33 @@ func executableCases(doc Document) []CaseSpec {
 			cases = appendTableCases(cases, current)
 		case FixtureCallNode:
 			cases = appendFixtureCallCase(cases, current)
+		case ProseNode:
+			cases = appendInlineCases(cases, current)
+		}
+	}
+	return cases
+}
+
+func appendInlineCases(cases []CaseSpec, node ProseNode) []CaseSpec {
+	for _, inline := range node.Inlines {
+		if inline.ID == nil {
+			continue
+		}
+		switch inline.Kind {
+		case InlineExpect:
+			cases = append(cases, CaseSpec{
+				ID:          *inline.ID,
+				Kind:        CaseKindInlineExpect,
+				Template:    inline.ExpectExpr,
+				ExpectValue: inline.ExpectValue,
+			})
+		case InlineFixture:
+			cases = append(cases, CaseSpec{
+				ID:            *inline.ID,
+				Kind:          CaseKindTableRow,
+				Fixture:       inline.Fixture,
+				FixtureParams: inline.FixtureParams,
+			})
 		}
 	}
 	return cases
@@ -319,40 +352,53 @@ func variableReferences(source string) []string {
 	return refs
 }
 
-func caseReferences(spec CaseSpec) []string {
-	switch spec.Kind {
-	case CaseKindCode:
-		return variableReferences(spec.Template)
-	case CaseKindTableRow:
-		seen := make(map[string]struct{})
-		refs := make([]string, 0)
-		for _, cell := range spec.Cells {
-			for _, name := range variableReferences(cell) {
-				if _, ok := seen[name]; ok {
-					continue
-				}
+func mergeVariableReferences(sources ...string) []string {
+	seen := make(map[string]struct{})
+	refs := make([]string, 0)
+	for _, source := range sources {
+		for _, name := range variableReferences(source) {
+			if _, ok := seen[name]; !ok {
 				seen[name] = struct{}{}
 				refs = append(refs, name)
 			}
 		}
-		return refs
+	}
+	return refs
+}
+
+func caseReferences(spec CaseSpec) []string {
+	switch spec.Kind {
+	case CaseKindCode:
+		return variableReferences(spec.Template)
+	case CaseKindInlineExpect:
+		return mergeVariableReferences(spec.Template, spec.ExpectValue)
+	case CaseKindTableRow:
+		return mergeVariableReferences(spec.Cells...)
 	default:
 		return nil
 	}
 }
 
 func (c CaseSpec) TargetKey() string {
-	if c.Kind == CaseKindCode {
+	switch c.Kind {
+	case CaseKindCode:
 		return c.Block.Descriptor()
+	case CaseKindInlineExpect:
+		return "expect"
+	default:
+		return c.Fixture
 	}
-	return c.Fixture
 }
 
 func (c CaseSpec) DisplayKind() string {
-	if c.Kind == CaseKindCode {
+	switch c.Kind {
+	case CaseKindCode:
 		return c.Block.Descriptor()
+	case CaseKindInlineExpect:
+		return "expect"
+	default:
+		return "fixture:" + c.Fixture
 	}
-	return "fixture:" + c.Fixture
 }
 
 func (c CaseSpec) DefaultLabel() string {
