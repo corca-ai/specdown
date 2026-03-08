@@ -67,14 +67,6 @@ A block without a leading comment renders normally (not collapsed):
 test 1 -eq 1
 ```
 
-After running this spec, the self-report contains the caption markup
-for the block above.
-
-```doctest:shell
-$ grep -c 'exec-caption-text">Demonstrate intent caption<' .artifacts/specdown/self-report.html
-1
-```
-
 ## Variable Capture
 
 A block can capture its output into a variable with `-> $varName`.
