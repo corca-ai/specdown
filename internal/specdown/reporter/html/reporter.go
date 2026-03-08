@@ -1412,6 +1412,20 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       opacity: 0.8;
     }
 
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-expect.expect-fail) {
+      position: relative;
+    }
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-expect.expect-fail)::before {
+      content: "";
+      position: absolute;
+      left: -0.85rem;
+      top: 0.75em;
+      width: 0.38rem;
+      height: 0.38rem;
+      border-radius: 50%;
+      background: var(--fail-mark);
+    }
+
     .inline-fixture {
       font-family: var(--font-mono);
       font-size: 0.94em;
