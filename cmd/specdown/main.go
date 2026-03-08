@@ -23,8 +23,12 @@ var version = "dev"
 var skillSpecdown string
 
 //go:generate cp ../../selfspecs/best-practices.spec.md skills/specdown/guide-writing.md
+//go:generate cp ../../selfspecs/adapter-protocol.spec.md skills/specdown/adapter-protocol.md
 //go:embed skills/specdown/guide-writing.md
 var skillWritingGuide string
+
+//go:embed skills/specdown/adapter-protocol.md
+var skillAdapterProtocol string
 
 func main() {
 	if len(os.Args) < 2 {
@@ -255,9 +259,14 @@ func installSkillsCmd(args []string) error {
 	if err := os.WriteFile(guideDest, []byte(skillWritingGuide), 0o644); err != nil {
 		return err
 	}
+	protocolDest := filepath.Join(dir, "adapter-protocol.md")
+	if err := os.WriteFile(protocolDest, []byte(skillAdapterProtocol), 0o644); err != nil {
+		return err
+	}
 
 	fmt.Printf("Created %s\n", dest)
 	fmt.Printf("Created %s\n", guideDest)
+	fmt.Printf("Created %s\n", protocolDest)
 	fmt.Println("Use /specdown in Claude Code to run and fix specs.")
 	return nil
 }

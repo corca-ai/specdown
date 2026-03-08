@@ -23,4 +23,4 @@ Run executable specifications and fix failures.
 
 ## Writing and Editing Specs
 
-When you need to write or edit a spec file, read `${CLAUDE_SKILL_DIR}/guide-writing.md` for best practices and patterns.
+When you need to write or edit a spec file, read `${CLAUDE_SKILL_DIR}/guide-writing.md` for best practices and patterns. When you need to build or modify an adapter, read `${CLAUDE_SKILL_DIR}/adapter-protocol.md` for the NDJSON protocol, request/response format, and examples.

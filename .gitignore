@@ -6,4 +6,5 @@ org.alloytools.alloy.dist.jar
 mise.toml
 .tmp-test/
 cmd/specdown/skills/specdown/guide-writing.md
+cmd/specdown/skills/specdown/adapter-protocol.md
 .playwright-cli/
