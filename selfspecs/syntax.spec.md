@@ -56,15 +56,23 @@ Here is an example: the following block's first line is a comment,
 so the report will render it collapsed with the caption
 "Demonstrate intent caption" and a pass/fail indicator.
 
-```run:shell
+```verify:shell
 # Demonstrate intent caption
-echo "This block is collapsed in the report"
+test 1 -eq 1
 ```
 
 A block without a leading comment renders normally (not collapsed):
 
-```run:shell
-echo "This block has no caption and renders fully visible"
+```verify:shell
+test 1 -eq 1
+```
+
+After running this spec, the self-report contains the caption markup
+for the block above.
+
+```doctest:shell
+$ grep -c 'exec-caption-text">Demonstrate intent caption<' .artifacts/specdown/self-report.html
+1
 ```
 
 ## Variable Capture
