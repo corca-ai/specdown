@@ -561,12 +561,34 @@ func renderHookBlock(node core.HookNode) string {
 		label += ":each"
 	}
 	var out strings.Builder
-	out.WriteString(`<section class="exec-block hook-block">`)
-	out.WriteString(`<div class="exec-source">`)
-	out.WriteString(`<code>`)
-	out.WriteString(template.HTMLEscapeString(node.Source))
-	out.WriteString(`</code>`)
-	out.WriteString(`</div>`)
+	out.WriteString(`<section class="exec-block hook-block`)
+	if node.Caption != "" {
+		out.WriteString(` has-caption`)
+	}
+	out.WriteString(`">`)
+
+	if node.Caption != "" {
+		out.WriteString(`<details class="exec-detail">`)
+		out.WriteString(`<summary class="exec-source">`)
+		out.WriteString(`<span class="exec-caption-text">`)
+		out.WriteString(template.HTMLEscapeString(node.Caption))
+		out.WriteString(`</span>`)
+		out.WriteString(`<span class="exec-expand-marker"></span>`)
+		out.WriteString(`</summary>`)
+		out.WriteString(`<div class="exec-source exec-source-body">`)
+		out.WriteString(`<code>`)
+		out.WriteString(template.HTMLEscapeString(stripFirstCommentLine(node.Source)))
+		out.WriteString(`</code>`)
+		out.WriteString(`</div>`)
+		out.WriteString(`</details>`)
+	} else {
+		out.WriteString(`<div class="exec-source">`)
+		out.WriteString(`<code>`)
+		out.WriteString(template.HTMLEscapeString(node.Source))
+		out.WriteString(`</code>`)
+		out.WriteString(`</div>`)
+	}
+
 	out.WriteString(`<p class="exec-block-footer">`)
 	out.WriteString(template.HTMLEscapeString(label + " · " + node.Block.Descriptor()))
 	out.WriteString(`</p>`)
@@ -1164,7 +1186,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .content { min-width: 0; }
 
     .report-title {
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, AppleMyungjo, Batang, "Noto Serif KR", serif;
+      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, AppleMyungjo, Batang, "Noto Serif KR", ui-serif, serif;
       font-size: 2.8rem;
       line-height: 1.15;
       letter-spacing: -0.01em;
@@ -1199,7 +1221,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       /* Sticky headings stack below each other.
          All levels share em-based padding so height = font-size × 2 + 1px border. */
       & :is(h2, h3, h4, h5, h6) {
-        font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, AppleMyungjo, Batang, "Noto Serif KR", serif;
+        font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, AppleMyungjo, Batang, "Noto Serif KR", ui-serif, serif;
         line-height: 1.15;
         padding: 0.5em 0 0.35em;
         margin-top: 0.75em;

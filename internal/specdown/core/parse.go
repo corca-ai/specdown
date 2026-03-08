@@ -168,12 +168,15 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 				}
 				raw := hookRaw + strings.Join(lines[i:end+1], "")
 				source := strings.Join(lines[i+1:end], "")
+				trimmedSource := strings.TrimSuffix(source, "\n")
+				hookCaption := extractCaption(trimmedSource)
 				nodes = append(nodes, HookNode{
 					Hook:        hookKind,
 					Each:        hookEach,
 					Block:       block,
-					Source:      strings.TrimSuffix(source, "\n"),
+					Source:      trimmedSource,
 					Raw:         raw,
+					Caption:     hookCaption,
 					HeadingPath: append([]string(nil), headingPath...),
 				})
 				hookKind = ""
@@ -232,7 +235,7 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 				Raw:    raw,
 			}
 			if block.Executable() && block.Kind != BlockKindDoctest {
-				node.Caption, _ = extractCaption(trimmedSource)
+				node.Caption = extractCaption(trimmedSource)
 			}
 			if block.Executable() {
 				ordinal++
@@ -731,11 +734,10 @@ func parseInlineElements(raw string, relativePath string, ordinal *int, headingP
 var commentPrefixes = []string{"# ", "// ", "-- "}
 
 // extractCaption checks if the first line of source is a comment and returns
-// the caption text and the remaining source with the comment line stripped.
-// If no caption is found, returns empty string and the original source unchanged.
-func extractCaption(source string) (caption string, rest string) {
+// the caption text. If no caption is found, returns empty string.
+func extractCaption(source string) string {
 	if source == "" {
-		return "", source
+		return ""
 	}
 	firstNewline := strings.IndexByte(source, '\n')
 	var firstLine string
@@ -747,17 +749,14 @@ func extractCaption(source string) (caption string, rest string) {
 	trimmed := strings.TrimSpace(firstLine)
 	for _, prefix := range commentPrefixes {
 		if strings.HasPrefix(trimmed, prefix) {
-			caption = strings.TrimSpace(trimmed[len(prefix):])
+			caption := strings.TrimSpace(trimmed[len(prefix):])
 			if caption == "" {
-				return "", source
+				return ""
 			}
-			if firstNewline < 0 {
-				return caption, ""
-			}
-			return caption, source[firstNewline+1:]
+			return caption
 		}
 	}
-	return "", source
+	return ""
 }
 
 func nextHeadingPath(current []string, level int, text string) []string {
