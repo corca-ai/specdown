@@ -104,3 +104,29 @@ func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
 		}
 	}
 }
+
+func TestUnknownBlockPrefix(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"verify:shell", "verify"},
+		{"test:webapp", "test"},
+		{"example:python", "example"},
+		{"run:shell", ""},       // recognized
+		{"doctest:shell", ""},   // recognized
+		{"alloy:model(x)", ""},  // handled separately
+		{"json", ""},            // no colon
+		{"go", ""},              // no colon
+		{"", ""},                // empty
+		{"run:", ""},            // no target
+		{"text/plain", ""},     // non-alpha before colon
+		{"http://example", ""}, // non-alpha before colon
+	}
+	for _, tc := range cases {
+		got := unknownBlockPrefix(tc.input)
+		if got != tc.want {
+			t.Errorf("unknownBlockPrefix(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}

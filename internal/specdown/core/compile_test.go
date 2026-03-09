@@ -21,7 +21,8 @@ func TestCompileDocumentAcceptsVisibleCapturedVariable(t *testing.T) {
 		"board \"${boardName}\" should exist",
 		"```",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -56,7 +57,8 @@ func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
 		"| ${boardName} | yes |",
 		"| ${boardName}-archive | yes |",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -92,7 +94,8 @@ func TestCompileDocumentAllowsSiblingVariableReference(t *testing.T) {
 		"board \"${boardName}\" should exist",
 		"```",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -121,7 +124,8 @@ func TestCompileDocumentCollectsAlloyModelsAndChecks(t *testing.T) {
 		"",
 		"> alloy:ref(board#cardExists, scope=5)",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -158,7 +162,8 @@ func TestCompileDocumentRejectsAlloyModuleRedeclarationInLaterFragment(t *testin
 		"module board",
 		"```",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -180,7 +185,8 @@ func TestCompileDocumentRejectsAlloyReferenceToUnknownModel(t *testing.T) {
 		"",
 		"> alloy:ref(board#cardExists, scope=5)",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}

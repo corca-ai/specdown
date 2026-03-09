@@ -25,7 +25,7 @@ func TestDiscoverFromEntryFindsSpecDocumentsInLinkOrder(t *testing.T) {
 		t.Fatalf("write entry: %v", err)
 	}
 
-	title, docs, err := DiscoverFromEntry(root, "specs/index.spec.md")
+	title, docs, err := DiscoverFromEntry(root, "specs/index.spec.md", nil)
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestDiscoverFromEntryDeduplicatesLinks(t *testing.T) {
 		t.Fatalf("write entry: %v", err)
 	}
 
-	_, docs, err := DiscoverFromEntry(root, "specs/index.spec.md")
+	_, docs, err := DiscoverFromEntry(root, "specs/index.spec.md", nil)
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestDiscoverFromEntryErrorsOnMissingH1(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	_, _, err := DiscoverFromEntry(root, "index.spec.md")
+	_, _, err := DiscoverFromEntry(root, "index.spec.md", nil)
 	if err == nil {
 		t.Fatal("expected error for missing H1")
 	}
@@ -88,7 +88,7 @@ func TestDiscoverFromEntryErrorsOnNoLinks(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	_, _, err := DiscoverFromEntry(root, "index.spec.md")
+	_, _, err := DiscoverFromEntry(root, "index.spec.md", nil)
 	if err == nil {
 		t.Fatal("expected error for no links")
 	}

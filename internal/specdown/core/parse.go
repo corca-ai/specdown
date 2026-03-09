@@ -9,13 +9,13 @@ import (
 	"strings"
 )
 
-func readDocument(baseDir string, relativePath string) (Document, error) {
+func readDocument(baseDir string, relativePath string, ignorePrefixes []string) (Document, error) {
 	fullPath := filepath.Join(baseDir, filepath.FromSlash(relativePath))
 	body, err := os.ReadFile(fullPath)
 	if err != nil {
 		return Document{}, fmt.Errorf("read %s: %w", fullPath, err)
 	}
-	return ParseDocument(relativePath, string(body))
+	return ParseDocument(relativePath, string(body), ignorePrefixes)
 }
 
 func parseFrontmatter(markdown string) (Frontmatter, string) {
@@ -51,9 +51,14 @@ func parseFrontmatter(markdown string) (Frontmatter, string) {
 }
 
 //nolint:gocognit // parser walk is inherently complex
-func ParseDocument(relativePath string, markdown string) (Document, error) {
+func ParseDocument(relativePath string, markdown string, ignorePrefixes []string) (Document, error) {
 	fm, content := parseFrontmatter(markdown)
 	lines := splitLines(content)
+
+	ignorePrefixSet := make(map[string]bool, len(ignorePrefixes))
+	for _, p := range ignorePrefixes {
+		ignorePrefixSet[p] = true
+	}
 
 	var (
 		nodes         []Node
@@ -66,6 +71,7 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		hookKind      HookKind
 		hookEach      bool
 		hookRaw       string
+		warnings      []string
 	)
 
 	for i := 0; i < len(lines); {
@@ -215,6 +221,12 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 				return Document{}, fmt.Errorf("%s: %w", relativePath, err)
 			}
 
+			if !block.Executable() {
+				if prefix := unknownBlockPrefix(info); prefix != "" && !ignorePrefixSet[prefix] {
+					warnings = append(warnings, fmt.Sprintf("%s: unknown block prefix %q in code block %q (not executable)", relativePath, prefix, strings.TrimSpace(info)))
+				}
+			}
+
 			end := -1
 			for j := i + 1; j < len(lines); j++ {
 				if isFenceEnd(lines[j]) {
@@ -356,6 +368,7 @@ func ParseDocument(relativePath string, markdown string) (Document, error) {
 		Markdown:    markdown,
 		Nodes:       nodes,
 		Frontmatter: fm,
+		Warnings:    warnings,
 	}, nil
 }
 

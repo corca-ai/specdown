@@ -191,6 +191,7 @@ type Document struct {
 	Markdown    string      `json:"markdown"`
 	Nodes       []Node      `json:"nodes"`
 	Frontmatter Frontmatter `json:"frontmatter,omitempty"`
+	Warnings    []string    `json:"warnings,omitempty"`
 }
 
 func slug(input string) string {

@@ -265,7 +265,7 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	title, docs, err := core.DiscoverFromEntry(root, "specs/index.spec.md")
+	title, docs, err := core.DiscoverFromEntry(root, "specs/index.spec.md", nil)
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
