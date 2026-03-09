@@ -1,6 +1,7 @@
 package alloy
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,5 +149,104 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 	}
 	if ext := filepath.Ext(bundle.SourceMapAbsolutePath); ext != ".json" {
 		t.Fatalf("unexpected source map extension %q", ext)
+	}
+}
+
+func TestParseReceiptWithMapScopes(t *testing.T) {
+	dir := t.TempDir()
+	receiptPath := filepath.Join(dir, "receipt.json")
+	data := `{
+		"commands": {
+			"0": {
+				"type": "check",
+				"source": "check cardShape for 5",
+				"scopes": {"Card": "5"},
+				"solution": []
+			}
+		}
+	}`
+	if err := os.WriteFile(receiptPath, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := parseReceipt(receiptPath)
+	if err != nil {
+		t.Fatalf("parseReceipt with map scopes: %v", err)
+	}
+	cmd, ok := results["check cardShape for 5"]
+	if !ok {
+		t.Fatal("expected command entry for 'check cardShape for 5'")
+	}
+	var m map[string]string
+	if err := json.Unmarshal(cmd.Scopes, &m); err != nil {
+		t.Fatalf("scopes should be a valid map: %v", err)
+	}
+	if m["Card"] != "5" {
+		t.Fatalf("expected Card scope '5', got %q", m["Card"])
+	}
+}
+
+func TestParseReceiptWithArrayScopes(t *testing.T) {
+	dir := t.TempDir()
+	receiptPath := filepath.Join(dir, "receipt.json")
+	data := `{
+		"commands": {
+			"0": {
+				"type": "check",
+				"source": "check cardShape for 5 but 6 Int",
+				"scopes": [{"sig": "univ", "scope": "5"}, {"sig": "Int", "scope": "6"}],
+				"solution": []
+			}
+		}
+	}`
+	if err := os.WriteFile(receiptPath, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := parseReceipt(receiptPath)
+	if err != nil {
+		t.Fatalf("parseReceipt with array scopes: %v", err)
+	}
+	cmd, ok := results["check cardShape for 5 but 6 Int"]
+	if !ok {
+		t.Fatal("expected command entry for 'check cardShape for 5 but 6 Int'")
+	}
+	var arr []map[string]string
+	if err := json.Unmarshal(cmd.Scopes, &arr); err != nil {
+		t.Fatalf("scopes should be a valid array: %v", err)
+	}
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 scope entries, got %d", len(arr))
+	}
+	if arr[0]["sig"] != "univ" || arr[1]["sig"] != "Int" || arr[1]["scope"] != "6" {
+		t.Fatalf("unexpected scope values: %v", arr)
+	}
+}
+
+func TestReceiptCommandScopesRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+	}{
+		{"map", `{"Card":"5"}`},
+		{"array", `[{"sig":"univ","scope":"5"},{"sig":"Int","scope":"6"}]`},
+		{"null", `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cmd receiptCommand
+			raw := `{"type":"check","source":"check x for 5","scopes":` + tc.input + `,"solution":[]}`
+			if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
+				t.Fatalf("unmarshal %s scopes: %v", tc.name, err)
+			}
+			compact := func(s string) string {
+				var buf json.RawMessage
+				if err := json.Unmarshal([]byte(s), &buf); err != nil {
+					return s
+				}
+				out, _ := json.Marshal(buf)
+				return string(out)
+			}
+			if got := compact(string(cmd.Scopes)); got != compact(tc.input) {
+				t.Fatalf("round-trip mismatch: got %s, want %s", got, compact(tc.input))
+			}
+		})
 	}
 }
