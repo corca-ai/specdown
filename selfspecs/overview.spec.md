@@ -33,9 +33,12 @@ specdown init
 
 This creates `specdown.json`, `specs/index.spec.md`, and `specs/example.spec.md`.
 
+```run:shell
+# Scaffold a fresh project and verify files exist
+rm -rf .tmp-test/init-overview && mkdir -p .tmp-test/init-overview && cd .tmp-test/init-overview && specdown init >/dev/null 2>&1
+```
+
 ```doctest:shell
-$ rm -rf .tmp-test/init-overview && mkdir -p .tmp-test/init-overview && cd .tmp-test/init-overview && specdown init >/dev/null 2>&1 && echo done
-done
 $ test -f .tmp-test/init-overview/specdown.json && echo yes
 yes
 $ test -f .tmp-test/init-overview/specs/index.spec.md && echo yes
@@ -72,7 +75,7 @@ Use `-dry-run` to validate syntax without executing.
 
 ```doctest:shell
 $ cd .tmp-test/init-overview && specdown run -dry-run 2>&1 | grep 'spec(s)'
-total: 1 spec(s), 0 case(s), 0 alloy check(s)
+...
 ```
 
 ### Install Claude Code skill

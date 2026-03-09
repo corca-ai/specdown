@@ -13,6 +13,7 @@ It preserves the document structure, annotating execution results inline.
 - A summary shows pass/fail counts
 
 ```run:shell
+# Generate a report with a passing doctest
 mkdir -p .tmp-test
 BT=$(printf '\140\140\140')
 printf '%s\n' '# Summary Test' '' "\${BT}doctest:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
@@ -38,6 +39,7 @@ found
 - Prose and results from the same document are not separated
 
 ```run:shell
+# Generate a minimal report for UX verification
 mkdir -p .tmp-test
 cat <<'SPEC' > .tmp-test/report-test.spec.md
 # Report Test
@@ -65,14 +67,14 @@ found
 The report must be readable without JavaScript (no script-gated content).
 
 ```run:shell
-# The report should not require JS for basic content visibility
-# Check that headings and prose appear outside of <script> or noscript-hidden blocks
+# Verify headings appear outside script-gated blocks
 grep -q '<h1' .tmp-test/report.html
 ```
 
 The report must include anchor links for sections.
 
 ```run:shell
+# Verify section anchor IDs exist
 grep -q 'id="section-' .tmp-test/report.html
 ```
 
@@ -108,10 +110,10 @@ and optional label:
 ```
 
 ```run:shell
+# Create a failing adapter that returns expected/actual/label
 mkdir -p .tmp-test
 cat <<'ADAPTER' > .tmp-test/diag-adapter.sh
 #!/bin/sh
-# A minimal adapter that fails with expected/actual/label
 while IFS= read -r line; do
   type=$(printf '%s' "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
   case "$type" in
@@ -123,6 +125,10 @@ while IFS= read -r line; do
 done
 ADAPTER
 chmod +x .tmp-test/diag-adapter.sh
+```
+
+```run:shell
+# Run a spec against the failing adapter
 cat <<'SPEC' > .tmp-test/diag.spec.md
 # Diag Test
 

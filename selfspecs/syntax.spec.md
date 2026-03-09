@@ -34,6 +34,7 @@ blocks has zero cases. Unrecognized prefixes emit a warning to stderr
 so typos like `runn:shell` are caught early.
 
 ```run:shell
+# Create spec with unrecognized block prefixes
 mkdir -p .tmp-test
 BT=$(printf '\140\140\140')
 printf '%s\n' '# Plain' '' "\${BT}verify:shell" 'echo hello' "\${BT}" '' "\${BT}test:webapp" 'some test' "\${BT}" > .tmp-test/unrecognized.spec.md
@@ -56,6 +57,7 @@ $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^wa
 To suppress warnings for specific prefixes, add `ignorePrefixes` to `specdown.json`:
 
 ```run:shell
+# Configure ignorePrefixes to suppress warnings
 printf '{"entry":"index.spec.md","adapters":[],"ignorePrefixes":["verify","test"]}' > .tmp-test/unrecognized-cfg.json
 ```
 
@@ -444,6 +446,7 @@ case list, but a hook failure marks the document as failed.
 A setup or teardown directive followed by an executable code block must parse successfully.
 
 ```run:shell
+# Verify spec with setup:each hook parses successfully
 mkdir -p .tmp-test
 printf '# Hook Test\n\n## Group\n\n> setup:each\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
 printf '# T\n\n- [Hook](hook-good.spec.md)\n' > .tmp-test/index.spec.md
@@ -466,6 +469,7 @@ If frontmatter is absent, defaults (unlimited) apply.
 A spec with a timeout must still pass when the adapter responds quickly.
 
 ```run:shell
+# Verify spec with YAML frontmatter timeout parses successfully
 mkdir -p .tmp-test
 cat <<'SPEC' > .tmp-test/timeout.spec.md
 ---

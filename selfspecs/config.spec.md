@@ -29,6 +29,7 @@ The `entry` field points to a Markdown file whose H1 heading becomes the report 
 The entry file lists spec documents as Markdown links; their order determines the table of contents.
 
 ```run:shell
+# Generate report from entry file and verify title
 mkdir -p .tmp-test
 cat <<'SPEC' > .tmp-test/entry-test.spec.md
 # My Feature
@@ -55,6 +56,7 @@ The shell adapter is built into specdown. Blocks `run:shell`
 and `doctest:shell` work without any adapter configuration.
 
 ```run:shell
+# Run a spec using the built-in shell adapter with no adapter config
 mkdir -p .tmp-test
 printf '# T\n\n- [S](builtin-shell-test.spec.md)\n' > .tmp-test/builtin-shell-index.spec.md
 BT=$(printf '\140\140\140')
@@ -64,7 +66,7 @@ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true
 ```
 
 ```doctest:shell
-$ grep -o 'PASS' .tmp-test/builtin-shell-cfg.json 2>/dev/null; specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | head -1
+$ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | head -1
 PASS 1 spec(s), 1 case(s), 0 alloy check(s)
 ```
 
@@ -86,6 +88,7 @@ the user adapter takes precedence over the built-in.
 A config file without `entry` must be rejected.
 
 ```run:shell
+# Reject config missing the entry field
 mkdir -p .tmp-test
 echo '{}' > .tmp-test/bad-config.json
 ! specdown run -config .tmp-test/bad-config.json 2>/dev/null
@@ -94,6 +97,7 @@ echo '{}' > .tmp-test/bad-config.json
 Two adapters with the same name must be rejected.
 
 ```run:shell
+# Reject duplicate adapter names
 mkdir -p .tmp-test
 cat <<'CFG' > .tmp-test/dup-adapter.json
 {
@@ -110,6 +114,7 @@ CFG
 An adapter with an empty name must be rejected.
 
 ```run:shell
+# Reject adapter with empty name
 mkdir -p .tmp-test
 printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":["run:x"]}]}' > .tmp-test/empty-name.json
 ! specdown run -config .tmp-test/empty-name.json 2>/dev/null
@@ -118,6 +123,7 @@ printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":
 An adapter without a command must be rejected.
 
 ```run:shell
+# Reject adapter with empty command
 printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run:x"]}]}' > .tmp-test/no-cmd.json
 ! specdown run -config .tmp-test/no-cmd.json 2>/dev/null
 ```
@@ -125,6 +131,7 @@ printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run
 An adapter must declare at least one block or fixture.
 
 ```run:shell
+# Reject adapter with no blocks and no fixtures
 printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > .tmp-test/no-blocks.json
 ! specdown run -config .tmp-test/no-blocks.json 2>/dev/null
 ```
@@ -132,6 +139,7 @@ printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > .t
 Only `"alloy"` is supported as a models builtin. Unknown values are rejected.
 
 ```run:shell
+# Reject unknown models builtin
 printf '{"entry":"i.spec.md","adapters":[],"models":{"builtin":"unknown"}}' > .tmp-test/bad-model.json
 ! specdown run -config .tmp-test/bad-model.json 2>/dev/null
 ```

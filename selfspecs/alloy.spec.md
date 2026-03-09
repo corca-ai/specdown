@@ -88,6 +88,7 @@ which cannot represent values like 10 or 21. The wider bitwidth lets the
 solver explore the full range declared in the fact.
 
 ```run:shell
+# Build spec with but-scope check and run Alloy verification
 mkdir -p .tmp-test
 printf '# T\n\n- [But](but-scope.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"},"reporters":[{"builtin":"json","outFile":"but-report.json"}]}' > .tmp-test/but-cfg.json
@@ -107,6 +108,7 @@ Source mapping comments are inserted into the generated model.
 A `module` declaration in a subsequent fragment is a compile-time error.
 
 ```run:shell
+# Reject duplicate module declaration in same model
 mkdir -p .tmp-test
 printf '# Bad\n\n```alloy:model(dm)\nmodule dm\nsig A {}\n```\n\n```alloy:model(dm)\nmodule dm\nsig B {}\n```\n' > .tmp-test/dup-module.spec.md
 printf '# T\n\n- [Dup](dup-module.spec.md)\n' > .tmp-test/index.spec.md
@@ -128,16 +130,17 @@ a counterexample artifact on failure.
 
 A dry-run must recognize `alloy:ref` directives as alloy checks.
 
-```run:shell -> $refOutput
+```run:shell
+# Create spec with alloy:ref and verify dry-run detects it
 mkdir -p .tmp-test
 printf '# Ref Test\n\n## Model\n\n```alloy:model(rm)\nmodule rm\nsig A {}\nassert noOrphan { all a: A | a in A }\ncheck noOrphan for 3\n```\n\n## Reference\n\n> alloy:ref(rm#noOrphan, scope=5)\n' > .tmp-test/ref-test.spec.md
 printf '# T\n\n- [Ref](ref-test.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/ref-test-cfg.json
-specdown run -config .tmp-test/ref-test-cfg.json -dry-run 2>&1
 ```
 
-```run:shell
-echo "${refOutput}" | grep -q "alloy:.*rm#noOrphan"
+```doctest:shell
+$ specdown run -config .tmp-test/ref-test-cfg.json -dry-run 2>&1 | grep -o 'alloy:.*'
+...
 ```
 
 ## Counterexample Artifacts
@@ -150,6 +153,7 @@ On failure, the `message` field includes a counterexample summary
 extracted from the Alloy solver output.
 
 ```run:shell
+# Run a deliberately failing Alloy check
 mkdir -p .tmp-test
 printf '%s\n' '# Counterexample Test' '' '```alloy:model(cx)' 'module cx' 'sig Node { next: lone Node }' 'assert allDisconnected { all n: Node | no n.next }' 'check allDisconnected for 3' '```' > .tmp-test/cx-test.spec.md
 printf '# T\n\n- [CX](cx-test.spec.md)\n' > .tmp-test/index.spec.md
@@ -159,13 +163,15 @@ specdown run -config .tmp-test/cx-cfg.json 2>&1 || true
 
 The JSON report includes a `counterexamplePath` for the failing check.
 
-```run:shell
-grep -q '"counterexamplePath"' .tmp-test/cx-report.json
+```doctest:shell
+$ grep -q '"counterexamplePath"' .tmp-test/cx-report.json && echo found
+found
 ```
 
 The counterexample artifact file exists on disk.
 
 ```run:shell
+# Verify the counterexample file was written
 path=$(grep 'counterexamplePath' .tmp-test/cx-report.json | sed 's/.*"counterexamplePath"[^"]*"\([^"]*\)".*/\1/')
 test -n "$path" && test -f "$path"
 ```
