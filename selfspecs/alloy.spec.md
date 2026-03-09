@@ -63,7 +63,7 @@ Source mapping comments are inserted into the generated model.
 
 A `module` declaration in a subsequent fragment is a compile-time error.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```alloy:model(dm)\nmodule dm\nsig A {}\n```\n\n```alloy:model(dm)\nmodule dm\nsig B {}\n```\n' > .tmp-test/dup-module.spec.md
 printf '# T\n\n- [Dup](dup-module.spec.md)\n' > .tmp-test/index.spec.md
@@ -93,7 +93,7 @@ printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > 
 specdown run -config .tmp-test/ref-test-cfg.json -dry-run 2>&1
 ```
 
-```verify:shell
+```run:shell
 echo "${refOutput}" | grep -q "alloy:.*rm#noOrphan"
 ```
 
@@ -116,13 +116,13 @@ specdown run -config .tmp-test/cx-cfg.json 2>&1 || true
 
 The JSON report includes a `counterexamplePath` for the failing check.
 
-```verify:shell
+```run:shell
 grep -q '"counterexamplePath"' .tmp-test/cx-report.json
 ```
 
 The counterexample artifact file exists on disk.
 
-```verify:shell
+```run:shell
 path=$(grep 'counterexamplePath' .tmp-test/cx-report.json | sed 's/.*"counterexamplePath"[^"]*"\([^"]*\)".*/\1/')
 test -n "$path" && test -f "$path"
 ```

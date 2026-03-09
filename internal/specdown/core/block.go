@@ -11,8 +11,6 @@ type BlockKind string
 const (
 	BlockKindNone    BlockKind = ""
 	BlockKindRun     BlockKind = "run"
-	BlockKindVerify  BlockKind = "verify"
-	BlockKindTest    BlockKind = "test"
 	BlockKindDoctest BlockKind = "doctest"
 )
 
@@ -63,7 +61,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 	kind := BlockKind(parts[0])
 	target := strings.TrimSpace(parts[1])
 	switch kind {
-	case BlockKindRun, BlockKindVerify, BlockKindTest:
+	case BlockKindRun:
 		if target == "" {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
 		}

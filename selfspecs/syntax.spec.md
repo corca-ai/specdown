@@ -14,27 +14,23 @@ Executable blocks are fenced code blocks whose info string starts with a recogni
 
 | Prefix | Meaning |
 |--------|---------|
-| `run:<target>` | Side-effecting executable block |
-| `verify:<target>` | Assertion block |
-| `test:<name>` | Named high-level test DSL |
+| `run:<target>` | Executable block |
 | `doctest:<target>` | Inline command/output verification block |
 
 The `<target>` is defined by the adapter, not the core.
 
-The parser must recognize `run`, `verify`, `test`, and `doctest` as executable block kinds.
+The parser must recognize `run` and `doctest` as executable block kinds.
 
 > fixture:block-kind
 
 | info | kind | target |
 | --- | --- | --- |
 | run:shell | run | shell |
-| verify:api | verify | api |
-| test:login | test | login |
 | doctest:shell | doctest | shell |
 
 ## Intent Captions
 
-If the first line of a `run:`, `verify:`, or `test:` block is a comment,
+If the first line of a `run:` block is a comment,
 specdown extracts it as the block's **intent caption**.
 
 In the HTML report, blocks with a caption are rendered collapsed:
@@ -56,14 +52,14 @@ Here is an example: the following block's first line is a comment,
 so the report will render it collapsed with the caption
 "Demonstrate intent caption" and a pass/fail indicator.
 
-```verify:shell
+```run:shell
 # Demonstrate intent caption
 test 1 -eq 1
 ```
 
 A block without a leading comment renders normally (not collapsed):
 
-```verify:shell
+```run:shell
 test 1 -eq 1
 ```
 
@@ -93,7 +89,7 @@ printf 'from-parent'
 
 #### Child section
 
-```verify:shell
+```run:shell
 test "${parentVar}" = "from-parent"
 ```
 
@@ -105,7 +101,7 @@ To output a literal `${...}`, escape it with a backslash: `\${literal}`.
 printf 'ok'
 ```
 
-```verify:shell
+```run:shell
 test "${escapeTest}" = "ok"
 ```
 
@@ -226,11 +222,11 @@ If the adapter unexpectedly succeeds, the case is a real failure.
 
 `!fail` blocks do not support variable capture (`-> $name`).
 
-### Failing verify block
+### Failing run block with exit code
 
 A command that exits non-zero is normally a failure. With `!fail`, it passes.
 
-```verify:shell !fail
+```run:shell !fail
 false
 ```
 
@@ -242,14 +238,6 @@ The `!fail` modifier makes the mismatch count as a pass.
 ```doctest:shell !fail
 $ echo hello
 goodbye
-```
-
-### Failing run block
-
-A run block that exits non-zero normally fails. With `!fail`, it passes.
-
-```run:shell !fail
-exit 1
 ```
 
 ### Multi-step doctest mismatch

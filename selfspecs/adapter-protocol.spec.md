@@ -116,7 +116,7 @@ Capabilities are declared in config, not negotiated at runtime.
   "adapters": [{
     "name": "myapp",
     "command": ["python3", "./tools/adapter.py"],
-    "blocks": ["run:myapp", "verify:myapp"],
+    "blocks": ["run:myapp"],
     "fixtures": ["user-exists"]
   }]
 }
@@ -131,8 +131,8 @@ Capabilities are declared in config, not negotiated at runtime.
 
 ## Built-in Shell Adapter
 
-The shell adapter is the only built-in adapter. It handles `run:shell`,
-`verify:shell`, and `doctest:shell` blocks without any adapter configuration.
+The shell adapter is the only built-in adapter. It handles `run:shell`
+and `doctest:shell` blocks without any adapter configuration.
 
 ### Execution Model
 
@@ -147,9 +147,6 @@ All commands are executed via `sh -c`.
 **`run:shell`** — Executes the block source as a shell command. A non-zero exit
 code fails the case. If capture names are specified (`-> $var`), stdout lines
 are split and bound to variables in order.
-
-**`verify:shell`** — Executes the block source and checks the exit code.
-Exit 0 passes; non-zero fails. Stdout is ignored.
 
 **`doctest:shell`** — Parses `$ ` prefixed commands and their expected output,
 executes each command in sequence, and compares actual stdout against expected
@@ -191,7 +188,7 @@ import json, sys
 
 def handle(case):
     # case["kind"]          — "code" or "tableRow"
-    # case["block"]         — "run:myapp", "verify:myapp", etc.
+    # case["block"]         — "run:myapp", etc.
     # case["source"]        — block body (variables already substituted)
     # case["fixture"]       — fixture name (for table rows)
     # case["fixtureParams"] — {"key": "value"} from directive (optional)

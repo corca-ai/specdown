@@ -8,8 +8,7 @@
         "./tools/pocket_board_adapter.py"
       ],
       "blocks": [
-        "run:board",
-        "verify:board"
+        "run:board"
       ],
       "fixtures": [
         "board-exists",

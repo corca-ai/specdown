@@ -7,7 +7,7 @@ before any adapter is invoked. The following errors are caught during parsing.
 
 A spec with an unclosed fenced code block must be rejected at parse time.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:shell\necho hello\n' > .tmp-test/unclosed.spec.md
 printf '# T\n\n- [Unclosed](unclosed.spec.md)\n' > .tmp-test/index.spec.md
@@ -21,7 +21,7 @@ CFG
 
 A fixture directive without parameters and not followed by a table must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n> fixture:x\n\nJust prose.\n' > .tmp-test/fnt.spec.md
 printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
@@ -54,7 +54,7 @@ specdown run -config .tmp-test/fixture-call-cfg.json -dry-run 2>&1
 
 A setup or teardown directive not followed by a code block must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n> setup:each\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
 printf '# T\n\n- [Hook](hook-bad.spec.md)\n' > .tmp-test/index.spec.md
@@ -66,7 +66,7 @@ CFG
 
 A hook followed by a non-executable code block (e.g. plain `json`) must also be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n> setup\n\n```json\n{"a":1}\n```\n' > .tmp-test/hook-nonexec.spec.md
 printf '# T\n\n- [HNE](hook-nonexec.spec.md)\n' > .tmp-test/index.spec.md
@@ -78,7 +78,7 @@ printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-nonexec-cfg.js
 
 A table header must define at least one column.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n> fixture:x\n\n|||\n|---|\n|a|\n' > .tmp-test/table-nocol.spec.md
 printf '# T\n\n- [TC](table-nocol.spec.md)\n' > .tmp-test/index.spec.md
@@ -88,7 +88,7 @@ printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"fix
 
 A table must define at least one data row.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n> fixture:x\n\n| a |\n|---|\n' > .tmp-test/table-norow.spec.md
 printf '# T\n\n- [TR](table-norow.spec.md)\n' > .tmp-test/index.spec.md
@@ -100,7 +100,7 @@ printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"fix
 
 A block info string with a known prefix but no target must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:\necho hello\n```\n' > .tmp-test/no-target.spec.md
 printf '# T\n\n- [NT](no-target.spec.md)\n' > .tmp-test/index.spec.md
@@ -110,7 +110,7 @@ printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/no-target-cfg.json
 
 Duplicate capture names in a single block must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:shell -> $a, $a\necho hello\n```\n' > .tmp-test/dup-capture.spec.md
 printf '# T\n\n- [DC](dup-capture.spec.md)\n' > .tmp-test/index.spec.md
@@ -120,7 +120,7 @@ printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blo
 
 Doctest blocks do not support variable capture.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```doctest:shell -> $x\n$ echo hi\nhi\n```\n' > .tmp-test/doctest-capture.spec.md
 printf '# T\n\n- [DTC](doctest-capture.spec.md)\n' > .tmp-test/index.spec.md
@@ -130,7 +130,7 @@ printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blo
 
 `!fail` blocks do not support variable capture.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:shell !fail -> $x\nexit 1\n```\n' > .tmp-test/fail-capture.spec.md
 printf '# T\n\n- [FC](fail-capture.spec.md)\n' > .tmp-test/index.spec.md
@@ -142,7 +142,7 @@ printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blo
 
 An `alloy:ref` directive referencing an unknown model must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n> alloy:ref(nonexistent#check, scope=5)\n' > .tmp-test/bad-ref.spec.md
 printf '# T\n\n- [BR](bad-ref.spec.md)\n' > .tmp-test/index.spec.md
@@ -154,7 +154,7 @@ printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > 
 
 Referencing a variable that was never captured must produce an error.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '# Bad\n\n```run:shell\necho \${missing}\n```\n' > .tmp-test/unresolved.spec.md
 printf '# T\n\n- [Unresolved](unresolved.spec.md)\n' > .tmp-test/index.spec.md

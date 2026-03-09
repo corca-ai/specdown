@@ -252,7 +252,7 @@ func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 		Name:         "__builtin_shell",
 		BuiltinShell: true,
 	}}
-	for _, block := range []string{"run:shell", "verify:shell", "doctest:shell"} {
+	for _, block := range []string{"run:shell", "doctest:shell"} {
 		if _, exists := registry.blocks[block]; !exists {
 			registry.blocks[block] = builtinEntry
 		}

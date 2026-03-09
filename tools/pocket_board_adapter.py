@@ -221,9 +221,7 @@ def run_case(state, case):
                 card["title"] = new_title
                 continue
 
-            raise SpecFailure(f'unsupported board command {line!r}')
-
-        if info == "verify:board":
+            # Not a mutation command — try as assertion
             run_verify(state, line)
             continue
 
