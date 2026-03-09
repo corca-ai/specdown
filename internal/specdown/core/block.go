@@ -9,9 +9,8 @@ import (
 type BlockKind string
 
 const (
-	BlockKindNone    BlockKind = ""
-	BlockKindRun     BlockKind = "run"
-	BlockKindDoctest BlockKind = "doctest"
+	BlockKindNone BlockKind = ""
+	BlockKindRun  BlockKind = "run"
 )
 
 type BlockSpec struct {
@@ -60,8 +59,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 
 	kind := BlockKind(parts[0])
 	target := strings.TrimSpace(parts[1])
-	switch kind {
-	case BlockKindRun:
+	if kind == BlockKindRun {
 		if target == "" {
 			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
 		}
@@ -69,14 +67,6 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 			return BlockSpec{}, fmt.Errorf("!fail blocks do not support captures")
 		}
 		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames, ExpectFail: expectFail}, nil
-	case BlockKindDoctest:
-		if target == "" {
-			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
-		}
-		if len(captureNames) > 0 {
-			return BlockSpec{}, fmt.Errorf("doctest blocks do not support captures")
-		}
-		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, ExpectFail: expectFail}, nil
 	}
 
 	return BlockSpec{Raw: trimmed}, nil
@@ -134,8 +124,7 @@ func unknownBlockPrefix(info string) string {
 			return ""
 		}
 	}
-	switch BlockKind(prefix) {
-	case BlockKindRun, BlockKindDoctest:
+	if BlockKind(prefix) == BlockKindRun {
 		return ""
 	}
 	// alloy: is handled separately in the parser
@@ -143,6 +132,18 @@ func unknownBlockPrefix(info string) string {
 		return ""
 	}
 	return prefix
+}
+
+// isDoctestContent returns true if the first non-empty line of source starts with "$ ".
+func isDoctestContent(source string) bool {
+	for _, line := range strings.Split(source, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		return strings.HasPrefix(line, "$ ")
+	}
+	return false
 }
 
 func parseCaptureNames(raw string) ([]string, error) {

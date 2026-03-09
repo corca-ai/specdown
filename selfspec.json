@@ -3,9 +3,9 @@
   "adapters": [
     {
       "name": "shell-fixtures",
-      "command": ["./bin/specdown-adapter-shell", "-fixtures-dir", "./selfspecs/fixtures"],
+      "command": ["./bin/specdown-adapter-shell", "-checks-dir", "./selfspecs/fixtures"],
       "blocks": [],
-      "fixtures": ["block-kind", "cell-escape", "echo-value"]
+      "checks": ["block-kind", "cell-escape", "echo-value"]
     }
   ],
   "reporters": [

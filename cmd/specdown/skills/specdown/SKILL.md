@@ -23,6 +23,6 @@ Run executable specifications and fix failures.
 
 ## Writing and Editing Specs
 
-- Syntax: `${CLAUDE_SKILL_DIR}/syntax.md` — executable blocks, variables, fixture tables, hooks, frontmatter
+- Syntax: `${CLAUDE_SKILL_DIR}/syntax.md` — executable blocks, variables, check tables, hooks, frontmatter
 - Best practices: `${CLAUDE_SKILL_DIR}/guide-writing.md` — patterns, pitfalls, anti-patterns
 - Adapter protocol: `${CLAUDE_SKILL_DIR}/adapter-protocol.md` — NDJSON protocol, request/response format, examples

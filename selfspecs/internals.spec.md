@@ -50,8 +50,8 @@ Core is responsible for:
 
 Adapters are responsible for:
 
-- Interpreting block semantics (`run:*`, `doctest:*`)
-- Interpreting column semantics of fixture tables
+- Interpreting block semantics (`run:*`, doctest-style)
+- Interpreting column semantics of check tables
 - Connecting to external execution environments
 
 Reporters are responsible for:

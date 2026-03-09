@@ -62,7 +62,7 @@ type InlineKind string
 
 const (
 	InlineExpect  InlineKind = "expect"
-	InlineFixture InlineKind = "fixture"
+	InlineCheck InlineKind = "check"
 )
 
 type InlineElement struct {
@@ -71,8 +71,8 @@ type InlineElement struct {
 	ExpectExpr    string            `json:"expectExpr,omitempty"`
 	ExpectValue   string            `json:"expectValue,omitempty"`
 	ExpectFail    bool              `json:"expectFail,omitempty"`
-	Fixture       string            `json:"fixture,omitempty"`
-	FixtureParams map[string]string `json:"fixtureParams,omitempty"`
+	Check       string            `json:"check,omitempty"`
+	CheckParams map[string]string `json:"checkParams,omitempty"`
 	ID            *SpecID           `json:"id,omitempty"`
 }
 
@@ -137,8 +137,8 @@ type TableRowNode struct {
 }
 
 type TableNode struct {
-	Fixture       string            `json:"fixture"`
-	FixtureParams map[string]string `json:"fixtureParams,omitempty"`
+	Check       string            `json:"check"`
+	CheckParams map[string]string `json:"checkParams,omitempty"`
 	Columns       []string          `json:"columns"`
 	Rows          []TableRowNode    `json:"rows"`
 	Raw           string            `json:"raw"`
@@ -170,16 +170,16 @@ type HookNode struct {
 func (HookNode) isNode()            {}
 func (n HookNode) Markdown() string { return n.Raw }
 
-type FixtureCallNode struct {
-	Fixture       string            `json:"fixture"`
-	FixtureParams map[string]string `json:"fixtureParams"`
-	Raw           string            `json:"raw"`
-	HeadingPath   []string          `json:"headingPath,omitempty"`
-	ID            *SpecID           `json:"id,omitempty"`
+type CheckCallNode struct {
+	Check       string            `json:"check"`
+	CheckParams map[string]string `json:"checkParams"`
+	Raw         string            `json:"raw"`
+	HeadingPath []string          `json:"headingPath,omitempty"`
+	ID          *SpecID           `json:"id,omitempty"`
 }
 
-func (FixtureCallNode) isNode()            {}
-func (n FixtureCallNode) Markdown() string { return n.Raw }
+func (CheckCallNode) isNode()            {}
+func (n CheckCallNode) Markdown() string { return n.Raw }
 
 type Frontmatter struct {
 	Timeout int `json:"timeout,omitempty"` // milliseconds, 0 = no limit

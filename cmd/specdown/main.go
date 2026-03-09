@@ -305,12 +305,12 @@ func initProject() error {
 
 	exampleMD := `# Example
 
-This is a sample spec. Add executable blocks and fixture tables to make it live.
+This is a sample spec. Add executable blocks and check tables to make it live.
 
 ## Getting Started
 
 Prose paragraphs are preserved in the HTML report.
-Only executable blocks and fixture tables are run.
+Only executable blocks and check tables are run.
 `
 	if err := os.WriteFile("specs/example.spec.md", []byte(exampleMD), 0o644); err != nil {
 		return err
@@ -378,7 +378,7 @@ func printCaseFailures(cases []core.CaseResult) {
 
 func printCaseFailure(c core.CaseResult) {
 	path := strings.Join(c.ID.HeadingPath, " > ")
-	kind := c.Block + c.Fixture
+	kind := c.Block + c.Check
 	label := ""
 	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
 		label = fmt.Sprintf(" row %d", c.RowNumber)
@@ -426,10 +426,10 @@ func printBindings(report core.Report) {
 				continue
 			}
 			path := strings.Join(c.ID.HeadingPath, " > ")
-			kind := c.Block + c.Fixture
+			kind := c.Block + c.Check
 			var pairs []string
 			for _, b := range c.VisibleBindings {
-				pairs = append(pairs, fmt.Sprintf("$%s=%s", b.Name, b.Value))
+				pairs = append(pairs, fmt.Sprintf("$%s=%v", b.Name, b.Value))
 			}
 			fmt.Fprintf(os.Stderr, "  BIND  %s  [%s]  %s\n", path, kind, strings.Join(pairs, ", "))
 		}
@@ -450,7 +450,7 @@ func printDryRun(report core.Report) {
 		for _, c := range doc.Cases {
 			kind := c.Block
 			if c.Kind == core.CaseKindTableRow {
-				kind = "fixture:" + c.Fixture
+				kind = "check:" + c.Check
 			}
 			fmt.Printf("  case: %s [%s]\n", strings.Join(c.ID.HeadingPath, " > "), kind)
 		}

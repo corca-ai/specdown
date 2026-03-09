@@ -45,22 +45,15 @@ func TestParseBlockSpecLeavesPlainCodeBlocksNonExecutable(t *testing.T) {
 	}
 }
 
-func TestParseBlockSpecSupportsDoctestBlocks(t *testing.T) {
+func TestParseBlockSpecSupportsDoctestContentInRunBlocks(t *testing.T) {
+	// doctest: prefix is no longer recognized — content with $ lines is auto-detected at runtime
 	block, err := parseBlockSpec("doctest:shell")
 	if err != nil {
 		t.Fatalf("parse doctest block: %v", err)
 	}
-	if block.Kind != BlockKindDoctest || block.Target != "shell" || !block.Executable() {
-		t.Fatalf("unexpected doctest block %#v", block)
-	}
-	if block.Descriptor() != "doctest:shell" {
-		t.Fatalf("unexpected descriptor %q", block.Descriptor())
-	}
-}
-
-func TestParseBlockSpecRejectsDoctestWithCaptures(t *testing.T) {
-	if _, err := parseBlockSpec("doctest:shell -> $x"); err == nil {
-		t.Fatal("expected error for doctest with captures")
+	// doctest: is now treated as an unknown prefix (non-executable)
+	if block.Executable() {
+		t.Fatalf("expected non-executable block for doctest: prefix, got %#v", block)
 	}
 }
 
@@ -71,7 +64,6 @@ func TestParseBlockSpecSupportsExpectFail(t *testing.T) {
 		target string
 	}{
 		{"run:shell !fail", BlockKindRun, "shell"},
-		{"doctest:shell !fail", BlockKindDoctest, "shell"},
 	}
 	for _, tc := range cases {
 		block, err := parseBlockSpec(tc.input)
@@ -114,7 +106,7 @@ func TestUnknownBlockPrefix(t *testing.T) {
 		{"test:webapp", "test"},
 		{"example:python", "example"},
 		{"run:shell", ""},       // recognized
-		{"doctest:shell", ""},   // recognized
+		{"doctest:shell", "doctest"}, // no longer recognized
 		{"alloy:model(x)", ""},  // handled separately
 		{"json", ""},            // no colon
 		{"go", ""},              // no colon

@@ -11,12 +11,11 @@ import (
 	"testing"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
-	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
-func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
+func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
@@ -51,14 +50,14 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 		"",
 		"#### A created card must belong to a board",
 		"",
-		"> fixture:card-exists",
+		"> check:card-exists",
 		"| board | card | exists |",
 		"| --- | --- | --- |",
 		"| ${boardName} | ${cardId} | yes |",
 		"",
 		"#### New cards must be in todo",
 		"",
-		"> fixture:card-column",
+		"> check:card-column",
 		"| board | card | column |",
 		"| --- | --- | --- |",
 		"| ${boardName} | ${cardId} | todo |",
@@ -71,7 +70,7 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 		"",
 		"##### A moved card must be in doing",
 		"",
-		"> fixture:card-column",
+		"> check:card-column",
 		"| board | card | column |",
 		"| --- | --- | --- |",
 		"| ${boardName} | ${cardId} | doing |",
@@ -107,7 +106,7 @@ func TestRunSupportsBoardAndCardLifecycleFixtures(t *testing.T) {
 	}
 }
 
-func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
+func TestRunFailsWhenCardColumnCheckMismatches(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
@@ -130,7 +129,7 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 		"",
 		"#### Card Column Check",
 		"",
-		"> fixture:card-column",
+		"> check:card-column",
 		"| board | card | column |",
 		"| --- | --- | --- |",
 		"| ${boardName} | ${cardId} | doing |",
@@ -161,24 +160,26 @@ func TestRunFailsWhenCardColumnFixtureMismatches(t *testing.T) {
 	}
 }
 
-func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
+func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
+	// The exec returns an error, so the binding is never captured.
+	// The subsequent check row fails because ${boardName} is unresolved.
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
 		"## Board Creation",
 		"",
 		"```run:board -> $boardName",
-		"create-board board-1",
+		"fail-command",
 		"```",
 		"",
 		"### Board Existence Rules",
 		"",
-		"> fixture:board-exists",
+		"> check:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| ${boardName} | yes |",
@@ -189,12 +190,13 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperNoBindingConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
-	if report.Summary.CasesFailed != 1 {
+	// First case fails (exec error), second case fails (unresolved binding)
+	if report.Summary.CasesFailed != 2 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
 	if got := report.Results[0].Cases[1].Message; got != `missing runtime binding for "boardName"` {
@@ -202,7 +204,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForFixtureRow(t *testing.T) {
 	}
 }
 
-func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
+func TestRunFailsWhenNoAdapterSupportsCheck(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
@@ -213,7 +215,7 @@ func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 		"",
 		"## Table Check",
 		"",
-		"> fixture:unknown",
+		"> check:unknown",
 		"| board | exists |",
 		"| --- | --- |",
 		"| demo | yes |",
@@ -228,7 +230,7 @@ func TestRunFailsWhenNoAdapterSupportsFixture(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "no adapter supports fixture") {
+	if !strings.Contains(err.Error(), "no adapter supports check") {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
@@ -575,14 +577,14 @@ func TestRunExecutesSetupOnceHook(t *testing.T) {
 	}
 }
 
-func TestRunFixtureCallWithParams(t *testing.T) {
+func TestRunCheckCallWithParams(t *testing.T) {
 	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "fixture-call.spec.md")
+	specPath := filepath.Join(root, "specs", "check-call.spec.md")
 	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	source := strings.Join([]string{
-		"# Fixture Call",
+		"# Check Call",
 		"",
 		"## Setup",
 		"",
@@ -592,7 +594,7 @@ func TestRunFixtureCallWithParams(t *testing.T) {
 		"",
 		"## Check",
 		"",
-		"> fixture:board-exists(board=board-1, exists=yes)",
+		"> check:board-exists(board=board-1, exists=yes)",
 		"",
 	}, "\n")
 	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
@@ -641,30 +643,12 @@ func helperAdapterConfig() config.Config {
 				Name:     "helper-board",
 				Command:  []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board"},
 				Blocks:   []string{"run:board"},
-				Fixtures: []string{"board-exists", "card-exists", "card-column"},
+				Checks: []string{"board-exists", "card-exists", "card-column"},
 			},
 		},
 	}
 }
 
-func helperNoBindingConfig() config.Config {
-	executable, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-
-	return config.Config{
-		Entry: "specs/index.spec.md",
-		Adapters: []config.AdapterConfig{
-			{
-				Name:     "helper-board",
-				Command:  []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board-no-bindings"},
-				Blocks:   []string{"run:board"},
-				Fixtures: []string{"board-exists", "card-exists", "card-column"},
-			},
-		},
-	}
-}
 
 func TestHelperAdapterProcess(t *testing.T) {
 	if len(os.Args) < 2 {
@@ -672,7 +656,7 @@ func TestHelperAdapterProcess(t *testing.T) {
 	}
 
 	mode := os.Args[len(os.Args)-1]
-	if mode != "board" && mode != "board-no-bindings" {
+	if mode != "board" {
 		return
 	}
 
@@ -680,25 +664,43 @@ func TestHelperAdapterProcess(t *testing.T) {
 		boards:      make(map[string]*helperBoard),
 		nextBoardID: 1,
 		nextCardID:  1,
-		emitBinding: mode == "board",
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 	encoder := json.NewEncoder(os.Stdout)
 	for scanner.Scan() {
-		var request adapterprotocol.Request
-		if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(scanner.Bytes(), &fields); err != nil {
 			os.Exit(2)
 		}
 
-		switch request.Type {
-		case "setup", "teardown":
-			// lifecycle hooks — no-op for helper adapter
-		case "runCase":
-			if request.Case == nil {
-				os.Exit(3)
+		var msgType string
+		if err := json.Unmarshal(fields["type"], &msgType); err != nil {
+			os.Exit(2)
+		}
+
+		switch msgType {
+		case "exec":
+			var req struct {
+				ID     int    `json:"id"`
+				Source string `json:"source"`
 			}
-			runHelperCase(encoder, &state, request.ID, *request.Case)
+			if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+				os.Exit(2)
+			}
+			runHelperExec(encoder, &state, req.ID, req.Source)
+		case "assert":
+			var req struct {
+				ID          int               `json:"id"`
+				Check       string            `json:"check"`
+				CheckParams map[string]string `json:"checkParams,omitempty"`
+				Columns     []string          `json:"columns,omitempty"`
+				Cells       []string          `json:"cells,omitempty"`
+			}
+			if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+				os.Exit(2)
+			}
+			runHelperAssert(encoder, &state, req.ID, req.Check, req.CheckParams, req.Columns, req.Cells)
 		default:
 			os.Exit(4)
 		}
@@ -710,7 +712,6 @@ type helperState struct {
 	boards      map[string]*helperBoard
 	nextBoardID int
 	nextCardID  int
-	emitBinding bool
 }
 
 type helperBoard struct {
@@ -721,60 +722,99 @@ type helperCard struct {
 	column string
 }
 
-func runHelperCase(encoder *json.Encoder, state *helperState, seqID int, item adapterprotocol.Case) {
-	bindings, err := executeHelperCase(state, item)
+func runHelperExec(encoder *json.Encoder, state *helperState, seqID int, source string) {
+	output, err := executeHelperExec(state, source)
 	if err != nil {
-		resp := adapterprotocol.Response{
-			ID:      seqID,
-			Type:    "failed",
-			Message: err.Error(),
-		}
-		var hf *helperFailure
-		if errors.As(err, &hf) {
-			resp.Message = hf.message
-			resp.Expected = hf.expected
-			resp.Actual = hf.actual
-			resp.Label = hf.label
-		}
-		_ = encoder.Encode(resp)
+		_ = encoder.Encode(map[string]interface{}{"id": seqID, "error": err.Error()})
 		return
 	}
-
-	_ = encoder.Encode(adapterprotocol.Response{
-		ID:       seqID,
-		Type:     "passed",
-		Bindings: bindings,
-	})
+	_ = encoder.Encode(map[string]interface{}{"id": seqID, "output": output})
 }
 
-func executeHelperCase(state *helperState, item adapterprotocol.Case) ([]adapterprotocol.Binding, error) {
-	if item.Kind == "tableRow" {
-		return executeHelperFixtureRow(state, item)
-	}
-
-	parts, err := parseHelperCommand(item.Source)
+func executeHelperExec(state *helperState, source string) (string, error) {
+	parts, err := parseHelperCommand(source)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if len(parts) == 0 {
-		return nil, &helperError{message: "empty command"}
+		return "", &helperError{message: "empty command"}
 	}
 
 	switch parts[0] {
 	case "create-board":
-		return executeHelperCreateBoard(state, item, parts)
+		return executeHelperCreateBoard(state, source, parts)
 	case "create-card":
-		return executeHelperCreateCard(state, item, parts)
+		return executeHelperCreateCard(state, source, parts)
 	case "move-card":
 		return executeHelperMoveCard(state, parts)
 	case "board":
-		return executeHelperVerifyBoard(state, item.Source)
+		return executeHelperVerifyBoard(state, source)
 	default:
-		return nil, &helperError{message: "unsupported case " + item.Block}
+		return "", &helperError{message: "unsupported command " + parts[0]}
 	}
 }
 
-func executeHelperCreateBoard(state *helperState, item adapterprotocol.Case, parts []string) ([]adapterprotocol.Binding, error) {
+func runHelperAssert(encoder *json.Encoder, state *helperState, seqID int, check string, checkParams map[string]string, columns, cells []string) {
+	err := executeHelperAssert(state, check, checkParams, columns, cells)
+	if err != nil {
+		resp := map[string]interface{}{"id": seqID, "type": "failed", "message": err.Error()}
+		var hf *helperFailure
+		if asHF(err, &hf) {
+			resp["message"] = hf.message
+			if hf.expected != "" {
+				resp["expected"] = hf.expected
+			}
+			if hf.actual != "" {
+				resp["actual"] = hf.actual
+			}
+			if hf.label != "" {
+				resp["label"] = hf.label
+			}
+		}
+		_ = encoder.Encode(resp)
+		return
+	}
+	_ = encoder.Encode(map[string]interface{}{"id": seqID, "type": "passed"})
+}
+
+func asHF(err error, target **helperFailure) bool {
+	if err == nil {
+		return false
+	}
+	var hf *helperFailure
+	if errors.As(err, &hf) {
+		*target = hf
+		return true
+	}
+	return false
+}
+
+func executeHelperAssert(state *helperState, check string, checkParams map[string]string, columns, cells []string) error {
+	if len(columns) != len(cells) && len(columns) > 0 {
+		return &helperError{message: "check row shape mismatch"}
+	}
+
+	values := make(map[string]string, len(columns)+len(checkParams))
+	for index, column := range columns {
+		values[column] = cells[index]
+	}
+	for k, v := range checkParams {
+		values[k] = v
+	}
+
+	switch check {
+	case "board-exists":
+		return helperCheckBoardExists(state, values)
+	case "card-exists":
+		return helperCheckCardExists(state, values)
+	case "card-column":
+		return helperCheckCardColumn(state, values)
+	default:
+		return &helperError{message: "unsupported check " + strconvQuote(check)}
+	}
+}
+
+func executeHelperCreateBoard(state *helperState, source string, parts []string) (string, error) {
 	var name string
 	switch len(parts) {
 	case 1:
@@ -783,130 +823,98 @@ func executeHelperCreateBoard(state *helperState, item adapterprotocol.Case, par
 	case 2:
 		name = parts[1]
 	default:
-		return nil, &helperError{message: "unsupported board command " + strconvQuote(item.Source)}
+		return "", &helperError{message: "unsupported board command " + strconvQuote(source)}
 	}
 	if _, exists := state.boards[name]; exists {
-		return nil, &helperError{message: "board " + strconvQuote(name) + " already exists"}
+		return "", &helperError{message: "board " + strconvQuote(name) + " already exists"}
 	}
 	state.boards[name] = &helperBoard{cards: make(map[string]*helperCard)}
-	if !state.emitBinding || len(item.CaptureNames) == 0 {
-		return nil, nil
-	}
-	return []adapterprotocol.Binding{{Name: item.CaptureNames[0], Value: name}}, nil
+	return name, nil
 }
 
-func executeHelperCreateCard(state *helperState, item adapterprotocol.Case, parts []string) ([]adapterprotocol.Binding, error) {
+func executeHelperCreateCard(state *helperState, source string, parts []string) (string, error) {
 	if len(parts) != 3 {
-		return nil, &helperError{message: "unsupported board command " + strconvQuote(item.Source)}
+		return "", &helperError{message: "unsupported board command " + strconvQuote(source)}
 	}
 	board, err := helperBoardFor(state, parts[1])
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	cardID := "card-" + strconv.Itoa(state.nextCardID)
 	state.nextCardID++
 	board.cards[cardID] = &helperCard{column: "todo"}
-	if !state.emitBinding || len(item.CaptureNames) == 0 {
-		return nil, nil
-	}
-	return []adapterprotocol.Binding{{Name: item.CaptureNames[0], Value: cardID}}, nil
+	return cardID, nil
 }
 
-func executeHelperMoveCard(state *helperState, parts []string) ([]adapterprotocol.Binding, error) {
+func executeHelperMoveCard(state *helperState, parts []string) (string, error) {
 	if len(parts) != 4 {
-		return nil, &helperError{message: "unsupported board command"}
+		return "", &helperError{message: "unsupported board command"}
 	}
 	board, err := helperBoardFor(state, parts[1])
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	card := board.cards[parts[2]]
 	if card == nil {
-		return nil, helperCardExistsFailure(parts[1], parts[2], true)
+		return "", helperCardExistsFailure(parts[1], parts[2], true)
 	}
 	card.column = parts[3]
-	return nil, nil
+	return "", nil
 }
 
-func executeHelperVerifyBoard(state *helperState, source string) ([]adapterprotocol.Binding, error) {
+func executeHelperVerifyBoard(state *helperState, source string) (string, error) {
 	name, shouldExist, err := parseHelperVerifySource(source)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	_, exists := state.boards[name]
 	if shouldExist == exists {
-		return nil, nil
+		return "", nil
 	}
-	return nil, helperBoardExistsFailure(name, shouldExist)
+	return "", helperBoardExistsFailure(name, shouldExist)
 }
 
-func executeHelperFixtureRow(state *helperState, item adapterprotocol.Case) ([]adapterprotocol.Binding, error) {
-	if len(item.Columns) != len(item.Cells) {
-		return nil, &helperError{message: "fixture row shape mismatch"}
-	}
-
-	values := make(map[string]string, len(item.Columns)+len(item.FixtureParams))
-	for index, column := range item.Columns {
-		values[column] = item.Cells[index]
-	}
-	// Fixture call params override column values
-	for k, v := range item.FixtureParams {
-		values[k] = v
-	}
-
-	switch item.Fixture {
-	case "board-exists":
-		return helperFixtureBoardExists(state, values)
-	case "card-exists":
-		return helperFixtureCardExists(state, values)
-	case "card-column":
-		return helperFixtureCardColumn(state, values)
-	default:
-		return nil, &helperError{message: "unsupported fixture " + strconvQuote(item.Fixture)}
-	}
-}
-
-func helperFixtureBoardExists(state *helperState, values map[string]string) ([]adapterprotocol.Binding, error) {
+func helperCheckBoardExists(state *helperState, values map[string]string) error {
 	name := values["board"]
 	shouldExist := parseHelperExists(values["exists"])
 	_, exists := state.boards[name]
 	if shouldExist == exists {
-		return nil, nil
+		return nil
 	}
-	return nil, helperBoardExistsFailure(name, shouldExist)
+	return helperBoardExistsFailure(name, shouldExist)
 }
 
-func helperFixtureCardExists(state *helperState, values map[string]string) ([]adapterprotocol.Binding, error) {
+func helperCheckCardExists(state *helperState, values map[string]string) error {
 	boardName := values["board"]
 	cardName := values["card"]
 	shouldExist := parseHelperExists(values["exists"])
 	board, err := helperBoardFor(state, boardName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	_, exists := board.cards[cardName]
 	if shouldExist == exists {
-		return nil, nil
+		return nil
 	}
-	return nil, helperCardExistsFailure(boardName, cardName, shouldExist)
+	return helperCardExistsFailure(boardName, cardName, shouldExist)
 }
 
-func helperFixtureCardColumn(state *helperState, values map[string]string) ([]adapterprotocol.Binding, error) {
+func helperCheckCardColumn(state *helperState, values map[string]string) error {
 	boardName := values["board"]
 	cardName := values["card"]
 	expectedColumn := values["column"]
 	board, err := helperBoardFor(state, boardName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	card := board.cards[cardName]
 	if card == nil {
-		return nil, helperCardExistsFailure(boardName, cardName, true)
+		return helperCardExistsFailure(boardName, cardName, true)
 	}
 	if card.column == expectedColumn {
-		return nil, nil
+		return nil
 	}
-	return nil, &helperFailure{
+	return &helperFailure{
 		message:  "column mismatch for card " + strconvQuote(cardName) + " in board " + strconvQuote(boardName),
 		expected: expectedColumn,
 		actual:   card.column,

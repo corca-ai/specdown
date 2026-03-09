@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fixture: block-kind
+# Check: block-kind
 # Verifies that a block info string has the expected kind and target.
 #
 # Columns: info, kind, target
@@ -31,9 +31,9 @@ fi
 
 # Also verify specdown dry-run can parse a spec with this block.
 mkdir -p .tmp-test
-tmpspec=".tmp-test/fixture-test-$$.spec.md"
-tmpentry=".tmp-test/fixture-test-$$-index.spec.md"
-tmpcfg=".tmp-test/fixture-test-$$.json"
+tmpspec=".tmp-test/check-test-$$.spec.md"
+tmpentry=".tmp-test/check-test-$$-index.spec.md"
+tmpcfg=".tmp-test/check-test-$$.json"
 trap 'rm -f "$tmpspec" "$tmpentry" "$tmpcfg"' EXIT
 
 cat > "$tmpspec" <<SPEC
@@ -47,7 +47,7 @@ SPEC
 printf '# T\n\n- [Test](%s)\n' "$(basename "$tmpspec")" > "$tmpentry"
 
 cat > "$tmpcfg" <<CFG
-{"entry":"$(basename "$tmpentry")","adapters":[{"name":"t","command":["true"],"blocks":["${expected_kind}:${expected_target}"],"fixtures":[]}]}
+{"entry":"$(basename "$tmpentry")","adapters":[{"name":"t","command":["true"],"blocks":["${expected_kind}:${expected_target}"],"checks":[]}]}
 CFG
 
 specdown run -config "$tmpcfg" -dry-run >/dev/null 2>&1

@@ -14,7 +14,6 @@ import (
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/config"
-	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
 )
 
@@ -32,7 +31,6 @@ type Session struct {
 	waited      bool
 	closed      bool
 	stdinClosed bool
-	setupDone   bool
 	nextID      int
 	builtin     bool
 	done        chan struct{} // signals builtin goroutine completion
@@ -80,7 +78,7 @@ func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		builtinShellLoop(stdinReader, stdoutWriter, adapter.FixturesDir)
+		builtinShellLoop(stdinReader, stdoutWriter, adapter.ChecksDir)
 		_ = stdoutWriter.Close()
 	}()
 
@@ -98,144 +96,156 @@ func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, 
 	}, nil
 }
 
-func builtinShellLoop(reader io.Reader, writer io.Writer, fixturesDir string) {
+func builtinShellLoop(reader io.Reader, writer io.Writer, checksDir string) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	encoder := json.NewEncoder(writer)
 
 	for scanner.Scan() {
-		var request adapterprotocol.Request
-		if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
-			return
-		}
-
-		switch request.Type {
-		case "setup", "teardown":
-			continue
-		case "runCase":
-			result := shelladapter.RunCase(request.ID, request.Case, fixturesDir)
-			if err := encoder.Encode(result); err != nil {
-				return
-			}
-		default:
+		if err := handleBuiltinMessage(scanner.Bytes(), encoder, checksDir); err != nil {
 			return
 		}
 	}
 }
 
-func (s *Session) Setup() error {
-	if s.setupDone {
-		return nil
-	}
-	s.setupDone = true
-
-	request := adapterprotocol.Request{
-		Type: "setup",
-	}
-	if err := s.encoder.Encode(request); err != nil {
-		return fmt.Errorf("write setup to adapter %q: %w", s.adapter.Name, err)
-	}
-	return nil
-}
-
-func (s *Session) Teardown() error {
-	request := adapterprotocol.Request{
-		Type: "teardown",
-	}
-	if err := s.encoder.Encode(request); err != nil {
+func handleBuiltinMessage(raw []byte, encoder *json.Encoder, checksDir string) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
 	}
-	return nil
+
+	typeRaw, ok := fields["type"]
+	if !ok {
+		return fmt.Errorf("missing type field")
+	}
+	var msgType string
+	if err := json.Unmarshal(typeRaw, &msgType); err != nil {
+		return err
+	}
+
+	switch msgType {
+	case "exec":
+		var req adapterprotocol.ExecRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return err
+		}
+		return encoder.Encode(shelladapter.Exec(req.ID, req.Source))
+	case "assert":
+		var req adapterprotocol.AssertRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return err
+		}
+		return encoder.Encode(shelladapter.Assert(req.ID, &req, checksDir))
+	default:
+		return fmt.Errorf("unknown type %q", msgType)
+	}
 }
 
-func (s *Session) RunCase(original core.CaseSpec, prepared core.CaseSpec, visibleBindings []core.Binding, timeoutMs int) (core.CaseResult, error) {
-	result := core.CaseResult{
-		ID:        original.ID,
-		Kind:      original.Kind,
-		Block:     original.Block.Descriptor(),
-		Fixture:   original.Fixture,
-		Label:     original.DefaultLabel(),
-		Columns:   append([]string(nil), original.Columns...),
-		RowNumber: original.RowNumber,
-	}
-	if original.Kind == core.CaseKindCode {
-		result.Template = original.Template
-		result.RenderedSource = prepared.Template
-	} else {
-		result.TemplateCells = append([]string(nil), original.Cells...)
-		result.RenderedCells = append([]string(nil), prepared.Cells...)
-	}
-
-	// Emit caseStarted internally
-	result.Events = append(result.Events, core.Event{
-		Type:  core.EventCaseStarted,
-		ID:    result.ID,
-		Label: result.Label,
-	})
-
+func (s *Session) Exec(id int, source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
 	s.nextID++
 	seqID := s.nextID
 
-	// Unescape table cells before sending to adapter
-	cells := append([]string(nil), prepared.Cells...)
-	for i, cell := range cells {
-		cells[i] = core.UnescapeCell(cell)
-	}
-
-	request := adapterprotocol.Request{
-		Type: "runCase",
-		ID:   seqID,
-		Case: &adapterprotocol.Case{
-			Kind:          string(prepared.Kind),
-			Block:         prepared.Block.Descriptor(),
-			Source:        prepared.Template,
-			Fixture:       prepared.Fixture,
-			FixtureParams: prepared.FixtureParams,
-			Columns:       append([]string(nil), prepared.Columns...),
-			Cells:         cells,
-			CaptureNames:  append([]string(nil), prepared.Block.CaptureNames...),
-			Bindings:      protocolBindings(visibleBindings),
-		},
+	request := adapterprotocol.ExecRequest{
+		Type:   "exec",
+		ID:     seqID,
+		Source: source,
 	}
 	if err := s.encoder.Encode(request); err != nil {
-		return core.CaseResult{}, fmt.Errorf("write request to adapter %q: %w", s.adapter.Name, err)
+		return adapterprotocol.ExecResponse{}, fmt.Errorf("write exec to adapter %q: %w", s.adapter.Name, err)
 	}
 
-	readResult := make(chan readResultMsg, 1)
+	type result struct {
+		resp adapterprotocol.ExecResponse
+		err  error
+	}
+	ch := make(chan result, 1)
 
 	go func() {
-		response, err := s.readResponse()
+		raw, err := s.readRawResponse()
 		if err != nil {
-			readResult <- readResultMsg{err: err}
+			ch <- result{err: err}
 			return
 		}
-		if err := applyResponse(&result, seqID, response); err != nil {
-			readResult <- readResultMsg{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
+		resp, err := adapterprotocol.ParseExecResponse(raw)
+		if err != nil {
+			ch <- result{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
 			return
 		}
-		readResult <- readResultMsg{result: result}
+		if resp.ID != seqID {
+			ch <- result{err: fmt.Errorf("adapter %q: response referenced unexpected id %d (expected %d)", s.adapter.Name, resp.ID, seqID)}
+			return
+		}
+		ch <- result{resp: resp}
 	}()
 
 	if timeoutMs > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 		select {
-		case msg := <-readResult:
-			return msg.result, msg.err
+		case r := <-ch:
+			return r.resp, r.err
 		case <-ctx.Done():
-			result.Status = core.StatusFailed
-			result.Message = fmt.Sprintf("timeout after %dms", timeoutMs)
-			return result, nil
+			return adapterprotocol.ExecResponse{ID: seqID, Error: fmt.Sprintf("timeout after %dms", timeoutMs)}, nil
 		}
 	}
 
-	msg := <-readResult
-	return msg.result, msg.err
+	r := <-ch
+	return r.resp, r.err
 }
 
-type readResultMsg struct {
-	result core.CaseResult
-	err    error
+func (s *Session) Assert(id int, check string, params map[string]string, columns, cells []string, timeoutMs int) (adapterprotocol.AssertResponse, error) {
+	s.nextID++
+	seqID := s.nextID
+
+	request := adapterprotocol.AssertRequest{
+		Type:        "assert",
+		ID:          seqID,
+		Check:       check,
+		CheckParams: params,
+		Columns:     columns,
+		Cells:       cells,
+	}
+	if err := s.encoder.Encode(request); err != nil {
+		return adapterprotocol.AssertResponse{}, fmt.Errorf("write assert to adapter %q: %w", s.adapter.Name, err)
+	}
+
+	type result struct {
+		resp adapterprotocol.AssertResponse
+		err  error
+	}
+	ch := make(chan result, 1)
+
+	go func() {
+		raw, err := s.readRawResponse()
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+		var resp adapterprotocol.AssertResponse
+		if err := json.Unmarshal(raw, &resp); err != nil {
+			ch <- result{err: fmt.Errorf("adapter %q: decode assert response: %w", s.adapter.Name, err)}
+			return
+		}
+		if resp.ID != seqID {
+			ch <- result{err: fmt.Errorf("adapter %q: response referenced unexpected id %d (expected %d)", s.adapter.Name, resp.ID, seqID)}
+			return
+		}
+		ch <- result{resp: resp}
+	}()
+
+	if timeoutMs > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+		defer cancel()
+		select {
+		case r := <-ch:
+			return r.resp, r.err
+		case <-ctx.Done():
+			return adapterprotocol.AssertResponse{ID: seqID, Type: "failed", Message: fmt.Sprintf("timeout after %dms", timeoutMs)}, nil
+		}
+	}
+
+	r := <-ch
+	return r.resp, r.err
 }
 
 func (s *Session) Close() error {
@@ -256,21 +266,17 @@ func (s *Session) Close() error {
 	return s.wait()
 }
 
-func (s *Session) readResponse() (adapterprotocol.Response, error) {
+func (s *Session) readRawResponse() ([]byte, error) {
 	if s.scanner.Scan() {
-		var response adapterprotocol.Response
-		if err := json.Unmarshal(s.scanner.Bytes(), &response); err != nil {
-			return adapterprotocol.Response{}, fmt.Errorf("decode adapter %q response: %w", s.adapter.Name, err)
-		}
-		return response, nil
+		return append([]byte(nil), s.scanner.Bytes()...), nil
 	}
 	if err := s.scanner.Err(); err != nil {
-		return adapterprotocol.Response{}, fmt.Errorf("read adapter %q response: %w", s.adapter.Name, err)
+		return nil, fmt.Errorf("read adapter %q response: %w", s.adapter.Name, err)
 	}
 	if err := s.wait(); err != nil {
-		return adapterprotocol.Response{}, err
+		return nil, err
 	}
-	return adapterprotocol.Response{}, io.EOF
+	return nil, io.EOF
 }
 
 func (s *Session) wait() error {
@@ -309,84 +315,4 @@ func resolveCommand(baseDir string, command []string) []string {
 		}
 	}
 	return resolved
-}
-
-func applyResponse(result *core.CaseResult, expectedID int, response adapterprotocol.Response) error {
-	if response.ID != expectedID {
-		return fmt.Errorf("response referenced unexpected case id %d (expected %d)", response.ID, expectedID)
-	}
-
-	switch response.Type {
-	case "passed":
-		result.Status = core.StatusPassed
-		result.Actual = response.Actual
-		result.Bindings = coreBindings(response.Bindings)
-		result.Steps = coreDoctestSteps(response.Steps)
-		result.Events = append(result.Events, core.Event{
-			Type:     core.EventCasePassed,
-			ID:       result.ID,
-			Label:    result.Label,
-			Bindings: result.Bindings,
-		})
-		return nil
-	case "failed":
-		result.Status = core.StatusFailed
-		result.Message = response.Message
-		result.Expected = response.Expected
-		result.Actual = response.Actual
-		result.Steps = coreDoctestSteps(response.Steps)
-		if response.Label != "" {
-			result.Label = response.Label
-		}
-		result.Events = append(result.Events, core.Event{
-			Type:     core.EventCaseFailed,
-			ID:       result.ID,
-			Label:    result.Label,
-			Message:  result.Message,
-			Expected: result.Expected,
-			Actual:   result.Actual,
-		})
-		return nil
-	default:
-		return fmt.Errorf("unexpected response type %q", response.Type)
-	}
-}
-
-
-func protocolBindings(bindings []core.Binding) []adapterprotocol.Binding {
-	items := make([]adapterprotocol.Binding, 0, len(bindings))
-	for _, binding := range bindings {
-		items = append(items, adapterprotocol.Binding{
-			Name:  binding.Name,
-			Value: binding.Value,
-		})
-	}
-	return items
-}
-
-func coreDoctestSteps(steps []adapterprotocol.DoctestStep) []core.DoctestStep {
-	if len(steps) == 0 {
-		return nil
-	}
-	result := make([]core.DoctestStep, 0, len(steps))
-	for _, s := range steps {
-		result = append(result, core.DoctestStep{
-			Command:  s.Command,
-			Expected: s.Expected,
-			Actual:   s.Actual,
-			Status:   core.Status(s.Status),
-		})
-	}
-	return result
-}
-
-func coreBindings(bindings []adapterprotocol.Binding) []core.Binding {
-	items := make([]core.Binding, 0, len(bindings))
-	for _, binding := range bindings {
-		items = append(items, core.Binding{
-			Name:  binding.Name,
-			Value: binding.Value,
-		})
-	}
-	return items
 }

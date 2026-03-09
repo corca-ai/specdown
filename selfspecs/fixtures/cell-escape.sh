@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fixture: cell-escape
+# Check: cell-escape
 # Verifies that the adapter receives unescaped cell values.
 #
 # Columns: input, expected

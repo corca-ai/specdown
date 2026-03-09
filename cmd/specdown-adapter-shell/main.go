@@ -11,10 +11,10 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
 )
 
-var fixturesDir string
+var checksDir string
 
 func main() {
-	flag.StringVar(&fixturesDir, "fixtures-dir", "./fixtures", "Directory containing fixture scripts")
+	flag.StringVar(&checksDir, "checks-dir", "./checks", "Directory containing check scripts")
 	flag.Parse()
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -22,23 +22,8 @@ func main() {
 	encoder := json.NewEncoder(os.Stdout)
 
 	for scanner.Scan() {
-		var request adapterprotocol.Request
-		if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
-			fmt.Fprintf(os.Stderr, "shell-adapter: decode request: %v\n", err)
-			os.Exit(1)
-		}
-
-		switch request.Type {
-		case "setup", "teardown":
-			continue
-		case "runCase":
-			result := shelladapter.RunCase(request.ID, request.Case, fixturesDir)
-			if err := encoder.Encode(result); err != nil {
-				fmt.Fprintf(os.Stderr, "shell-adapter: encode response: %v\n", err)
-				os.Exit(1)
-			}
-		default:
-			fmt.Fprintf(os.Stderr, "shell-adapter: unknown request type %q\n", request.Type)
+		if err := handleMessage(scanner.Bytes(), encoder); err != nil {
+			fmt.Fprintf(os.Stderr, "shell-adapter: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -46,5 +31,34 @@ func main() {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "shell-adapter: read stdin: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func handleMessage(raw []byte, encoder *json.Encoder) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("decode request: %w", err)
+	}
+
+	var msgType string
+	if err := json.Unmarshal(fields["type"], &msgType); err != nil {
+		return fmt.Errorf("decode type: %w", err)
+	}
+
+	switch msgType {
+	case "exec":
+		var req adapterprotocol.ExecRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return fmt.Errorf("decode exec: %w", err)
+		}
+		return encoder.Encode(shelladapter.Exec(req.ID, req.Source))
+	case "assert":
+		var req adapterprotocol.AssertRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return fmt.Errorf("decode assert: %w", err)
+		}
+		return encoder.Encode(shelladapter.Assert(req.ID, &req, checksDir))
+	default:
+		return fmt.Errorf("unknown request type %q", msgType)
 	}
 }

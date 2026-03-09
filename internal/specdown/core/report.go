@@ -4,7 +4,7 @@ import "time"
 
 type Binding struct {
 	Name  string `json:"name"`
-	Value string `json:"value"`
+	Value any    `json:"value"`
 }
 
 type EventType string
@@ -36,7 +36,7 @@ type CaseResult struct {
 	ID             SpecID    `json:"id"`
 	Kind           CaseKind  `json:"kind"`
 	Block          string    `json:"block,omitempty"`
-	Fixture        string    `json:"fixture,omitempty"`
+	Check          string    `json:"check,omitempty"`
 	Label          string    `json:"label"`
 	Template       string    `json:"template,omitempty"`
 	RenderedSource string    `json:"renderedSource,omitempty"`

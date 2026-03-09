@@ -25,7 +25,7 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		"",
 		"### Table Check",
 		"",
-		"> fixture:board-exists",
+		"> check:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| ${boardName} | yes |",
@@ -87,8 +87,8 @@ func assertTableShape(t *testing.T, tables []TableNode) {
 	if len(tables) != 1 {
 		t.Fatalf("expected 1 table, got %d", len(tables))
 	}
-	if tables[0].Fixture != "board-exists" {
-		t.Fatalf("unexpected fixture %q", tables[0].Fixture)
+	if tables[0].Check != "board-exists" {
+		t.Fatalf("unexpected check %q", tables[0].Check)
 	}
 	if len(tables[0].Rows) != 2 {
 		t.Fatalf("unexpected row count %d", len(tables[0].Rows))
@@ -105,11 +105,11 @@ func assertOrdinals(t *testing.T, blocks []CodeBlockNode, tables []TableNode) {
 	}
 }
 
-func TestParseDocumentRejectsFixtureDirectiveWithoutTable(t *testing.T) {
+func TestParseDocumentRejectsCheckDirectiveWithoutTable(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
-		"> fixture:board-exists",
+		"> check:board-exists",
 		"",
 		"not a table",
 		"",
@@ -219,11 +219,11 @@ func TestParseDocumentDefaultsFrontmatterWhenAbsent(t *testing.T) {
 	}
 }
 
-func TestParseDocumentParsesFixtureParams(t *testing.T) {
+func TestParseDocumentParsesCheckParams(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"> fixture:write-permission(user=alan)",
+		"> check:write-permission(user=alan)",
 		"| path | write |",
 		"| --- | --- |",
 		"| /tmp | yes |",
@@ -243,22 +243,22 @@ func TestParseDocumentParsesFixtureParams(t *testing.T) {
 	if len(tables) != 1 {
 		t.Fatalf("expected 1 table, got %d", len(tables))
 	}
-	if tables[0].Fixture != "write-permission" {
-		t.Fatalf("unexpected fixture %q", tables[0].Fixture)
+	if tables[0].Check != "write-permission" {
+		t.Fatalf("unexpected check %q", tables[0].Check)
 	}
-	if tables[0].FixtureParams == nil {
-		t.Fatal("expected fixture params")
+	if tables[0].CheckParams == nil {
+		t.Fatal("expected check params")
 	}
-	if got := tables[0].FixtureParams["user"]; got != "alan" {
+	if got := tables[0].CheckParams["user"]; got != "alan" {
 		t.Fatalf("expected param user=alan, got %q", got)
 	}
 }
 
-func TestParseDocumentParsesFixtureMultipleParams(t *testing.T) {
+func TestParseDocumentParsesCheckMultipleParams(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"> fixture:editor-op(type=lexical, mode=rich)",
+		"> check:editor-op(type=lexical, mode=rich)",
 		"| input | output |",
 		"| --- | --- |",
 		"| a | b |",
@@ -275,16 +275,16 @@ func TestParseDocumentParsesFixtureMultipleParams(t *testing.T) {
 			tables = append(tables, tbl)
 		}
 	}
-	if tables[0].FixtureParams["type"] != "lexical" || tables[0].FixtureParams["mode"] != "rich" {
-		t.Fatalf("unexpected params %#v", tables[0].FixtureParams)
+	if tables[0].CheckParams["type"] != "lexical" || tables[0].CheckParams["mode"] != "rich" {
+		t.Fatalf("unexpected params %#v", tables[0].CheckParams)
 	}
 }
 
-func TestParseDocumentFixtureWithoutParamsHasNilParams(t *testing.T) {
+func TestParseDocumentCheckWithoutParamsHasNilParams(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		"> fixture:board-exists",
+		"> check:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| x | yes |",
@@ -301,8 +301,8 @@ func TestParseDocumentFixtureWithoutParamsHasNilParams(t *testing.T) {
 			tables = append(tables, tbl)
 		}
 	}
-	if tables[0].FixtureParams != nil {
-		t.Fatalf("expected nil params for parameterless fixture, got %#v", tables[0].FixtureParams)
+	if tables[0].CheckParams != nil {
+		t.Fatalf("expected nil params for parameterless check, got %#v", tables[0].CheckParams)
 	}
 }
 
@@ -310,7 +310,7 @@ func TestParseTableCellsWithEscapedPipe(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
-		`> fixture:check`,
+		`> check:check`,
 		`| input | expected |`,
 		`| --- | --- |`,
 		`| a\|b | a\|b |`,
@@ -360,12 +360,12 @@ func TestUnescapeCell(t *testing.T) {
 	}
 }
 
-func TestParseDocumentAllowsFixtureWithParamsAndNoTable(t *testing.T) {
+func TestParseDocumentAllowsCheckWithParamsAndNoTable(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
 		"Some prose.",
-		"> fixture:check-user(field=plan, expected=STANDARD)",
+		"> check:check-user(field=plan, expected=STANDARD)",
 		"",
 		"More prose.",
 		"",
@@ -375,31 +375,31 @@ func TestParseDocumentAllowsFixtureWithParamsAndNoTable(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	var calls []FixtureCallNode
+	var calls []CheckCallNode
 	for _, node := range doc.Nodes {
-		if fc, ok := node.(FixtureCallNode); ok {
+		if fc, ok := node.(CheckCallNode); ok {
 			calls = append(calls, fc)
 		}
 	}
 	if len(calls) != 1 {
-		t.Fatalf("expected 1 fixture call, got %d", len(calls))
+		t.Fatalf("expected 1 check call, got %d", len(calls))
 	}
-	if calls[0].Fixture != "check-user" {
-		t.Fatalf("unexpected fixture %q", calls[0].Fixture)
+	if calls[0].Check != "check-user" {
+		t.Fatalf("unexpected check %q", calls[0].Check)
 	}
-	if calls[0].FixtureParams["field"] != "plan" || calls[0].FixtureParams["expected"] != "STANDARD" {
-		t.Fatalf("unexpected params %#v", calls[0].FixtureParams)
+	if calls[0].CheckParams["field"] != "plan" || calls[0].CheckParams["expected"] != "STANDARD" {
+		t.Fatalf("unexpected params %#v", calls[0].CheckParams)
 	}
 	if calls[0].ID == nil || calls[0].ID.Ordinal != 1 {
 		t.Fatalf("unexpected ID %#v", calls[0].ID)
 	}
 }
 
-func TestParseDocumentRejectsFixtureWithoutParamsAndNoTable(t *testing.T) {
+func TestParseDocumentRejectsCheckWithoutParamsAndNoTable(t *testing.T) {
 	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
-		"> fixture:board-exists",
+		"> check:board-exists",
 		"",
 		"not a table",
 		"",

@@ -16,7 +16,7 @@ It preserves the document structure, annotating execution results inline.
 # Generate a report with a passing doctest
 mkdir -p .tmp-test
 BT=$(printf '\140\140\140')
-printf '%s\n' '# Summary Test' '' "\${BT}doctest:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
+printf '%s\n' '# Summary Test' '' "\${BT}run:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
 printf '# T\n\n- [Summary](summary-test.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}' > .tmp-test/summary-cfg.json
 specdown run -config .tmp-test/summary-cfg.json 2>&1 || true
@@ -24,7 +24,7 @@ specdown run -config .tmp-test/summary-cfg.json 2>&1 || true
 
 The HTML report contains a pass/fail summary.
 
-```doctest:shell
+```run:shell
 $ grep -q 'class="pill pass"' .tmp-test/summary-report.html && echo found
 found
 $ grep -q 'passed' .tmp-test/summary-report.html && echo found
@@ -55,7 +55,7 @@ specdown run -config .tmp-test/report-test.json -out report.html 2>&1 || true
 
 The report file must exist and contain standard HTML structure.
 
-```doctest:shell
+```run:shell
 $ test -f .tmp-test/report.html && echo yes
 yes
 $ grep -q '<html' .tmp-test/report.html && echo found
@@ -99,11 +99,11 @@ The containing section gets the `has-caption` class.
 When an adapter returns `expected`/`actual` values on failure,
 those values appear in both the CLI output and the JSON report.
 
-The CLI output format for fixture table failures includes the row number
+The CLI output format for check table failures includes the row number
 and optional label:
 
 ```
-  FAIL  Heading > Path  [fixture-name] row 5 "description"
+  FAIL  Heading > Path  [check-name] row 5 "description"
         error message
         expected: expected-value
         actual:   actual-value
@@ -116,10 +116,10 @@ cat <<'ADAPTER' > .tmp-test/diag-adapter.sh
 #!/bin/sh
 while IFS= read -r line; do
   type=$(printf '%s' "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
+  id=$(printf '%s' "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
   case "$type" in
-    setup|teardown) ;;
-    runCase)
-      printf '%s\n' '{"id":1,"type":"failed","message":"content mismatch","expected":"alpha\\nbeta","actual":"alpha\\ngamma","label":"diag row"}'
+    assert)
+      printf '{"id":%s,"type":"failed","message":"content mismatch","expected":"alpha\\nbeta","actual":"alpha\\ngamma","label":"diag row"}\n' "$id"
       ;;
   esac
 done
@@ -132,28 +132,28 @@ chmod +x .tmp-test/diag-adapter.sh
 cat <<'SPEC' > .tmp-test/diag.spec.md
 # Diag Test
 
-> fixture:diag
+> check:diag
 | input | output |
 | --- | --- |
 | a | b |
 SPEC
 printf '# T\n\n- [Diag](diag.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/diag.json
-{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"fixtures":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"},{"builtin":"json","outFile":"report.json"}]}
+{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"checks":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"},{"builtin":"json","outFile":"report.json"}]}
 CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
 ```
 
 The HTML report displays expected/actual values inline for diffing.
 
-```doctest:shell
+```run:shell
 $ grep -q 'failure-diff' .tmp-test/diag-report.html && echo found
 found
 ```
 
 The JSON report must contain the expected and actual fields, and the adapter label.
 
-```doctest:shell
+```run:shell
 $ grep -q '"expected"' .tmp-test/report.json && echo found
 found
 $ grep -q '"actual"' .tmp-test/report.json && echo found

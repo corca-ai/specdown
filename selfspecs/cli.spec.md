@@ -8,7 +8,7 @@ a configuration file that registers adapters, and the `specdown run` command.
 ### A Minimal Spec
 
 A well-formed spec document needs only a heading and prose to parse successfully.
-Executable blocks and fixture tables are added as needed.
+Executable blocks and check tables are added as needed.
 
 ```run:shell
 # Create a minimal spec and verify it parses
@@ -33,7 +33,7 @@ specdown run -config .tmp-test/valid-cfg.json -dry-run 2>&1
 
 The CLI reports its version when invoked with `version`.
 
-```doctest:shell
+```run:shell
 $ specdown version
 ...
 ```
@@ -41,7 +41,7 @@ $ specdown version
 Dry-run mode parses and validates spec files without executing adapters.
 This is useful for checking syntax before a full run.
 
-```doctest:shell
+```run:shell
 $ specdown run -config selfspec.json -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
@@ -57,7 +57,7 @@ rm -rf .tmp-test/init-test && mkdir -p .tmp-test/init-test && cd .tmp-test/init-
 
 The scaffolded project contains all required files.
 
-```doctest:shell
+```run:shell
 $ test -f .tmp-test/init-test/specdown.json && echo yes
 yes
 $ test -f .tmp-test/init-test/specs/index.spec.md && echo yes
@@ -75,7 +75,7 @@ cd .tmp-test/init-test && ! specdown init 2>/dev/null
 
 The generated project must be runnable immediately.
 
-```doctest:shell
+```run:shell
 $ cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
@@ -117,7 +117,7 @@ echo "$help" | grep -q "alloy dump"
 
 The `-filter` flag runs only cases whose heading path contains the given string.
 
-```doctest:shell
+```run:shell
 $ specdown run -config selfspec.json -dry-run -filter "Filter" 2>&1 | head -1
 ...
 ```

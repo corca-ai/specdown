@@ -50,7 +50,7 @@ func buildMainTestReport() core.Report {
 							},
 						},
 						core.TableNode{
-							Fixture: "board-exists",
+							Check: "board-exists",
 							Columns: []string{"board", "exists"},
 							Rows: []core.TableRowNode{
 								{
@@ -114,8 +114,8 @@ func buildMainTestReport() core.Report {
 							Ordinal:     3,
 						},
 						Kind:          core.CaseKindTableRow,
-						Fixture:       "board-exists",
-						Label:         "fixture:board-exists @ Table Check row 1",
+						Check:         "board-exists",
+						Label:         "check:board-exists @ Table Check row 1",
 						Columns:       []string{"board", "exists"},
 						TemplateCells: []string{"${boardName}", "yes"},
 						RenderedCells: []string{"board-1", "yes"},
@@ -129,8 +129,8 @@ func buildMainTestReport() core.Report {
 							Ordinal:     4,
 						},
 						Kind:          core.CaseKindTableRow,
-						Fixture:       "board-exists",
-						Label:         "fixture:board-exists @ Table Check row 2",
+						Check:         "board-exists",
+						Label:         "check:board-exists @ Table Check row 2",
 						Columns:       []string{"board", "exists"},
 						TemplateCells: []string{"${boardName}-archive", "yes"},
 						RenderedCells: []string{"board-1-archive", "yes"},
@@ -214,7 +214,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 		assertContains(t, html, "pass 3", "pass summary")
 		assertContains(t, html, "fail 1", "fail summary")
 		assertContains(t, html, "boardName=board-1", "binding note")
-		assertContains(t, html, "fixture:board-exists", "fixture label")
+		assertContains(t, html, "check:board-exists", "check label")
 		assertContains(t, html, "board-1-archive", "resolved table cell")
 		assertContains(t, html, `<dt>expected</dt><dd>board-1-archive exists</dd>`, "expected value in failure diff")
 		assertContains(t, html, `<dt>actual</dt><dd>not found</dd>`, "actual value in failure diff")
@@ -395,7 +395,7 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Editor", Raw: "# Editor\n", HeadingPath: []string{"Editor"}},
 						core.TableNode{
-							Fixture: "editor-op",
+							Check: "editor-op",
 							Columns: []string{"initial", "expected"},
 							Rows: []core.TableRowNode{
 								{
@@ -412,8 +412,8 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 					{
 						ID:            core.SpecID{File: "specs/editor.spec.md", HeadingPath: []string{"Editor"}, Ordinal: 1},
 						Kind:          core.CaseKindTableRow,
-						Fixture:       "editor-op",
-						Label:         "fixture:editor-op @ Editor row 1",
+						Check:         "editor-op",
+						Label:         "check:editor-op @ Editor row 1",
 						Columns:       []string{"initial", "expected"},
 						TemplateCells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},
 						RenderedCells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},

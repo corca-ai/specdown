@@ -16,17 +16,6 @@ class SpecFailure(Exception):
         self.message = message
 
 
-def binding_items(case):
-    return {item["name"]: item["value"] for item in case.get("bindings", [])}
-
-
-def render_arg(raw, bindings):
-    raw = raw.strip()
-    for name, value in bindings.items():
-        raw = raw.replace("${" + name + "}", value)
-    return raw
-
-
 def parse_single_arg(raw):
     raw = raw.strip()
     if not raw:
@@ -113,20 +102,11 @@ def ensure_card(state, board_name, card_id):
 VALID_COLUMNS = ("todo", "doing", "done")
 
 
-def run_case(state, case):
-    kind = case["kind"]
-    info = case.get("block", "")
-    source = case.get("source", "")
-    fixture = case.get("fixture", "")
-    capture_names = case.get("captureNames", [])
-    bindings = binding_items(case)
-    produced_bindings = []
-
-    if kind == "tableRow":
-        return run_table_row(state, fixture, case.get("columns", []), case.get("cells", []))
-
+def run_exec(state, source):
+    """Execute a source command, returning output string."""
+    output_lines = []
     for raw_line in source.splitlines():
-        line = render_arg(raw_line.strip(), bindings)
+        line = raw_line.strip()
         if not line:
             continue
         parts = parse_command(line)
@@ -134,100 +114,90 @@ def run_case(state, case):
             continue
         command = parts[0]
 
-        if info == "run:board":
-            if command == "create-board":
-                if len(parts) == 1:
-                    if not capture_names:
-                        raise SpecFailure("missing board name")
-                    name = f"board-{state['next_board_id']}"
-                    state["next_board_id"] += 1
-                elif len(parts) == 2:
-                    name = parts[1]
-                else:
-                    raise SpecFailure(f'unsupported board command {line!r}')
-                if name in state["boards"]:
-                    raise SpecFailure(f'board {name!r} already exists')
-                state["boards"][name] = {"cards": {}}
-                for capture_name in capture_names:
-                    produced_bindings.append({
-                        "name": capture_name,
-                        "value": name,
-                    })
-                continue
+        if command == "create-board":
+            if len(parts) == 1:
+                name = f"board-{state['next_board_id']}"
+                state["next_board_id"] += 1
+            elif len(parts) == 2:
+                name = parts[1]
+            else:
+                raise SpecFailure(f'unsupported board command {line!r}')
+            if name in state["boards"]:
+                raise SpecFailure(f'board {name!r} already exists')
+            state["boards"][name] = {"cards": {}}
+            output_lines.append(name)
+            continue
 
-            if command == "create-card":
-                if len(parts) != 3:
-                    raise SpecFailure(f'unsupported board command {line!r}')
-                board_name = parts[1]
-                title = parts[2]
-                if not title:
-                    raise SpecFailure("card title must not be empty")
-                if len(title) > 256:
-                    raise SpecFailure(f'card title exceeds 256 characters (got {len(title)})')
-                board = ensure_board(state, board_name)
-                card_id = f"card-{state['next_card_id']}"
-                state["next_card_id"] += 1
-                board["cards"][card_id] = {
-                    "title": title,
-                    "column": "todo",
-                }
-                for capture_name in capture_names:
-                    produced_bindings.append({
-                        "name": capture_name,
-                        "value": card_id,
-                    })
-                continue
+        if command == "create-card":
+            if len(parts) != 3:
+                raise SpecFailure(f'unsupported board command {line!r}')
+            board_name = parts[1]
+            title = parts[2]
+            if not title:
+                raise SpecFailure("card title must not be empty")
+            if len(title) > 256:
+                raise SpecFailure(f'card title exceeds 256 characters (got {len(title)})')
+            board = ensure_board(state, board_name)
+            card_id = f"card-{state['next_card_id']}"
+            state["next_card_id"] += 1
+            board["cards"][card_id] = {
+                "title": title,
+                "column": "todo",
+            }
+            output_lines.append(card_id)
+            continue
 
-            if command == "move-card":
-                if len(parts) != 4:
-                    raise SpecFailure(f'unsupported board command {line!r}')
-                board_name = parts[1]
-                card_id = parts[2]
-                column = parts[3]
-                if column not in VALID_COLUMNS:
-                    raise SpecFailure(f'invalid column {column!r}')
-                _, card = ensure_card(state, board_name, card_id)
-                card["column"] = column
-                continue
+        if command == "move-card":
+            if len(parts) != 4:
+                raise SpecFailure(f'unsupported board command {line!r}')
+            board_name = parts[1]
+            card_id = parts[2]
+            column = parts[3]
+            if column not in VALID_COLUMNS:
+                raise SpecFailure(f'invalid column {column!r}')
+            _, card = ensure_card(state, board_name, card_id)
+            card["column"] = column
+            continue
 
-            if command == "delete-board":
-                if len(parts) != 2:
-                    raise SpecFailure(f'unsupported board command {line!r}')
-                board_name = parts[1]
-                ensure_board(state, board_name)
-                del state["boards"][board_name]
-                continue
+        if command == "delete-board":
+            if len(parts) != 2:
+                raise SpecFailure(f'unsupported board command {line!r}')
+            board_name = parts[1]
+            ensure_board(state, board_name)
+            del state["boards"][board_name]
+            continue
 
-            if command == "delete-card":
-                if len(parts) != 3:
-                    raise SpecFailure(f'unsupported board command {line!r}')
-                board_name = parts[1]
-                card_id = parts[2]
-                board, _ = ensure_card(state, board_name, card_id)
-                del board["cards"][card_id]
-                continue
+        if command == "delete-card":
+            if len(parts) != 3:
+                raise SpecFailure(f'unsupported board command {line!r}')
+            board_name = parts[1]
+            card_id = parts[2]
+            board, _ = ensure_card(state, board_name, card_id)
+            del board["cards"][card_id]
+            continue
 
-            if command == "rename-card":
-                if len(parts) != 4:
-                    raise SpecFailure(f'unsupported board command {line!r}')
-                board_name = parts[1]
-                card_id = parts[2]
-                new_title = parts[3]
-                if not new_title:
-                    raise SpecFailure("card title must not be empty")
-                if len(new_title) > 256:
-                    raise SpecFailure(f'card title exceeds 256 characters (got {len(new_title)})')
-                _, card = ensure_card(state, board_name, card_id)
-                card["title"] = new_title
-                continue
+        if command == "rename-card":
+            if len(parts) != 4:
+                raise SpecFailure(f'unsupported board command {line!r}')
+            board_name = parts[1]
+            card_id = parts[2]
+            new_title = parts[3]
+            if not new_title:
+                raise SpecFailure("card title must not be empty")
+            if len(new_title) > 256:
+                raise SpecFailure(f'card title exceeds 256 characters (got {len(new_title)})')
+            _, card = ensure_card(state, board_name, card_id)
+            card["title"] = new_title
+            continue
 
-            # Not a mutation command — try as assertion
+        if command == "board":
             run_verify(state, line)
             continue
 
-        raise SpecFailure(f'unsupported case info {info!r}')
+        # Try as assertion
+        run_verify(state, line)
 
-    return produced_bindings
+    return "\n".join(output_lines)
 
 
 def run_verify(state, line):
@@ -265,16 +235,15 @@ def run_verify(state, line):
 
     # duplicate board should be rejected
     if line == "duplicate board should be rejected":
-        # The board created earlier already exists — trying again would fail
         if state["boards"]:
-            return  # at least one board exists, so a duplicate create would fail
+            return
         raise SpecFailure("no boards exist to test duplicate rejection")
 
     # deleting nonexistent board should fail
     if line == "deleting nonexistent board should fail":
         phantom = "nonexistent-board-xyz"
         if phantom not in state["boards"]:
-            return  # correctly would fail
+            return
         raise SpecFailure("phantom board unexpectedly exists")
 
     # board list should contain at least one entry
@@ -294,29 +263,26 @@ def run_verify(state, line):
 
     # moving "cardId" to "column" should fail
     if line.startswith("moving ") and line.endswith("should fail"):
-        # extract card id and target column
         inner = line[len("moving "):-len("should fail")].strip()
         parts = shlex.split(inner)
-        # parts: [cardId, "to", "invalid"]
         if len(parts) == 3 and parts[1] == "to":
             target_col = parts[2]
             if target_col not in VALID_COLUMNS:
-                return  # correctly fails for invalid column
+                return
             raise SpecFailure(f'expected move to {target_col!r} to fail, but it is a valid column')
         raise SpecFailure(f'cannot parse moving assertion: {line!r}')
 
     # moving "cardId" to current column should succeed
     if line.startswith("moving ") and line.endswith("should succeed"):
-        # this tests that moving to same column is a no-op — always succeeds
         return
 
     # card with empty title should be rejected
     if line == "card with empty title should be rejected":
-        return  # create-card already rejects empty titles
+        return
 
     # card title length must be at most 256
     if line == "card title length must be at most 256":
-        return  # create-card already rejects titles > 256
+        return
 
     # card "cardId" title should be "expected"
     if line.startswith("card ") and "title should be" in line:
@@ -325,7 +291,6 @@ def run_verify(state, line):
         expected_raw = line[idx + len("title should be"):].strip()
         card_id = json.loads(card_id_raw) if card_id_raw.startswith('"') else card_id_raw
         expected_title = json.loads(expected_raw) if expected_raw.startswith('"') else expected_raw
-        # find card in any board
         for board_name, board in state["boards"].items():
             card = board["cards"].get(card_id)
             if card is not None:
@@ -338,7 +303,7 @@ def run_verify(state, line):
 
     # deleting nonexistent card should fail
     if line == "deleting nonexistent card should fail":
-        return  # delete-card already checks existence
+        return
 
     raise SpecFailure(f'unsupported board assertion {line!r}')
 
@@ -352,44 +317,48 @@ def parse_exists_value(raw):
     raise SpecFailure(f'unsupported exists value {raw!r}')
 
 
-def run_table_row(state, fixture, columns, cells):
-    if fixture not in ("board-exists", "card-exists", "card-column"):
-        raise SpecFailure(f'unsupported fixture {fixture!r}')
+def run_assert(state, check, check_params, columns, cells):
+    """Run an assert check, returning on success or raising SpecFailure."""
+    if check not in ("board-exists", "card-exists", "card-column"):
+        raise SpecFailure(f'unsupported check {check!r}')
     if len(columns) != len(cells):
-        raise SpecFailure("fixture row shape does not match header")
+        raise SpecFailure("check row shape does not match header")
 
     row = {}
     for index, column in enumerate(columns):
         row[column] = cells[index]
+    # Check params override column values
+    for k, v in check_params.items():
+        row[k] = v
 
-    if fixture == "board-exists":
+    if check == "board-exists":
         if "board" not in row or "exists" not in row:
-            raise SpecFailure('fixture "board-exists" requires columns "board" and "exists"')
+            raise SpecFailure('check "board-exists" requires columns "board" and "exists"')
         board_name = row["board"]
         should_exist = parse_exists_value(row["exists"])
         exists = board_name in state["boards"]
         if should_exist and exists:
-            return []
+            return
         if not should_exist and not exists:
-            return []
+            return
         raise board_exists_failure(board_name, should_exist, state)
 
-    if fixture == "card-exists":
+    if check == "card-exists":
         if "board" not in row or "card" not in row or "exists" not in row:
-            raise SpecFailure('fixture "card-exists" requires columns "board", "card", and "exists"')
+            raise SpecFailure('check "card-exists" requires columns "board", "card", and "exists"')
         board_name = row["board"]
         board = ensure_board(state, board_name)
         card_name = row["card"]
         should_exist = parse_exists_value(row["exists"])
         exists = card_name in board["cards"]
         if should_exist and exists:
-            return []
+            return
         if not should_exist and not exists:
-            return []
+            return
         raise card_exists_failure(board_name, card_name, should_exist, state)
 
     if "board" not in row or "card" not in row or "column" not in row:
-        raise SpecFailure('fixture "card-column" requires columns "board", "card", and "column"')
+        raise SpecFailure('check "card-column" requires columns "board", "card", and "column"')
     board_name = row["board"]
     board = ensure_board(state, board_name)
     card_name = row["card"]
@@ -399,7 +368,7 @@ def run_table_row(state, fixture, columns, cells):
         raise card_exists_failure(board_name, card_name, True, state)
     actual_column = card["column"]
     if actual_column == expected_column:
-        return []
+        return
     raise card_column_failure(board_name, card_name, expected_column, actual_column)
 
 
@@ -415,27 +384,29 @@ def main():
             continue
         request = json.loads(raw)
 
-        if request["type"] == "runCase":
+        if request["type"] == "exec":
             seq_id = request["id"]
-            case = request["case"]
+            source = request["source"]
             try:
-                produced_bindings = run_case(state, case)
+                output = run_exec(state, source)
             except SpecFailure as err:
-                emit({
-                    "id": seq_id,
-                    "type": "failed",
-                    "message": err.message,
-                })
+                emit({"id": seq_id, "error": err.message})
                 continue
-
-            emit({
-                "id": seq_id,
-                "type": "passed",
-                "bindings": produced_bindings,
-            })
+            emit({"id": seq_id, "output": output})
             continue
 
-        if request["type"] in ("setup", "teardown"):
+        if request["type"] == "assert":
+            seq_id = request["id"]
+            check = request["check"]
+            check_params = request.get("checkParams", {})
+            columns = request.get("columns", [])
+            cells = request.get("cells", [])
+            try:
+                run_assert(state, check, check_params, columns, cells)
+            except SpecFailure as err:
+                emit({"id": seq_id, "type": "failed", "message": err.message})
+                continue
+            emit({"id": seq_id, "type": "passed"})
             continue
 
         raise SystemExit(f"unsupported request type {request['type']!r}")

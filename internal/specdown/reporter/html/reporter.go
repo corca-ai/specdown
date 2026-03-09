@@ -2,6 +2,7 @@ package html
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"os"
@@ -244,8 +245,8 @@ func renderNode(node core.Node, caseResults map[string]core.CaseResult, alloyRes
 		return renderTable(current, caseResults)
 	case core.HookNode:
 		return renderHookBlock(current), nil
-	case core.FixtureCallNode:
-		return renderFixtureCall(current, caseResults), nil
+	case core.CheckCallNode:
+		return renderCheckCall(current, caseResults), nil
 	default:
 		return "", fmt.Errorf("unknown node type %T", node)
 	}
@@ -293,7 +294,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		out.WriteString(`</details>`)
 	} else {
 		out.WriteString(`<div class="exec-source">`)
-		if strings.HasPrefix(result.Block, "doctest:") && len(result.Steps) > 0 {
+		if len(result.Steps) > 0 {
 			renderDoctestSteps(&out, result.Steps)
 		} else {
 			renderCodeSource(&out, result)
@@ -362,7 +363,7 @@ func renderVisibleBindings(out *strings.Builder, bindings []core.Binding) {
 		out.WriteString(`$`)
 		out.WriteString(template.HTMLEscapeString(b.Name))
 		out.WriteString(`=`)
-		out.WriteString(template.HTMLEscapeString(b.Value))
+		out.WriteString(template.HTMLEscapeString(bindingValueToString(b.Value)))
 	}
 	out.WriteString(`</div>`)
 }
@@ -378,7 +379,7 @@ func renderBindings(out *strings.Builder, bindings []core.Binding) {
 		}
 		out.WriteString(template.HTMLEscapeString(b.Name))
 		out.WriteString(`=`)
-		out.WriteString(template.HTMLEscapeString(b.Value))
+		out.WriteString(template.HTMLEscapeString(bindingValueToString(b.Value)))
 	}
 	out.WriteString(`</div>`)
 }
@@ -402,7 +403,7 @@ func renderHeading(node core.HeadingNode) (string, error) {
 }
 
 func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (string, error) {
-	if node.Fixture == "" {
+	if node.Check == "" {
 		return markdownToHTML(node.Markdown())
 	}
 
@@ -449,8 +450,8 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 		renderTableRow(&out, item.node, item.result)
 	}
 	out.WriteString(`</tbody></table>`)
-	out.WriteString(`<p class="exec-table-footer">fixture:`)
-	out.WriteString(template.HTMLEscapeString(node.Fixture))
+	out.WriteString(`<p class="exec-table-footer">check:`)
+	out.WriteString(template.HTMLEscapeString(node.Check))
 	out.WriteString(`</p>`)
 	out.WriteString(`</section>`)
 	return out.String(), nil
@@ -596,7 +597,7 @@ func renderHookBlock(node core.HookNode) string {
 	return out.String()
 }
 
-func renderFixtureCall(node core.FixtureCallNode, caseResults map[string]core.CaseResult) string {
+func renderCheckCall(node core.CheckCallNode, caseResults map[string]core.CaseResult) string {
 	if node.ID == nil {
 		return ""
 	}
@@ -606,17 +607,17 @@ func renderFixtureCall(node core.FixtureCallNode, caseResults map[string]core.Ca
 	}
 
 	var out strings.Builder
-	out.WriteString(`<section class="exec-block fixture-call `)
+	out.WriteString(`<section class="exec-block check-call `)
 	out.WriteString(template.HTMLEscapeString(string(result.Status)))
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
 	out.WriteString(`<div class="exec-source">`)
 	out.WriteString(`<code>`)
-	label := node.Fixture
-	if len(node.FixtureParams) > 0 {
+	label := node.Check
+	if len(node.CheckParams) > 0 {
 		var params []string
-		for k, v := range node.FixtureParams {
+		for k, v := range node.CheckParams {
 			params = append(params, k+"="+v)
 		}
 		sort.Strings(params)
@@ -628,7 +629,7 @@ func renderFixtureCall(node core.FixtureCallNode, caseResults map[string]core.Ca
 		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
 	}
 	out.WriteString(`</div>`)
-	out.WriteString(`<p class="exec-block-footer">fixture</p>`)
+	out.WriteString(`<p class="exec-block-footer">check</p>`)
 	out.WriteString(`</section>`)
 	return out.String()
 }
@@ -649,7 +650,7 @@ func nodeSpecIDs(node core.Node) []*core.SpecID {
 			ids[i] = n.Rows[i].ID
 		}
 		return ids
-	case core.FixtureCallNode:
+	case core.CheckCallNode:
 		return []*core.SpecID{n.ID}
 	case core.ProseNode:
 		var ids []*core.SpecID
@@ -692,8 +693,8 @@ func accumulateNodeBindings(bindings []core.Binding, node core.Node, caseResults
 }
 
 var htmlCodeExpectPattern = regexp.MustCompile(`<code>expect:\s*(.+?)\s*==\s*(.+?)\s*</code>`)
-var htmlCodeFixturePattern = regexp.MustCompile(`<code>fixture:([A-Za-z0-9_-]+)\(([^)]*)\)</code>`)
-var proseVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var htmlCodeCheckPattern = regexp.MustCompile(`<code>check:([A-Za-z0-9_-]+)\(([^)]*)\)</code>`)
+var proseVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 var htmlCodeTagPattern = regexp.MustCompile(`<code[^>]*>[^<]*</code>`)
 
 func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult, accBindings []core.Binding) (string, error) {
@@ -721,15 +722,15 @@ func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult
 		return renderInlineExpectSpan(cr)
 	})
 
-	// Replace <code>fixture:name(params)</code> with inline fixture result spans
-	fixtureIdx := 0
-	fixtures := filterInlinesByKind(node.Inlines, core.InlineFixture)
-	html = htmlCodeFixturePattern.ReplaceAllStringFunc(html, func(match string) string {
-		if fixtureIdx >= len(fixtures) {
+	// Replace <code>check:name(params)</code> with inline check result spans
+	checkIdx := 0
+	checks := filterInlinesByKind(node.Inlines, core.InlineCheck)
+	html = htmlCodeCheckPattern.ReplaceAllStringFunc(html, func(match string) string {
+		if checkIdx >= len(checks) {
 			return match
 		}
-		inline := fixtures[fixtureIdx]
-		fixtureIdx++
+		inline := checks[checkIdx]
+		checkIdx++
 		if inline.ID == nil {
 			return match
 		}
@@ -737,13 +738,13 @@ func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult
 		if !ok {
 			return match
 		}
-		return renderInlineFixtureSpan(inline, cr)
+		return renderInlineCheckSpan(inline, cr)
 	})
 
 	// Replace ${var} in non-<code> parts with variable display spans
 	bindingMap := make(map[string]string, len(accBindings))
 	for _, b := range accBindings {
-		bindingMap[b.Name] = b.Value
+		bindingMap[b.Name] = bindingValueToString(b.Value)
 	}
 	html = replaceProseVariables(html, bindingMap)
 
@@ -781,11 +782,11 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 	return out.String()
 }
 
-func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) string {
+func renderInlineCheckSpan(inline core.InlineElement, cr core.CaseResult) string {
 	var out strings.Builder
 	if cr.Actual != "" {
-		// Ruby: fixture name as annotation, actual value as main content
-		out.WriteString(`<span class="inline-fixture `)
+		// Ruby: check name as annotation, actual value as main content
+		out.WriteString(`<span class="inline-check `)
 		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
 		out.WriteString(`" title="`)
 		if cr.Status == core.StatusFailed && cr.Message != "" {
@@ -796,10 +797,10 @@ func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) stri
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
 		out.WriteString(`<span class="annotation">`)
-		out.WriteString(template.HTMLEscapeString(inline.Fixture))
+		out.WriteString(template.HTMLEscapeString(inline.Check))
 		out.WriteString(`</span></span>`)
 	} else {
-		out.WriteString(`<span class="inline-fixture `)
+		out.WriteString(`<span class="inline-check `)
 		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
 		out.WriteString(`" title="`)
 		if cr.Status == core.StatusFailed && cr.Message != "" {
@@ -808,7 +809,7 @@ func renderInlineFixtureSpan(inline core.InlineElement, cr core.CaseResult) stri
 			out.WriteString(template.HTMLEscapeString(inline.Raw))
 		}
 		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(inline.Fixture))
+		out.WriteString(template.HTMLEscapeString(inline.Check))
 		out.WriteString(`</span>`)
 	}
 	return out.String()
@@ -832,6 +833,21 @@ func replaceProseVariables(html string, bindings map[string]string) string {
 	}
 	out.WriteString(replaceVarRefs(html[lastEnd:], bindings))
 	return out.String()
+}
+
+func bindingValueToString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case nil:
+		return ""
+	default:
+		data, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(data)
+	}
 }
 
 func replaceVarRefs(text string, bindings map[string]string) string {
@@ -1526,7 +1542,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     }
 
     .inline-expect.failed > .annotation,
-    .inline-fixture > .annotation {
+    .inline-check > .annotation {
       position: absolute;
       left: 0;
       bottom: 100%;
@@ -1538,10 +1554,10 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       pointer-events: none;
     }
 
-    .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed) {
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-check.failed) {
       position: relative;
     }
-    .spec-body :is(p, li):has(.inline-expect.failed, .inline-fixture.failed)::before {
+    .spec-body :is(p, li):has(.inline-expect.failed, .inline-check.failed)::before {
       content: "";
       position: absolute;
       left: -0.85rem;
@@ -1552,24 +1568,24 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       background: var(--fail-mark);
     }
 
-    .inline-fixture {
+    .inline-check {
       font-family: var(--font-mono);
       font-size: 0.94em;
       padding: 0.1em 0.35em;
       border-radius: 0.2rem;
     }
 
-    .inline-fixture.passed {
+    .inline-check.passed {
       background: var(--pass-bg);
       color: var(--pass-ink);
     }
 
-    .inline-fixture.failed {
+    .inline-check.failed {
       background: var(--fail-bg);
       color: var(--fail-ink);
     }
 
-    .inline-fixture:has(.annotation) {
+    .inline-check:has(.annotation) {
       position: relative;
       padding-top: 0.02em;
       padding-bottom: 0.02em;

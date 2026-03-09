@@ -17,7 +17,7 @@ func TestLoadConfigParsesAdaptersAndReporters(t *testing.T) {
       "name": "project",
       "command": ["python3", "./tools/adapter.py"],
       "blocks": ["run:myapp"],
-      "fixtures": ["user-exists"]
+      "checks": ["user-exists"]
     }
   ],
   "models": {

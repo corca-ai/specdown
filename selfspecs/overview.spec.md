@@ -38,7 +38,7 @@ This creates `specdown.json`, `specs/index.spec.md`, and `specs/example.spec.md`
 rm -rf .tmp-test/init-overview && mkdir -p .tmp-test/init-overview && cd .tmp-test/init-overview && specdown init >/dev/null 2>&1
 ```
 
-```doctest:shell
+```run:shell
 $ test -f .tmp-test/init-overview/specdown.json && echo yes
 yes
 $ test -f .tmp-test/init-overview/specs/index.spec.md && echo yes
@@ -51,7 +51,7 @@ yes
 
 This section is a working example. In the HTML report, the block below appears green:
 
-```doctest:shell
+```run:shell
 $ echo hello
 hello
 ```
@@ -59,7 +59,7 @@ hello
 This block intentionally mismatches. It appears red and counts as a failure,
 but `!fail` prevents it from causing a non-zero exit code:
 
-```doctest:shell !fail
+```run:shell !fail
 $ echo hello
 goodbye
 ```
@@ -73,7 +73,7 @@ specdown run
 Specs are parsed, executed via adapters, and results are rendered as an HTML report.
 Use `-dry-run` to validate syntax without executing.
 
-```doctest:shell
+```run:shell
 $ cd .tmp-test/init-overview && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```

@@ -65,9 +65,9 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 		headingPath   []string
 		title         string
 		ordinal       int
-		fixture       string
-		fixtureParams map[string]string
-		fixtureRaw    string
+		check       string
+		checkParams map[string]string
+		checkRaw    string
 		hookKind      HookKind
 		hookEach      bool
 		hookRaw       string
@@ -83,13 +83,13 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 			if hookKind != "" {
 				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 			}
-			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 				return Document{}, err
 			} else if flushed {
 				nodes = append(nodes, node)
-				fixture = ""
-				fixtureParams = nil
-				fixtureRaw = ""
+				check = ""
+				checkParams = nil
+				checkRaw = ""
 			}
 			ordinal++
 			ref.Raw = line
@@ -108,13 +108,13 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 			if hookKind != "" {
 				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 			}
-			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 				return Document{}, err
 			} else if flushed {
 				nodes = append(nodes, node)
-				fixture = ""
-				fixtureParams = nil
-				fixtureRaw = ""
+				check = ""
+				checkParams = nil
+				checkRaw = ""
 			}
 			hookKind = hk
 			hookEach = he
@@ -123,30 +123,30 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 			continue
 		}
 
-		if nextFixture, nextParams, ok := parseFixtureDirective(line); ok {
+		if nextCheck, nextParams, ok := parseCheckDirective(line); ok {
 			if hookKind != "" {
 				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 			}
-			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 				return Document{}, err
 			} else if flushed {
 				nodes = append(nodes, node)
 			}
-			fixture = nextFixture
-			fixtureParams = nextParams
-			fixtureRaw = line
+			check = nextCheck
+			checkParams = nextParams
+			checkRaw = line
 			i++
 			continue
 		}
 
 		if isFenceStart(line) {
-			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 				return Document{}, err
 			} else if flushed {
 				nodes = append(nodes, node)
-				fixture = ""
-				fixtureParams = nil
-				fixtureRaw = ""
+				check = ""
+				checkParams = nil
+				checkRaw = ""
 			}
 			info := parseFenceInfo(line)
 
@@ -246,7 +246,7 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 				Source: trimmedSource,
 				Raw:    raw,
 			}
-			if block.Executable() && block.Kind != BlockKindDoctest {
+			if block.Executable() && !isDoctestContent(trimmedSource) {
 				node.Caption = extractCaption(trimmedSource)
 			}
 			if block.Executable() {
@@ -266,14 +266,14 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 			if hookKind != "" {
 				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 			}
-			table, next, err := parseTableNode(relativePath, lines, i, fixture, fixtureParams, &ordinal, headingPath)
+			table, next, err := parseTableNode(relativePath, lines, i, check, checkParams, &ordinal, headingPath)
 			if err != nil {
 				return Document{}, err
 			}
 			nodes = append(nodes, table)
-			fixture = ""
-			fixtureParams = nil
-			fixtureRaw = ""
+			check = ""
+			checkParams = nil
+			checkRaw = ""
 			i = next
 			continue
 		}
@@ -282,13 +282,13 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 			if hookKind != "" {
 				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 			}
-			if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 				return Document{}, err
 			} else if flushed {
 				nodes = append(nodes, node)
-				fixture = ""
-				fixtureParams = nil
-				fixtureRaw = ""
+				check = ""
+				checkParams = nil
+				checkRaw = ""
 			}
 			if title == "" {
 				title = text
@@ -317,7 +317,7 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 			if _, _, ok := parseHookDirective(lines[i]); ok {
 				break
 			}
-			if _, _, ok := parseFixtureDirective(lines[i]); ok {
+			if _, _, ok := parseCheckDirective(lines[i]); ok {
 				break
 			}
 			if isTableStart(lines, i) {
@@ -333,13 +333,13 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 		if hookKind != "" {
 			return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 		}
-		if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+		if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 			return Document{}, err
 		} else if flushed {
 			nodes = append(nodes, node)
-			fixture = ""
-			fixtureParams = nil
-			fixtureRaw = ""
+			check = ""
+			checkParams = nil
+			checkRaw = ""
 		}
 		proseNode := ProseNode{
 			Raw:         raw,
@@ -352,7 +352,7 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 	if hookKind != "" {
 		return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
 	}
-	if node, flushed, err := tryFlushFixture(fixture, fixtureParams, fixtureRaw, relativePath, &ordinal, headingPath); err != nil {
+	if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
 		return Document{}, err
 	} else if flushed {
 		nodes = append(nodes, node)
@@ -398,24 +398,24 @@ func parseFenceInfo(line string) string {
 	return strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
 }
 
-var fixtureDirectivePattern = regexp.MustCompile(`^\s*>\s*fixture:([A-Za-z0-9_-]+)(?:\(([^)]*)\))?\s*$`)
+var checkDirectivePattern = regexp.MustCompile(`^\s*>\s*check:([A-Za-z0-9_-]+)(?:\(([^)]*)\))?\s*$`)
 var alloyModelInfoPattern = regexp.MustCompile(`^alloy:model\(([A-Za-z_][A-Za-z0-9_-]*)\)$`)
 var alloyRefDirectivePattern = regexp.MustCompile(`^\s*>\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*$`)
 var hookDirectivePattern = regexp.MustCompile(`^\s*>\s*(setup|teardown)(?::(each))?\s*$`)
 
-func parseFixtureDirective(line string) (string, map[string]string, bool) {
-	matches := fixtureDirectivePattern.FindStringSubmatch(line)
+func parseCheckDirective(line string) (string, map[string]string, bool) {
+	matches := checkDirectivePattern.FindStringSubmatch(line)
 	if matches == nil {
 		return "", nil, false
 	}
 	var params map[string]string
 	if matches[2] != "" {
-		params = parseFixtureParams(matches[2])
+		params = parseCheckParams(matches[2])
 	}
 	return matches[1], params, true
 }
 
-func parseFixtureParams(raw string) map[string]string {
+func parseCheckParams(raw string) map[string]string {
 	params := make(map[string]string)
 	for _, pair := range strings.Split(raw, ",") {
 		pair = strings.TrimSpace(pair)
@@ -438,18 +438,18 @@ func parseHookDirective(line string) (HookKind, bool, bool) {
 	return HookKind(matches[1]), matches[2] == "each", true
 }
 
-func tryFlushFixture(fixture string, fixtureParams map[string]string, fixtureRaw string, relativePath string, ordinal *int, headingPath []string) (FixtureCallNode, bool, error) {
-	if fixture == "" {
-		return FixtureCallNode{}, false, nil
+func tryFlushCheck(check string, checkParams map[string]string, checkRaw string, relativePath string, ordinal *int, headingPath []string) (CheckCallNode, bool, error) {
+	if check == "" {
+		return CheckCallNode{}, false, nil
 	}
-	if len(fixtureParams) == 0 {
-		return FixtureCallNode{}, false, fmt.Errorf("%s: fixture directive %q must be followed by a table", relativePath, fixture)
+	if len(checkParams) == 0 {
+		return CheckCallNode{}, false, fmt.Errorf("%s: check directive %q must be followed by a table", relativePath, check)
 	}
 	*ordinal++
-	return FixtureCallNode{
-		Fixture:       fixture,
-		FixtureParams: fixtureParams,
-		Raw:           fixtureRaw,
+	return CheckCallNode{
+		Check:       check,
+		CheckParams: checkParams,
+		Raw:           checkRaw,
 		HeadingPath:   append([]string(nil), headingPath...),
 		ID: &SpecID{
 			File:        relativePath,
@@ -497,7 +497,7 @@ func isTableStart(lines []string, index int) bool {
 	return looksLikeTableRow(lines[index]) && isTableSeparator(lines[index+1])
 }
 
-func parseTableNode(relativePath string, lines []string, start int, fixture string, fixtureParams map[string]string, ordinal *int, headingPath []string) (TableNode, int, error) {
+func parseTableNode(relativePath string, lines []string, start int, check string, checkParams map[string]string, ordinal *int, headingPath []string) (TableNode, int, error) {
 	columns, err := parseTableCells(lines[start])
 	if err != nil {
 		return TableNode{}, 0, fmt.Errorf("%s: %w", relativePath, err)
@@ -521,7 +521,7 @@ func parseTableNode(relativePath string, lines []string, start int, fixture stri
 			Cells: cells,
 			Raw:   lines[end],
 		}
-		if fixture != "" {
+		if check != "" {
 			*ordinal++
 			row.ID = &SpecID{
 				File:        relativePath,
@@ -538,8 +538,8 @@ func parseTableNode(relativePath string, lines []string, start int, fixture stri
 	}
 
 	return TableNode{
-		Fixture:       fixture,
-		FixtureParams: fixtureParams,
+		Check:       check,
+		CheckParams: checkParams,
 		Columns:       columns,
 		Rows:          rows,
 		Raw:           strings.Join(lines[start:end], ""),
@@ -674,7 +674,7 @@ func parseHeading(line string) (int, string, bool) {
 }
 
 var inlineExpectPattern = regexp.MustCompile("`expect:\\s*(.+?)\\s*==\\s*(.+?)\\s*(!fail\\s*)?`")
-var inlineFixturePattern = regexp.MustCompile("`fixture:([A-Za-z0-9_-]+)\\(([^)]*)\\)`")
+var inlineCheckPattern = regexp.MustCompile("`check:([A-Za-z0-9_-]+)\\(([^)]*)\\)`")
 
 // insideCodeSpan checks whether a match at [start, end) in raw
 // is enclosed by a Markdown code span. The match itself includes its
@@ -722,16 +722,16 @@ func parseInlineElements(raw string, relativePath string, ordinal *int, headingP
 		})
 	}
 
-	for _, loc := range inlineFixturePattern.FindAllStringSubmatchIndex(raw, -1) {
+	for _, loc := range inlineCheckPattern.FindAllStringSubmatchIndex(raw, -1) {
 		if insideCodeSpan(raw, loc[0], loc[1]) {
 			continue
 		}
 		*ordinal++
 		elements = append(elements, InlineElement{
-			Kind:          InlineFixture,
+			Kind:          InlineCheck,
 			Raw:           raw[loc[0]:loc[1]],
-			Fixture:       raw[loc[2]:loc[3]],
-			FixtureParams: parseFixtureParams(raw[loc[4]:loc[5]]),
+			Check:       raw[loc[2]:loc[3]],
+			CheckParams: parseCheckParams(raw[loc[4]:loc[5]]),
 			ID: &SpecID{
 				File:        relativePath,
 				HeadingPath: append([]string(nil), headingPath...),

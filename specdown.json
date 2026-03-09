@@ -10,7 +10,7 @@
       "blocks": [
         "run:board"
       ],
-      "fixtures": [
+      "checks": [
         "board-exists",
         "card-exists",
         "card-column"

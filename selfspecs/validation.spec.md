@@ -18,39 +18,39 @@ CFG
 ! specdown run -config .tmp-test/unclosed-cfg.json 2>/dev/null
 ```
 
-## Fixture without table
+## Check without table
 
-A fixture directive without parameters and not followed by a table must be rejected.
+A check directive without parameters and not followed by a table must be rejected.
 
 ```run:shell
-# Reject bare fixture directive with no table
+# Reject bare check directive with no table
 mkdir -p .tmp-test
-printf '# Bad\n\n> fixture:x\n\nJust prose.\n' > .tmp-test/fnt.spec.md
+printf '# Bad\n\n> check:x\n\nJust prose.\n' > .tmp-test/fnt.spec.md
 printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/fnt-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"fixtures":["x"]}]}
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"checks":["x"]}]}
 CFG
 ! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
 ```
 
-A fixture directive with parameters but no table is valid (parameterized fixture call).
+A check directive with parameters but no table is valid (parameterized check call).
 
 ```run:shell
-# Accept parameterized fixture call without table
+# Accept parameterized check call without table
 mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/fixture-call.spec.md
-# Fixture Call
+cat <<'SPEC' > .tmp-test/check-call.spec.md
+# Check Call
 
 Some prose.
-> fixture:check(field=plan, expected=STANDARD)
+> check:verify(field=plan, expected=STANDARD)
 
 More prose.
 SPEC
-printf '# T\n\n- [FC](fixture-call.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/fixture-call-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"fixtures":["check"]}]}
+printf '# T\n\n- [FC](check-call.spec.md)\n' > .tmp-test/index.spec.md
+cat <<'CFG' > .tmp-test/check-call-cfg.json
+{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"checks":["verify"]}]}
 CFG
-specdown run -config .tmp-test/fixture-call-cfg.json -dry-run 2>&1
+specdown run -config .tmp-test/check-call-cfg.json -dry-run 2>&1
 ```
 
 ## Hook without code block
@@ -82,22 +82,22 @@ printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-nonexec-cfg.js
 A table header must define at least one column.
 
 ```run:shell
-# Reject fixture table with no columns
+# Reject check table with no columns
 mkdir -p .tmp-test
-printf '# Bad\n\n> fixture:x\n\n|||\n|---|\n|a|\n' > .tmp-test/table-nocol.spec.md
+printf '# Bad\n\n> check:x\n\n|||\n|---|\n|a|\n' > .tmp-test/table-nocol.spec.md
 printf '# T\n\n- [TC](table-nocol.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"fixtures":["x"]}]}' > .tmp-test/table-nocol-cfg.json
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"checks":["x"]}]}' > .tmp-test/table-nocol-cfg.json
 ! specdown run -config .tmp-test/table-nocol-cfg.json 2>/dev/null
 ```
 
 A table must define at least one data row.
 
 ```run:shell
-# Reject fixture table with header but no data rows
+# Reject check table with header but no data rows
 mkdir -p .tmp-test
-printf '# Bad\n\n> fixture:x\n\n| a |\n|---|\n' > .tmp-test/table-norow.spec.md
+printf '# Bad\n\n> check:x\n\n| a |\n|---|\n' > .tmp-test/table-norow.spec.md
 printf '# T\n\n- [TR](table-norow.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"fixtures":["x"]}]}' > .tmp-test/table-norow-cfg.json
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"checks":["x"]}]}' > .tmp-test/table-norow-cfg.json
 ! specdown run -config .tmp-test/table-norow-cfg.json 2>/dev/null
 ```
 
@@ -123,17 +123,6 @@ printf '# Bad\n\n```run:shell -> $a, $a\necho hello\n```\n' > .tmp-test/dup-capt
 printf '# T\n\n- [DC](dup-capture.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}' > .tmp-test/dup-capture-cfg.json
 ! specdown run -config .tmp-test/dup-capture-cfg.json 2>/dev/null
-```
-
-Doctest blocks do not support variable capture.
-
-```run:shell
-# Reject variable capture on doctest block
-mkdir -p .tmp-test
-printf '# Bad\n\n```doctest:shell -> $x\n$ echo hi\nhi\n```\n' > .tmp-test/doctest-capture.spec.md
-printf '# T\n\n- [DTC](doctest-capture.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["doctest:shell"]}]}' > .tmp-test/doctest-capture-cfg.json
-! specdown run -config .tmp-test/doctest-capture-cfg.json 2>/dev/null
 ```
 
 `!fail` blocks do not support variable capture.

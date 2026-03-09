@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -8,10 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/corca-ai/specdown/internal/specdown/alloy"
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
+	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
+	"github.com/corca-ai/specdown/internal/specdown/alloy"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
 )
 
 // adapterEntry holds an adapter config for registry lookups.
@@ -27,7 +30,7 @@ type RunOptions struct {
 
 type adapterRegistry struct {
 	blocks   map[string]adapterEntry
-	fixtures map[string]adapterEntry
+	checks map[string]adapterEntry
 }
 
 type scopedBinding struct {
@@ -188,7 +191,7 @@ func dryRunReport(plan core.Plan) core.Report {
 				ID:      c.ID,
 				Kind:    c.Kind,
 				Block:   c.Block.Descriptor(),
-				Fixture: c.Fixture,
+				Check: c.Check,
 				Label:   dryRunLabel(c),
 				Columns: append([]string(nil), c.Columns...),
 				RowNumber: c.RowNumber,
@@ -229,7 +232,7 @@ func dryRunLabel(c core.CaseSpec) string {
 func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 	registry := adapterRegistry{
 		blocks:   make(map[string]adapterEntry),
-		fixtures: make(map[string]adapterEntry),
+		checks: make(map[string]adapterEntry),
 	}
 	for _, adapter := range adapters {
 		entry := adapterEntry{Config: adapter}
@@ -239,11 +242,11 @@ func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 			}
 			registry.blocks[block] = entry
 		}
-		for _, fixture := range adapter.Fixtures {
-			if previous, exists := registry.fixtures[fixture]; exists {
-				return adapterRegistry{}, fmt.Errorf("fixture %q is declared by both adapter %q and %q", fixture, previous.Config.Name, adapter.Name)
+		for _, check := range adapter.Checks {
+			if previous, exists := registry.checks[check]; exists {
+				return adapterRegistry{}, fmt.Errorf("check %q is declared by both adapter %q and %q", check, previous.Config.Name, adapter.Name)
 			}
-			registry.fixtures[fixture] = entry
+			registry.checks[check] = entry
 		}
 	}
 
@@ -252,7 +255,7 @@ func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 		Name:         "__builtin_shell",
 		BuiltinShell: true,
 	}}
-	for _, block := range []string{"run:shell", "doctest:shell"} {
+	for _, block := range []string{"run:shell"} {
 		if _, exists := registry.blocks[block]; !exists {
 			registry.blocks[block] = builtinEntry
 		}
@@ -270,9 +273,9 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 		}
 		return entry, nil
 	case core.CaseKindTableRow:
-		entry, ok := r.fixtures[specCase.Fixture]
+		entry, ok := r.checks[specCase.Check]
 		if !ok {
-			return adapterEntry{}, fmt.Errorf("no adapter supports fixture %q in %s", specCase.Fixture, specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports check %q in %s", specCase.Check, specCase.ID.Key())
 		}
 		return entry, nil
 	default:
@@ -294,11 +297,6 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	cases, status, err := runDocumentCases(plan, registry, host, sessions)
 	if err != nil {
 		return core.DocumentResult{}, err
-	}
-
-	// Send teardown before closing
-	for _, session := range sessions {
-		_ = session.Teardown()
 	}
 
 	if err := closeSessions(sessions); err != nil {
@@ -323,13 +321,12 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 
 func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session) ([]core.CaseResult, core.Status, error) {
 	ctx := &caseRunContext{
-		registry:      registry,
-		host:          host,
-		sessions:      sessions,
-		setupSessions: make(map[string]bool),
-		bindings:      make([]scopedBinding, 0),
-		timeoutMs:     plan.Document.Frontmatter.Timeout,
-		hooks:         plan.Hooks,
+		registry:  registry,
+		host:      host,
+		sessions:  sessions,
+		bindings:  make([]scopedBinding, 0),
+		timeoutMs: plan.Document.Frontmatter.Timeout,
+		hooks:     plan.Hooks,
 	}
 	cases := make([]core.CaseResult, 0, len(plan.Cases))
 	status := core.StatusPassed
@@ -342,7 +339,7 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 			status = core.StatusFailed
 		}
 
-		result, err := runSingleCase(specCase, ctx.registry, ctx.host, ctx.sessions, ctx.setupSessions, ctx.bindings, ctx.timeoutMs)
+		result, err := runSingleCase(specCase, ctx.registry, ctx.host, ctx.sessions, ctx.bindings, ctx.timeoutMs)
 		if err != nil {
 			return nil, "", err
 		}
@@ -367,13 +364,12 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 }
 
 type caseRunContext struct {
-	registry      adapterRegistry
-	host          adapterhost.Host
-	sessions      map[string]*adapterhost.Session
-	setupSessions map[string]bool
-	bindings      []scopedBinding
-	timeoutMs     int
-	hooks         []core.HookSpec
+	registry  adapterRegistry
+	host      adapterhost.Host
+	sessions  map[string]*adapterhost.Session
+	bindings  []scopedBinding
+	timeoutMs int
+	hooks     []core.HookSpec
 }
 
 func (c *caseRunContext) addBindings(newBindings []core.Binding, headingPath []string) {
@@ -392,11 +388,8 @@ func (c *caseRunContext) runSetupHooks(prevPath, currPath []string) bool {
 		if hook.Kind != core.HookSetup || !shouldRunHook(hook, prevPath, currPath) {
 			continue
 		}
-		hookBindings, err := runHook(hook, c.registry, c.host, c.sessions, c.setupSessions, c.bindings, c.timeoutMs)
-		if err != nil {
+		if err := runHook(hook, c.registry, c.host, c.sessions, c.bindings, c.timeoutMs); err != nil {
 			failed = true
-		} else {
-			c.addBindings(hookBindings, hook.HeadingPath)
 		}
 	}
 	return failed
@@ -408,7 +401,7 @@ func (c *caseRunContext) runTeardownHooks(currPath, nextPath []string) bool {
 		if hook.Kind != core.HookTeardown || !shouldRunTeardownHook(hook, currPath, nextPath) {
 			continue
 		}
-		if _, err := runHook(hook, c.registry, c.host, c.sessions, c.setupSessions, c.bindings, c.timeoutMs); err != nil {
+		if err := runHook(hook, c.registry, c.host, c.sessions, c.bindings, c.timeoutMs); err != nil {
 			failed = true
 		}
 	}
@@ -449,7 +442,7 @@ func shouldRunTeardownHook(hook core.HookSpec, currPath, nextPath []string) bool
 	return currPath[depth] != nextPath[depth]
 }
 
-func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, setupSessions map[string]bool, bindings []scopedBinding, timeoutMs int) ([]core.Binding, error) {
+func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, bindings []scopedBinding, timeoutMs int) error {
 	synthetic := core.CaseSpec{
 		ID: core.SpecID{
 			File:        "_hook",
@@ -462,38 +455,31 @@ func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host
 
 	adapter, err := registry.adapterFor(synthetic)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	visible := visibleBindings(bindings, hook.HeadingPath)
 	prepared, err := prepareCase(synthetic, visible)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	session, err := sessionFor(sessions, host, adapter.Config)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if !setupSessions[adapter.Config.Name] {
-		setupSessions[adapter.Config.Name] = true
-		if err := session.Setup(); err != nil {
-			return nil, err
-		}
-	}
-
-	result, err := session.RunCase(synthetic, prepared, visible, timeoutMs)
+	resp, err := session.Exec(synthetic.ID.Ordinal, prepared.Template, timeoutMs)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if result.Status == core.StatusFailed {
-		return nil, fmt.Errorf("%s hook failed: %s", hook.Kind, result.Message)
+	if resp.Error != "" {
+		return fmt.Errorf("%s hook failed: %s", hook.Kind, resp.Error)
 	}
-	return result.Bindings, nil
+	return nil
 }
 
-func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, setupSessions map[string]bool, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {
+func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {
 	if specCase.Kind == core.CaseKindInlineExpect {
 		visible := visibleBindings(bindings, specCase.ID.HeadingPath)
 		prepared, err := prepareCase(specCase, visible)
@@ -523,14 +509,15 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 		return core.CaseResult{}, err
 	}
 
-	if !setupSessions[adapter.Config.Name] {
-		setupSessions[adapter.Config.Name] = true
-		if err := session.Setup(); err != nil {
-			return core.CaseResult{}, err
-		}
+	var result core.CaseResult
+	switch specCase.Kind {
+	case core.CaseKindCode:
+		result, err = runCodeCase(specCase, prepared, session, timeoutMs)
+	case core.CaseKindTableRow:
+		result, err = runTableRowCase(specCase, prepared, session, timeoutMs)
+	default:
+		return core.CaseResult{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
 	}
-
-	result, err := session.RunCase(specCase, prepared, visible, timeoutMs)
 	if err != nil {
 		return result, err
 	}
@@ -541,6 +528,215 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 	}
 
 	return result, nil
+}
+
+func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+	result := core.CaseResult{
+		ID:             specCase.ID,
+		Kind:           specCase.Kind,
+		Block:          specCase.Block.Descriptor(),
+		Label:          specCase.DefaultLabel(),
+		Template:       specCase.Template,
+		RenderedSource: prepared.Template,
+	}
+
+	result.Events = append(result.Events, core.Event{
+		Type:  core.EventCaseStarted,
+		ID:    result.ID,
+		Label: result.Label,
+	})
+
+	if shelladapter.IsDoctestContent(prepared.Template) {
+		return runDoctestCase(specCase, prepared, session, result, timeoutMs)
+	}
+
+	resp, err := session.Exec(specCase.ID.Ordinal, prepared.Template, timeoutMs)
+	if err != nil {
+		return result, err
+	}
+
+	if resp.Error != "" {
+		result.Status = core.StatusFailed
+		result.Message = resp.Error
+		result.Events = append(result.Events, core.Event{
+			Type:    core.EventCaseFailed,
+			ID:      result.ID,
+			Label:   result.Label,
+			Message: resp.Error,
+		})
+		return result, nil
+	}
+
+	result.Status = core.StatusPassed
+
+	// Extract captures from output
+	if resp.HasOutput && len(specCase.Block.CaptureNames) > 0 {
+		result.Bindings = captureBindings(resp.Output, specCase.Block.CaptureNames)
+	}
+
+	result.Events = append(result.Events, core.Event{
+		Type:     core.EventCasePassed,
+		ID:       result.ID,
+		Label:    result.Label,
+		Bindings: result.Bindings,
+	})
+
+	return result, nil
+}
+
+func runDoctestCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, result core.CaseResult, timeoutMs int) (core.CaseResult, error) {
+	steps := shelladapter.ParseDoctestSource(prepared.Template)
+	result.Status = core.StatusPassed
+
+	for _, step := range steps {
+		resp, err := session.Exec(specCase.ID.Ordinal, step.Command, timeoutMs)
+		if err != nil {
+			return result, err
+		}
+
+		actual, stepStatus := evalDoctestStep(resp, step.Expected)
+		result.Steps = append(result.Steps, core.DoctestStep{
+			Command:  step.Command,
+			Expected: step.Expected,
+			Actual:   actual,
+			Status:   stepStatus,
+		})
+
+		if stepStatus == core.StatusFailed {
+			result.Status = core.StatusFailed
+		}
+	}
+
+	if result.Status == core.StatusFailed {
+		result.Events = append(result.Events, core.Event{
+			Type:  core.EventCaseFailed,
+			ID:    result.ID,
+			Label: result.Label,
+		})
+	} else {
+		result.Events = append(result.Events, core.Event{
+			Type:  core.EventCasePassed,
+			ID:    result.ID,
+			Label: result.Label,
+		})
+	}
+
+	return result, nil
+}
+
+func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string, core.Status) {
+	switch {
+	case resp.Error != "":
+		if expected == "" || !shelladapter.MatchWithWildcard(resp.Error, expected) {
+			return resp.Error, core.StatusFailed
+		}
+		return resp.Error, core.StatusPassed
+	case resp.HasOutput:
+		actual := shelladapter.ExecResponseToString(resp.Output)
+		if expected != "" && !shelladapter.MatchWithWildcard(actual, expected) {
+			return actual, core.StatusFailed
+		}
+		return actual, core.StatusPassed
+	default:
+		if expected != "" {
+			return "", core.StatusFailed
+		}
+		return "", core.StatusPassed
+	}
+}
+
+func runTableRowCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+	result := core.CaseResult{
+		ID:            specCase.ID,
+		Kind:          specCase.Kind,
+		Check:         specCase.Check,
+		Label:         specCase.DefaultLabel(),
+		Columns:       append([]string(nil), specCase.Columns...),
+		TemplateCells: append([]string(nil), specCase.Cells...),
+		RenderedCells: append([]string(nil), prepared.Cells...),
+		RowNumber:     specCase.RowNumber,
+	}
+
+	result.Events = append(result.Events, core.Event{
+		Type:  core.EventCaseStarted,
+		ID:    result.ID,
+		Label: result.Label,
+	})
+
+	resp, err := session.Assert(specCase.ID.Ordinal, prepared.Check, prepared.CheckParams, prepared.Columns, prepared.Cells, timeoutMs)
+	if err != nil {
+		return result, err
+	}
+
+	switch resp.Type {
+	case "passed":
+		result.Status = core.StatusPassed
+		if resp.Actual != "" {
+			result.Actual = resp.Actual
+		}
+		result.Events = append(result.Events, core.Event{
+			Type:  core.EventCasePassed,
+			ID:    result.ID,
+			Label: result.Label,
+		})
+	case "failed":
+		result.Status = core.StatusFailed
+		result.Message = resp.Message
+		result.Expected = resp.Expected
+		result.Actual = resp.Actual
+		if resp.Label != "" {
+			result.Label = resp.Label
+		}
+		result.Events = append(result.Events, core.Event{
+			Type:     core.EventCaseFailed,
+			ID:       result.ID,
+			Label:    result.Label,
+			Message:  resp.Message,
+			Expected: resp.Expected,
+			Actual:   resp.Actual,
+		})
+	default:
+		return result, fmt.Errorf("unexpected assert response type %q", resp.Type)
+	}
+
+	return result, nil
+}
+
+func captureBindings(rawOutput json.RawMessage, captureNames []string) []core.Binding {
+	// Try to parse as string first
+	var strValue string
+	if err := json.Unmarshal(rawOutput, &strValue); err == nil {
+		// String output — split by newlines for captures
+		lines := strings.Split(strValue, "\n")
+		var bindings []core.Binding
+		for i, name := range captureNames {
+			var value any = ""
+			if i < len(lines) {
+				value = lines[i]
+			}
+			bindings = append(bindings, core.Binding{Name: name, Value: value})
+		}
+		return bindings
+	}
+
+	// Non-string output (object, array, number, etc.) — store as structured value
+	if len(captureNames) == 1 {
+		var parsed interface{}
+		if err := json.Unmarshal(rawOutput, &parsed); err == nil {
+			return []core.Binding{{Name: captureNames[0], Value: parsed}}
+		}
+	}
+
+	// Fallback: store raw JSON string
+	var bindings []core.Binding
+	for i, name := range captureNames {
+		if i == 0 {
+			bindings = append(bindings, core.Binding{Name: name, Value: string(rawOutput)})
+		} else {
+			bindings = append(bindings, core.Binding{Name: name, Value: ""})
+		}
+	}
+	return bindings
 }
 
 func runInlineExpect(prepared core.CaseSpec, visible []core.Binding) core.CaseResult {
@@ -688,7 +884,7 @@ func headingPathPrefix(prefix []string, current []string) bool {
 	return true
 }
 
-var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {
 	prepared := specCase
@@ -729,7 +925,7 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 }
 
 func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
-	values := make(map[string]string, len(bindings))
+	values := make(map[string]any, len(bindings))
 	for _, binding := range bindings {
 		values[binding.Name] = binding.Value
 	}
@@ -744,12 +940,24 @@ func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
 			// escaped \${...} → literal ${...}
 			return raw[1:]
 		}
-		value, ok := values[match[2]]
+		ref := match[2]
+		parts := strings.SplitN(ref, ".", 2)
+		rootName := parts[0]
+		rootValue, ok := values[rootName]
 		if !ok {
-			unresolved = fmt.Errorf("missing runtime binding for %q", match[2])
+			unresolved = fmt.Errorf("missing runtime binding for %q", rootName)
 			return raw
 		}
-		return value
+		if len(parts) == 1 {
+			return valueToString(rootValue)
+		}
+		// Dot-path access
+		resolved, err := resolveValue(rootValue, strings.Split(parts[1], "."))
+		if err != nil {
+			unresolved = fmt.Errorf("cannot resolve %q: %w", ref, err)
+			return raw
+		}
+		return valueToString(resolved)
 	})
 	if unresolved != nil {
 		return "", unresolved
@@ -757,12 +965,43 @@ func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
 	return rendered, nil
 }
 
+func resolveValue(value any, path []string) (any, error) {
+	current := value
+	for _, key := range path {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("cannot access %q on non-object value", key)
+		}
+		next, exists := m[key]
+		if !exists {
+			return nil, fmt.Errorf("key %q not found", key)
+		}
+		current = next
+	}
+	return current, nil
+}
+
+func valueToString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case nil:
+		return ""
+	default:
+		data, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(data)
+	}
+}
+
 func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 	result := core.CaseResult{
 		ID:        specCase.ID,
 		Kind:      specCase.Kind,
 		Block:     specCase.Block.Descriptor(),
-		Fixture:   specCase.Fixture,
+		Check:     specCase.Check,
 		Label:     specCase.DefaultLabel(),
 		Columns:   append([]string(nil), specCase.Columns...),
 		RowNumber: specCase.RowNumber,

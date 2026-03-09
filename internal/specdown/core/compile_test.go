@@ -39,7 +39,7 @@ func TestCompileDocumentAcceptsVisibleCapturedVariable(t *testing.T) {
 	}
 }
 
-func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
+func TestCompileDocumentAcceptsVariablesInCheckRows(t *testing.T) {
 	doc, err := ParseDocument("specs/pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -51,7 +51,7 @@ func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
 		"",
 		"### Table Check",
 		"",
-		"> fixture:board-exists",
+		"> check:board-exists",
 		"| board | exists |",
 		"| --- | --- |",
 		"| ${boardName} | yes |",
@@ -70,7 +70,7 @@ func TestCompileDocumentAcceptsVariablesInFixtureRows(t *testing.T) {
 	if len(plan.Cases) != 3 {
 		t.Fatalf("expected 3 cases, got %d", len(plan.Cases))
 	}
-	if plan.Cases[1].Kind != CaseKindTableRow || plan.Cases[1].Fixture != "board-exists" {
+	if plan.Cases[1].Kind != CaseKindTableRow || plan.Cases[1].Check != "board-exists" {
 		t.Fatalf("unexpected table case %#v", plan.Cases[1])
 	}
 	if got := plan.Cases[1].References; len(got) != 1 || got[0] != "boardName" {

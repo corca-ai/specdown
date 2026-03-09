@@ -1,7 +1,7 @@
 # Spec Syntax
 
 This document builds up spec syntax from simple to complex:
-headings, executable blocks, variables, fixture tables, hooks, and frontmatter.
+headings, executable blocks, variables, check tables, hooks, and frontmatter.
 
 ## Headings and Prose
 
@@ -15,18 +15,18 @@ Executable blocks are fenced code blocks whose info string starts with a recogni
 | Prefix | Meaning |
 |--------|---------|
 | `run:<target>` | Executable block |
-| `doctest:<target>` | Inline command/output verification block |
 
 The `<target>` is defined by the adapter, not the core.
+Blocks whose content starts with `$ ` lines are auto-detected as doctest-style
+and run each command individually with inline output comparison.
 
-The parser must recognize `run` and `doctest` as executable block kinds.
+The parser must recognize `run` as the executable block kind.
 
-> fixture:block-kind
+> check:block-kind
 
 | info | kind | target |
 | --- | --- | --- |
 | run:shell | run | shell |
-| doctest:shell | doctest | shell |
 
 Other prefixes (e.g. `verify:`, `test:`) are not recognized and produce
 plain, non-executable code blocks. A spec containing only unrecognized
@@ -42,14 +42,14 @@ printf '# T\n\n- [U](unrecognized.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/unrecognized-cfg.json
 ```
 
-```doctest:shell
+```run:shell
 $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | tail -1
 total: 1 spec(s), 0 case(s), 0 alloy check(s)
 ```
 
 The warnings appear on stderr:
 
-```doctest:shell
+```run:shell
 $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^warning:' | wc -l | tr -d ' '
 2
 ```
@@ -61,7 +61,7 @@ To suppress warnings for specific prefixes, add `ignorePrefixes` to `specdown.js
 printf '{"entry":"index.spec.md","adapters":[],"ignorePrefixes":["verify","test"]}' > .tmp-test/unrecognized-cfg.json
 ```
 
-```doctest:shell
+```run:shell
 $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^warning:' | wc -l | tr -d ' '
 0
 ```
@@ -85,8 +85,8 @@ The comment prefixes recognized are `# `, `// `, and `-- `.
 Only the text after the prefix becomes the caption;
 the prefix itself and leading/trailing whitespace are stripped.
 
-Doctest blocks never get captions — they use a different rendering model
-with command/output pairs.
+Blocks with doctest content (`$ ` lines) never get captions — they use
+a different rendering model with command/output pairs.
 
 Here is an example: the following block's first line is a comment,
 so the report will render it collapsed with the caption
@@ -107,7 +107,7 @@ test 1 -eq 1
 
 A block can capture its output into a variable with `-> $varName`.
 
-> fixture:block-kind
+> check:block-kind
 | info | kind | target |
 | --- | --- | --- |
 | run:shell -> $id | run | shell |
@@ -147,32 +147,30 @@ test "${escapeTest}" = "ok"
 
 ## Doctest Blocks
 
-A `doctest:<target>` block pairs shell commands with their expected output
-inline, similar to Python's doctest. Lines starting with `$ ` are commands;
-subsequent lines until the next `$ ` or end of block are the expected output.
+A `run:<target>` block whose content starts with `$ ` lines is auto-detected
+as doctest-style. Lines starting with `$ ` are commands; subsequent lines
+until the next `$ ` or end of block are the expected output.
 
 Commands are executed sequentially. On the first output mismatch, the block
 fails with `expected` and `actual` values for diffing. Commands without
 expected output lines are executed but only checked for exit status.
 
-Doctest blocks do not support variable capture (`-> $name`).
-
-```doctest:shell
+```run:shell
 $ echo hello
 hello
 $ echo one two three
 one two three
 ```
 
-A doctest block with no expected output still verifies the command succeeds.
+A doctest-style block with no expected output still verifies the command succeeds.
 
-```doctest:shell
+```run:shell
 $ true
 ```
 
 Multi-line expected output is matched exactly.
 
-```doctest:shell
+```run:shell
 $ printf 'line1\nline2\nline3'
 line1
 line2
@@ -181,7 +179,7 @@ line3
 
 Arithmetic and pipelines work as expected.
 
-```doctest:shell
+```run:shell
 $ echo $((2 + 3))
 5
 $ seq 3 | tr '\n' '+' | sed 's/+$//'
@@ -190,7 +188,7 @@ $ seq 3 | tr '\n' '+' | sed 's/+$//'
 
 Commands that produce no output show only the prompt line.
 
-```doctest:shell
+```run:shell
 $ mkdir -p /tmp/specdown-test
 $ touch /tmp/specdown-test/file.txt
 $ test -f /tmp/specdown-test/file.txt
@@ -202,7 +200,7 @@ A line containing exactly `...` in the expected output matches zero or more
 lines in the actual output. This is useful when output contains timestamps,
 PIDs, temporary paths, or other values that change between runs.
 
-```doctest:shell
+```run:shell
 $ echo hello && date && echo goodbye
 hello
 ...
@@ -211,7 +209,7 @@ goodbye
 
 A wildcard at the end matches any trailing output.
 
-```doctest:shell
+```run:shell
 $ printf 'header\ndetail1\ndetail2'
 header
 ...
@@ -219,7 +217,7 @@ header
 
 A wildcard at the start matches any leading output.
 
-```doctest:shell
+```run:shell
 $ printf 'preamble\nresult'
 ...
 result
@@ -227,14 +225,14 @@ result
 
 A lone `...` matches any output.
 
-```doctest:shell
+```run:shell
 $ date
 ...
 ```
 
 Multiple wildcards can appear in a single expected block.
 
-```doctest:shell
+```run:shell
 $ printf 'a\nb\nc\nd\ne'
 a
 ...
@@ -245,7 +243,7 @@ e
 
 When no `...` line is present, matching is still exact (backward compatible).
 
-```doctest:shell !fail
+```run:shell !fail
 $ echo hello
 world
 ```
@@ -270,47 +268,47 @@ A command that exits non-zero is normally a failure. With `!fail`, it passes.
 false
 ```
 
-### Failing doctest with output mismatch
+### Failing doctest-style block with output mismatch
 
-This doctest intentionally shows the wrong expected output.
+This block intentionally shows the wrong expected output.
 The `!fail` modifier makes the mismatch count as a pass.
 
-```doctest:shell !fail
+```run:shell !fail
 $ echo hello
 goodbye
 ```
 
-### Multi-step doctest mismatch
+### Multi-step doctest-style mismatch
 
 When multiple commands are present, the block fails fast on the first
 mismatch. Passed steps show actual output in green; the failed step
 shows actual output in red with the expected value below it.
 
-```doctest:shell !fail
+```run:shell !fail
 $ echo first
 first
 $ echo second
 WRONG
 ```
 
-### Doctest with multi-line mismatch
+### Doctest-style block with multi-line mismatch
 
 Multi-line expected output is compared exactly. The entire actual
 output is shown in red on mismatch.
 
-```doctest:shell !fail
+```run:shell !fail
 $ printf 'alpha\nbeta'
 alpha
 gamma
 ```
 
-## Fixture Tables
+## Check Tables
 
-A Markdown table becomes executable when preceded by a fixture directive.
+A Markdown table becomes executable when preceded by a check directive.
 
-The directive is a blockquote of the form `> fixture:name`.
+The directive is a blockquote of the form `> check:name`.
 The first row is the header. Each subsequent row is an independent test case.
-Fixture names are defined by the adapter, not the core.
+Check names are defined by the adapter, not the core.
 
 ### Cell escaping
 
@@ -326,50 +324,50 @@ before sending to the adapter.
 Adapters always receive unescaped values.
 The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 
-> fixture:cell-escape
+> check:cell-escape
 | input | expected |
 | --- | --- |
 | hello | hello |
 | line1\nline2 | line1\nline2 |
 | a\\\|b | a\\\|b |
 
-### Fixture parameters
+### Check parameters
 
-Fixtures can accept parameters via `(key=value)` syntax.
-Parameters are passed to the adapter as `fixtureParams` in the `runCase` message.
-Multiple parameters are comma-separated: `> fixture:name(key1=val1, key2=val2)`.
+Checks can accept parameters via `(key=value)` syntax.
+Parameters are passed to the adapter as `checkParams` in the `assert` message.
+Multiple parameters are comma-separated: `> check:name(key1=val1, key2=val2)`.
 
-Parameters let one fixture definition handle many scenarios.
-Instead of registering separate fixtures for each endpoint or mode,
-register a single generic fixture and pass the differences as parameters:
+Parameters let one check definition handle many scenarios.
+Instead of registering separate checks for each endpoint or mode,
+register a single generic check and pass the differences as parameters:
 
 ```markdown
-> fixture:check(endpoint=/api/users, mode=object)
+> check:api(endpoint=/api/users, mode=object)
 | field | expected |
 | name  | alice    |
 
-> fixture:check(endpoint=/api/orders, mode=array, count=2)
+> check:api(endpoint=/api/orders, mode=array, count=2)
 | index | status  |
 | 0     | SUCCESS |
 | 1     | PENDING |
 ```
 
-The adapter reads `fixtureParams.endpoint` and `fixtureParams.mode`
-to decide how to fetch and validate, eliminating per-endpoint fixture code.
+The adapter reads `checkParams.endpoint` and `checkParams.mode`
+to decide how to fetch and validate, eliminating per-endpoint check code.
 
-### Parameterized fixture call
+### Parameterized check call
 
-A fixture directive with parameters but no following table creates a single
-assertion case. The adapter receives a `runCase` with `kind: "tableRow"`,
-the fixture name, `fixtureParams` populated, and empty `columns`/`cells`.
+A check directive with parameters but no following table creates a single
+assertion case. The adapter receives an `assert` message with
+the check name, `checkParams` populated, and empty `columns`/`cells`.
 
 This is useful for inline assertions that don't warrant a full table:
 
 ```markdown
-> fixture:check-user(field=plan, expected=STANDARD)
+> check:check-user(field=plan, expected=STANDARD)
 ```
 
-A fixture directive without parameters and without a table is a compile-time error.
+A check directive without parameters and without a table is a compile-time error.
 
 ## Inline Elements
 
@@ -410,21 +408,21 @@ that expected failures do not cause a non-zero exit code.
 This deliberately wrong assertion is an expected failure:
 `expect: hello == goodbye !fail`.
 
-### Inline fixture call
+### Inline check call
 
-A backtick code span of the form `` `fixture:name(key=value)` `` creates an inline
-fixture assertion. It reuses the adapter protocol with `kind: "tableRow"`,
-the fixture name, and `fixtureParams` populated with empty `columns`/`cells`.
+A backtick code span of the form `` `check:name(key=value)` `` creates an inline
+check assertion. It reuses the adapter protocol with `kind: "tableRow"`,
+the check name, and `checkParams` populated with empty `columns`/`cells`.
 
 ```markdown
-The file `fixture:file-check(path=/tmp/data.txt, exists=yes)` was created.
+The file `check:file-check(path=/tmp/data.txt, exists=yes)` was created.
 ```
 
 When the adapter returns an `actual` value in its passed response, the inline
-fixture displays the actual value as the main content with the fixture name
+check displays the actual value as the main content with the check name
 shown as a small ruby annotation above it.
 
-For example, a + b is `fixture:echo-value(value=3)`.
+For example, a + b is `check:echo-value(value=3)`.
 
 Multiple inline elements can appear in the same paragraph.
 

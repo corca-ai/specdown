@@ -23,8 +23,8 @@ type AdapterConfig struct {
 	Name        string   `json:"name"`
 	Command     []string `json:"command"`
 	Blocks      []string `json:"blocks"`
-	Fixtures    []string `json:"fixtures,omitempty"`
-	FixturesDir string   `json:"fixturesDir,omitempty"`
+	Checks    []string `json:"checks,omitempty"`
+	ChecksDir string   `json:"checksDir,omitempty"`
 	BuiltinShell bool    `json:"-"` // set internally for the auto-registered shell adapter
 }
 
@@ -78,8 +78,8 @@ func validateAdapters(adapters []AdapterConfig) error {
 		if len(adapter.Command) == 0 {
 			return fmt.Errorf("adapter %q must define a command", adapter.Name)
 		}
-		if len(adapter.Blocks) == 0 && len(adapter.Fixtures) == 0 {
-			return fmt.Errorf("adapter %q must declare at least one block or fixture", adapter.Name)
+		if len(adapter.Blocks) == 0 && len(adapter.Checks) == 0 {
+			return fmt.Errorf("adapter %q must declare at least one block or check", adapter.Name)
 		}
 	}
 	return nil

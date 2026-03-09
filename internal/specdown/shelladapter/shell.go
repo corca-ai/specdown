@@ -2,6 +2,7 @@ package shelladapter
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,85 +12,103 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 )
 
-// RunCase executes a single shell adapter case and returns the response.
-// fixturesDir is the directory containing fixture scripts (used for tableRow cases).
-func RunCase(id int, c *adapterprotocol.Case, fixturesDir string) adapterprotocol.Response {
-	if c == nil {
-		return adapterprotocol.Response{
-			ID:      id,
-			Type:    "failed",
-			Message: "missing case payload",
-		}
-	}
+// ExecRawResponse is the raw JSON map returned by Exec, suitable for encoding as a line.
+type ExecRawResponse map[string]interface{}
 
-	switch c.Kind {
-	case "code":
-		return runCodeCase(id, c)
-	case "tableRow":
-		return runTableRowCase(id, c, fixturesDir)
-	default:
-		return adapterprotocol.Response{
-			ID:      id,
-			Type:    "failed",
-			Message: fmt.Sprintf("unsupported case kind %q", c.Kind),
-		}
-	}
-}
-
-func runCodeCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
-	if strings.HasPrefix(c.Block, "doctest:") {
-		return runDoctestCase(id, c)
-	}
-
-	source := c.Source
-
+// Exec runs source via sh -c and returns a raw JSON response with "output" or "error" key.
+func Exec(id int, source string) ExecRawResponse {
 	cmd := exec.Command("sh", "-c", source)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
-
 	if err != nil {
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
 			message = err.Error()
 		}
-		return adapterprotocol.Response{
+		return ExecRawResponse{"id": id, "error": message}
+	}
+
+	output := strings.TrimRight(stdout.String(), "\n")
+	return ExecRawResponse{"id": id, "output": output}
+}
+
+// Assert runs a check script and returns an AssertResponse.
+func Assert(id int, req *adapterprotocol.AssertRequest, checksDir string) adapterprotocol.AssertResponse {
+	if req == nil {
+		return adapterprotocol.AssertResponse{
+			ID:      id,
+			Type:    "failed",
+			Message: "missing assert request",
+		}
+	}
+
+	// Build environment from check params and cells.
+	env := os.Environ()
+	if req.CheckParams != nil {
+		for k, v := range req.CheckParams {
+			env = append(env, fmt.Sprintf("CHECK_PARAM_%s=%s", strings.ToUpper(k), v))
+		}
+	}
+	for i, col := range req.Columns {
+		value := ""
+		if i < len(req.Cells) {
+			value = req.Cells[i]
+		}
+		env = append(env, fmt.Sprintf("COL_%s=%s", strings.ToUpper(strings.ReplaceAll(col, "-", "_")), value))
+	}
+	env = append(env, fmt.Sprintf("CHECK=%s", req.Check))
+
+	script := filepath.Join(checksDir, req.Check+".sh")
+	cmd := exec.Command("sh", script)
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = strings.TrimSpace(stdout.String())
+		}
+		if message == "" {
+			message = err.Error()
+		}
+		return adapterprotocol.AssertResponse{
 			ID:      id,
 			Type:    "failed",
 			Message: message,
 		}
 	}
 
-	// Capture stdout into bindings if capture names are specified.
-	var bindings []adapterprotocol.Binding
-	if len(c.CaptureNames) > 0 {
-		output := strings.TrimRight(stdout.String(), "\n")
-		lines := strings.SplitN(output, "\n", len(c.CaptureNames))
-		for i, name := range c.CaptureNames {
-			value := ""
-			if i < len(lines) {
-				value = lines[i]
-			}
-			bindings = append(bindings, adapterprotocol.Binding{
-				Name:  name,
-				Value: value,
-			})
-		}
+	resp := adapterprotocol.AssertResponse{
+		ID:   id,
+		Type: "passed",
 	}
-
-	return adapterprotocol.Response{
-		ID:       id,
-		Type:     "passed",
-		Bindings: bindings,
+	if actual := strings.TrimSpace(stdout.String()); actual != "" {
+		resp.Actual = actual
 	}
+	return resp
 }
 
 // DoctestStep represents a single command/expected-output pair in a doctest block.
 type DoctestStep struct {
 	Command  string
 	Expected string
+}
+
+// IsDoctestContent returns true if the source starts with a `$ ` line.
+func IsDoctestContent(source string) bool {
+	for _, line := range strings.Split(source, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		return strings.HasPrefix(line, "$ ")
+	}
+	return false
 }
 
 func ParseDoctestSource(source string) []DoctestStep {
@@ -118,72 +137,6 @@ func ParseDoctestSource(source string) []DoctestStep {
 	}
 	flush()
 	return steps
-}
-
-func runDoctestCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
-	steps := ParseDoctestSource(c.Source)
-	if len(steps) == 0 {
-		return adapterprotocol.Response{
-			ID:      id,
-			Type:    "failed",
-			Message: "doctest block contains no $ commands",
-		}
-	}
-
-	var resultSteps []adapterprotocol.DoctestStep
-	for _, step := range steps {
-		cmd := exec.Command("sh", "-c", step.Command)
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-
-		if err := cmd.Run(); err != nil {
-			message := strings.TrimSpace(stderr.String())
-			if message == "" {
-				message = err.Error()
-			}
-			resultSteps = append(resultSteps, adapterprotocol.DoctestStep{
-				Command:  step.Command,
-				Expected: step.Expected,
-				Actual:   message,
-				Status:   "failed",
-			})
-			return adapterprotocol.Response{
-				ID:    id,
-				Type:  "failed",
-				Steps: resultSteps,
-			}
-		}
-
-		actual := strings.TrimRight(stdout.String(), "\n")
-		expected := step.Expected
-		resultSteps = append(resultSteps, adapterprotocol.DoctestStep{
-			Command:  step.Command,
-			Expected: expected,
-			Actual:   actual,
-			Status:   stepStatus(actual, expected),
-		})
-		if !MatchWithWildcard(actual, expected) {
-			return adapterprotocol.Response{
-				ID:    id,
-				Type:  "failed",
-				Steps: resultSteps,
-			}
-		}
-	}
-
-	return adapterprotocol.Response{
-		ID:    id,
-		Type:  "passed",
-		Steps: resultSteps,
-	}
-}
-
-func stepStatus(actual, expected string) string {
-	if MatchWithWildcard(actual, expected) {
-		return "passed"
-	}
-	return "failed"
 }
 
 // MatchWithWildcard checks if actual matches expected, where a line
@@ -238,51 +191,37 @@ func matchLines(actual, expected []string, ai, ei int) bool {
 	return ai >= len(actual)
 }
 
-func runTableRowCase(id int, c *adapterprotocol.Case, fixturesDir string) adapterprotocol.Response {
-	// Build environment from fixture params and cells.
-	env := os.Environ()
-	if c.FixtureParams != nil {
-		for k, v := range c.FixtureParams {
-			env = append(env, fmt.Sprintf("FIXTURE_PARAM_%s=%s", strings.ToUpper(k), v))
-		}
+// StepStatus returns "passed" or "failed" for a doctest step.
+func StepStatus(actual, expected string) string {
+	if MatchWithWildcard(actual, expected) {
+		return "passed"
 	}
-	for i, col := range c.Columns {
-		value := ""
-		if i < len(c.Cells) {
-			value = c.Cells[i]
-		}
-		env = append(env, fmt.Sprintf("COL_%s=%s", strings.ToUpper(strings.ReplaceAll(col, "-", "_")), value))
-	}
-	env = append(env, fmt.Sprintf("FIXTURE=%s", c.Fixture))
+	return "failed"
+}
 
-	script := filepath.Join(fixturesDir, c.Fixture+".sh")
-	cmd := exec.Command("sh", script)
-	cmd.Env = env
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+// ExecForDoctest runs a single command and returns stdout/stderr.
+func ExecForDoctest(command string) (stdout string, errMsg string, ok bool) {
+	cmd := exec.Command("sh", "-c", command)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
 
 	if err := cmd.Run(); err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = strings.TrimSpace(stdout.String())
-		}
+		message := strings.TrimSpace(errBuf.String())
 		if message == "" {
 			message = err.Error()
 		}
-		return adapterprotocol.Response{
-			ID:      id,
-			Type:    "failed",
-			Message: message,
-		}
+		return "", message, false
 	}
+	return strings.TrimRight(outBuf.String(), "\n"), "", true
+}
 
-	resp := adapterprotocol.Response{
-		ID:   id,
-		Type: "passed",
+// ExecResponseToString extracts a string from an ExecResponse output field.
+func ExecResponseToString(raw json.RawMessage) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		// Not a string — return raw JSON
+		return string(raw)
 	}
-	if actual := strings.TrimSpace(stdout.String()); actual != "" {
-		resp.Actual = actual
-	}
-	return resp
+	return s
 }

@@ -21,8 +21,8 @@ type CaseSpec struct {
 	ID            SpecID
 	Kind          CaseKind
 	Block         BlockSpec
-	Fixture       string
-	FixtureParams map[string]string
+	Check       string
+	CheckParams map[string]string
 	Template      string
 	ExpectValue   string
 	ExpectFail    bool
@@ -211,7 +211,7 @@ func documentOrdinals(doc Document) []*SpecID {
 			ids = append(ids, n.ID)
 		case AlloyRefNode:
 			ids = append(ids, n.ID)
-		case FixtureCallNode:
+		case CheckCallNode:
 			ids = append(ids, n.ID)
 		case TableNode:
 			for i := range n.Rows {
@@ -250,8 +250,8 @@ func executableCases(doc Document) []CaseSpec {
 			cases = appendCodeCase(cases, current)
 		case TableNode:
 			cases = appendTableCases(cases, current)
-		case FixtureCallNode:
-			cases = appendFixtureCallCase(cases, current)
+		case CheckCallNode:
+			cases = appendCheckCallCase(cases, current)
 		case ProseNode:
 			cases = appendInlineCases(cases, current)
 		}
@@ -273,12 +273,12 @@ func appendInlineCases(cases []CaseSpec, node ProseNode) []CaseSpec {
 				ExpectValue: inline.ExpectValue,
 				ExpectFail:  inline.ExpectFail,
 			})
-		case InlineFixture:
+		case InlineCheck:
 			cases = append(cases, CaseSpec{
 				ID:            *inline.ID,
 				Kind:          CaseKindTableRow,
-				Fixture:       inline.Fixture,
-				FixtureParams: inline.FixtureParams,
+				Check:       inline.Check,
+				CheckParams: inline.CheckParams,
 			})
 		}
 	}
@@ -297,20 +297,20 @@ func appendCodeCase(cases []CaseSpec, block CodeBlockNode) []CaseSpec {
 	})
 }
 
-func appendFixtureCallCase(cases []CaseSpec, node FixtureCallNode) []CaseSpec {
+func appendCheckCallCase(cases []CaseSpec, node CheckCallNode) []CaseSpec {
 	if node.ID == nil {
 		return cases
 	}
 	return append(cases, CaseSpec{
 		ID:            *node.ID,
 		Kind:          CaseKindTableRow,
-		Fixture:       node.Fixture,
-		FixtureParams: node.FixtureParams,
+		Check:       node.Check,
+		CheckParams: node.CheckParams,
 	})
 }
 
 func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
-	if table.Fixture == "" {
+	if table.Check == "" {
 		return cases
 	}
 	for index, row := range table.Rows {
@@ -320,8 +320,8 @@ func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
 		cases = append(cases, CaseSpec{
 			ID:            *row.ID,
 			Kind:          CaseKindTableRow,
-			Fixture:       table.Fixture,
-			FixtureParams: table.FixtureParams,
+			Check:       table.Check,
+			CheckParams: table.CheckParams,
 			Columns:       append([]string(nil), table.Columns...),
 			Cells:         append([]string(nil), row.Cells...),
 			RowNumber:     index + 1,
@@ -330,7 +330,7 @@ func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
 	return cases
 }
 
-var variableRefPattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var variableRefPattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 
 func variableReferences(source string) []string {
 	matches := variableRefPattern.FindAllStringSubmatch(source, -1)
@@ -344,7 +344,11 @@ func variableReferences(source string) []string {
 		if match[1] == `\` {
 			continue // escaped \${...}
 		}
+		// Extract root name (before first dot) for scope checking
 		name := match[2]
+		if idx := strings.Index(name, "."); idx >= 0 {
+			name = name[:idx]
+		}
 		if _, ok := seen[name]; ok {
 			continue
 		}
@@ -388,7 +392,7 @@ func (c CaseSpec) TargetKey() string {
 	case CaseKindInlineExpect:
 		return "expect"
 	default:
-		return c.Fixture
+		return c.Check
 	}
 }
 
@@ -399,7 +403,7 @@ func (c CaseSpec) DisplayKind() string {
 	case CaseKindInlineExpect:
 		return "expect"
 	default:
-		return "fixture:" + c.Fixture
+		return "check:" + c.Check
 	}
 }
 

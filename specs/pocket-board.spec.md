@@ -43,7 +43,7 @@ board "${boardName}-archive" should not exist
 
 Board existence can be independently verified for each row in a table.
 
-> fixture:board-exists
+> check:board-exists
 | board | exists |
 | --- | --- |
 | ${boardName} | yes |

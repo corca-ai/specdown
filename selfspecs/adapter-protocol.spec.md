@@ -9,63 +9,77 @@ Any language works as long as it reads JSON from stdin and writes JSON to stdout
 ## Protocol Flow
 
 1. specdown launches the adapter process
-2. specdown sends a `setup` message (no response required)
-3. specdown sends `runCase` messages in document order, each with an integer `id`
-4. The adapter responds to each case with `passed` or `failed`, echoing the `id`
-5. specdown sends a `teardown` message (no response required)
+2. specdown sends `exec` or `assert` messages in document order, each with an integer `id`
+3. The adapter responds to each message, echoing the `id`
+4. When the spec run finishes, specdown closes stdin and waits for the process to exit
 
-A single adapter process handles multiple `runCase` requests during one spec run.
+A single adapter process handles multiple requests during one spec run.
 The adapter can maintain process-local state across requests.
-Use this to cache data: for example, when a fixture table has many rows
+Use this to cache data: for example, when a check table has many rows
 that all query the same endpoint, fetch once on the first row
 and reuse the cached response for subsequent rows.
 
-## Request Format
+## Exec Request
 
-For executable blocks (`kind: "code"`):
+For executable blocks:
 
 ```json
 {
-  "type": "runCase",
+  "type": "exec",
   "id": 1,
-  "case": {
-    "kind": "code",
-    "block": "run:myapp",
-    "source": "create-board",
-    "captureNames": ["boardName"],
-    "bindings": [{"name": "x", "value": "1"}]
-  }
+  "source": "create-board"
 }
 ```
 
-For fixture table rows (`kind: "tableRow"`):
+Variables in `source` are already substituted by the engine.
+The adapter executes the source and returns the result.
+
+## Exec Response
+
+An exec response must contain exactly one of `"output"` or `"error"` keys.
+Key presence determines success or failure — not the value.
+
+```json
+{"id": 1, "output": "board-1"}
+{"id": 1, "output": ""}
+{"id": 1, "error": "command not found"}
+```
+
+| Key | Description |
+|-----|-------------|
+| `id` | Correlation ID, must echo the request `id` |
+| `output` | Present on success. Can be any JSON value (string, object, null, etc.) |
+| `error` | Present on failure. Error message string |
+
+The engine handles variable capture: if the block has `-> $var`, the engine
+extracts the output value. For string output, lines are split and mapped to
+capture names in order. For structured (non-string) output, the value is
+stored as-is and accessible via dot-path syntax (`${result.field}`).
+
+## Assert Request
+
+For check table rows and check calls:
 
 ```json
 {
-  "type": "runCase",
+  "type": "assert",
   "id": 2,
-  "case": {
-    "kind": "tableRow",
-    "fixture": "board-exists",
-    "fixtureParams": {"user": "alan"},
-    "columns": ["board", "exists"],
-    "cells": ["board-1", "yes"],
-    "bindings": []
-  }
+  "check": "board-exists",
+  "checkParams": {"user": "alan"},
+  "columns": ["board", "exists"],
+  "cells": ["board-1", "yes"]
 }
 ```
 
-Variables in `source` and `cells` are already substituted.
+Variables in `cells` are already substituted.
 Cell escape sequences are already resolved.
-The adapter can process values directly without additional substitution.
 
-## Response Format
+## Assert Response
 
 ```json
-{"id": 1, "type": "passed"}
-{"id": 1, "type": "passed", "bindings": [{"name": "boardName", "value": "board-1"}]}
-{"id": 1, "type": "failed", "message": "expected 3, got 4"}
-{"id": 1, "type": "failed", "message": "mismatch", "expected": "foo", "actual": "bar", "label": "row description"}
+{"id": 2, "type": "passed"}
+{"id": 2, "type": "failed", "message": "expected 3, got 4"}
+{"id": 2, "type": "failed", "message": "mismatch", "expected": "foo", "actual": "bar", "label": "row description"}
 ```
 
 | Field | Description |
@@ -75,40 +89,12 @@ The adapter can process values directly without additional substitution.
 | `message` | Error description (failed only) |
 | `expected` | Expected value for structured diff (optional) |
 | `actual` | Actual value for structured diff (optional) |
-| `label` | Human-readable row identifier for debugging, overrides the default `row N` format (optional) |
-| `bindings` | Captured variables to pass to subsequent cases (passed only) |
-| `steps` | Per-command results for doctest blocks (optional, see below) |
-
-### Doctest Steps
-
-For `doctest:*` blocks, the adapter returns a `steps` array in the response.
-Each step records one command and its result:
-
-```json
-{
-  "id": 1,
-  "type": "passed",
-  "steps": [
-    {"command": "echo hello", "expected": "hello", "actual": "hello", "status": "passed"},
-    {"command": "echo world", "expected": "world", "actual": "world", "status": "passed"}
-  ]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `command` | The command that was executed |
-| `expected` | Expected output from the spec |
-| `actual` | Actual output from execution |
-| `status` | `"passed"` or `"failed"` |
-
-On the first mismatch, the block fails. Steps before the failure have status `"passed"`;
-the failing step has status `"failed"`.
+| `label` | Human-readable row identifier, overrides default `row N` format (optional) |
 
 ## Registration
 
 Adapters declare their capabilities in `specdown.json`.
-specdown routes each case to the adapter that declared the matching block or fixture.
+specdown routes each case to the adapter that declared the matching block or check.
 Capabilities are declared in config, not negotiated at runtime.
 
 ```json
@@ -117,7 +103,7 @@ Capabilities are declared in config, not negotiated at runtime.
     "name": "myapp",
     "command": ["python3", "./tools/adapter.py"],
     "blocks": ["run:myapp"],
-    "fixtures": ["user-exists"]
+    "checks": ["user-exists"]
   }]
 }
 ```
@@ -126,13 +112,12 @@ Capabilities are declared in config, not negotiated at runtime.
 
 - A non-zero exit indicates an adapter crash or infrastructure failure, not a case failure
 - Only protocol messages are written to stdout; stderr is for diagnostic output
-- Adapters may ignore `setup`/`teardown` (no response required)
 - Built-in adapters follow the same protocol contract (see below)
 
 ## Built-in Shell Adapter
 
 The shell adapter is the only built-in adapter. It handles `run:shell`
-and `doctest:shell` blocks without any adapter configuration.
+blocks without any adapter configuration.
 
 ### Execution Model
 
@@ -145,26 +130,24 @@ All commands are executed via `sh -c`.
 ### Block Behaviors
 
 **`run:shell`** — Executes the block source as a shell command. A non-zero exit
-code fails the case. If capture names are specified (`-> $var`), stdout lines
-are split and bound to variables in order.
+code returns an error response. If capture names are specified (`-> $var`),
+stdout lines are split and bound to variables in order by the engine.
 
-**`doctest:shell`** — Parses `$ ` prefixed commands and their expected output,
-executes each command in sequence, and compares actual stdout against expected
-output. The first mismatch fails the entire block. A `...` line in expected
-output matches zero or more lines (see [Spec Syntax](syntax.spec.md) for
-wildcard details).
+Blocks whose content starts with `$ ` lines are auto-detected as doctest-style.
+The engine sends individual `exec` requests for each command and compares
+output against expected values inline.
 
-### Fixture Tables
+### Check Tables
 
-The shell adapter handles fixture table rows by executing
-`{fixturesDir}/{fixture}.sh` scripts. Table columns and fixture params are
+The shell adapter handles check table rows by executing
+`{checksDir}/{check}.sh` scripts. Table columns and check params are
 passed as environment variables:
 
 | Variable pattern | Source |
 |---|---|
 | `COL_{COLUMN}` | Table cell value (column name uppercased, hyphens become underscores) |
-| `FIXTURE_PARAM_{KEY}` | Fixture directive parameter (key uppercased) |
-| `FIXTURE` | Fixture name |
+| `CHECK_PARAM_{KEY}` | Check directive parameter (key uppercased) |
+| `CHECK` | Check name |
 
 Exit 0 passes; non-zero fails (stderr or stdout used as error message).
 
@@ -177,8 +160,8 @@ user adapter has claimed.
 ## Writing an Adapter
 
 Any executable works — Python, Node, Ruby, Go, Rust, shell scripts.
-The minimal pattern is: read NDJSON from stdin, skip `setup`/`teardown`,
-handle `runCase`, and write the response to stdout.
+The minimal pattern is: read NDJSON from stdin, handle `exec` and `assert`
+messages, and write the response to stdout.
 
 ### Python
 
@@ -186,27 +169,29 @@ handle `runCase`, and write the response to stdout.
 #!/usr/bin/env python3
 import json, sys
 
-def handle(case):
-    # case["kind"]          — "code" or "tableRow"
-    # case["block"]         — "run:myapp", etc.
-    # case["source"]        — block body (variables already substituted)
-    # case["fixture"]       — fixture name (for table rows)
-    # case["fixtureParams"] — {"key": "value"} from directive (optional)
-    # case["columns"], case["cells"] — table data (escapes already resolved)
-    # case["bindings"]      — variables from previous blocks
-    # case["captureNames"]  — variable names to return
+def handle_exec(source):
     try:
-        bindings = execute(case)
-        return {"type": "passed", "bindings": bindings}
+        output = execute(source)
+        return {"output": output}
+    except Exception as e:
+        return {"error": str(e)}
+
+def handle_assert(check, params, columns, cells):
+    try:
+        run_check(check, params, columns, cells)
+        return {"type": "passed"}
     except Exception as e:
         return {"type": "failed", "message": str(e)}
 
 for line in sys.stdin:
     req = json.loads(line)
-    if req["type"] in ("setup", "teardown"):
-        continue
-    if req["type"] == "runCase":
-        result = handle(req["case"])
+    if req["type"] == "exec":
+        result = handle_exec(req["source"])
+        print(json.dumps({"id": req["id"], **result}))
+    elif req["type"] == "assert":
+        result = handle_assert(
+            req["check"], req.get("checkParams", {}),
+            req.get("columns", []), req.get("cells", []))
         print(json.dumps({"id": req["id"], **result}))
 ```
 
@@ -216,11 +201,12 @@ for line in sys.stdin:
 #!/bin/sh
 while IFS= read -r line; do
   type=$(echo "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
+  id=$(echo "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
   case "$type" in
-    setup|teardown) ;;
-    runCase)
-      id=$(echo "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-      # Process the case and emit a response
+    exec)
+      echo "{\"id\":${id},\"output\":\"ok\"}"
+      ;;
+    assert)
       echo "{\"id\":${id},\"type\":\"passed\"}"
       ;;
   esac
@@ -229,7 +215,7 @@ done
 
 ### Structured Failure Reporting
 
-When a case fails, include `expected` and `actual` for structured diffs
+When a check fails, include `expected` and `actual` for structured diffs
 in the CLI output and HTML report. The `label` field provides a
 human-readable row identifier; if omitted, specdown uses the default
 `row N` format.

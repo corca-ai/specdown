@@ -138,7 +138,7 @@ printf '# T\n\n- [Ref](ref-test.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/ref-test-cfg.json
 ```
 
-```doctest:shell
+```run:shell
 $ specdown run -config .tmp-test/ref-test-cfg.json -dry-run 2>&1 | grep -o 'alloy:.*'
 ...
 ```
@@ -163,7 +163,7 @@ specdown run -config .tmp-test/cx-cfg.json 2>&1 || true
 
 The JSON report includes a `counterexamplePath` for the failing check.
 
-```doctest:shell
+```run:shell
 $ grep -q '"counterexamplePath"' .tmp-test/cx-report.json && echo found
 found
 ```

@@ -12,7 +12,7 @@ For v1, a single `specdown.json` is sufficient.
       "name": "myapp",
       "command": ["python3", "./tools/adapter.py"],
       "blocks": ["run:myapp"],
-      "fixtures": ["user-exists"]
+      "checks": ["user-exists"]
     }
   ],
   "reporters": [
@@ -45,27 +45,27 @@ specdown run -config .tmp-test/entry-test-cfg.json 2>&1 || true
 
 The H1 heading from the entry file appears as the report title.
 
-```doctest:shell
+```run:shell
 $ grep -o '<title>[^<]*</title>' .tmp-test/entry-report.html
 <title>My Project Title</title>
 ```
 
 ## Built-in Shell Adapter
 
-The shell adapter is built into specdown. Blocks `run:shell`
-and `doctest:shell` work without any adapter configuration.
+The shell adapter is built into specdown. `run:shell` blocks
+work without any adapter configuration.
 
 ```run:shell
 # Run a spec using the built-in shell adapter with no adapter config
 mkdir -p .tmp-test
 printf '# T\n\n- [S](builtin-shell-test.spec.md)\n' > .tmp-test/builtin-shell-index.spec.md
 BT=$(printf '\140\140\140')
-printf '%s\n' '# Builtin Shell' '' "$BT"'doctest:shell' '$ echo works' 'works' "$BT" > .tmp-test/builtin-shell-test.spec.md
+printf '%s\n' '# Builtin Shell' '' "$BT"'run:shell' '$ echo works' 'works' "$BT" > .tmp-test/builtin-shell-test.spec.md
 printf '{"entry":"builtin-shell-index.spec.md","adapters":[]}' > .tmp-test/builtin-shell-cfg.json
 specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true
 ```
 
-```doctest:shell
+```run:shell
 $ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | head -1
 PASS 1 spec(s), 1 case(s), 0 alloy check(s)
 ```
@@ -78,7 +78,7 @@ the user adapter takes precedence over the built-in.
 | Field | Description |
 |-------|-------------|
 | `entry` | Path to the entry Markdown file. Its H1 is the report title; links define spec order |
-| `adapters` | List of adapters that handle executable blocks and fixtures |
+| `adapters` | List of adapters that handle executable blocks and checks |
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification. Can be omitted if not used |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
@@ -128,10 +128,10 @@ printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run
 ! specdown run -config .tmp-test/no-cmd.json 2>/dev/null
 ```
 
-An adapter must declare at least one block or fixture.
+An adapter must declare at least one block or check.
 
 ```run:shell
-# Reject adapter with no blocks and no fixtures
+# Reject adapter with no blocks and no checks
 printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > .tmp-test/no-blocks.json
 ! specdown run -config .tmp-test/no-blocks.json 2>/dev/null
 ```
