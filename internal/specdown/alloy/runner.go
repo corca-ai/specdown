@@ -64,7 +64,7 @@ type receipt struct {
 type receiptCommand struct {
 	Type     string            `json:"type"`
 	Source   string            `json:"source"`
-	Scopes   json.RawMessage   `json:"scopes"`
+	Scopes   json.RawMessage  `json:"scopes"`
 	Solution []receiptSolution `json:"solution"`
 }
 

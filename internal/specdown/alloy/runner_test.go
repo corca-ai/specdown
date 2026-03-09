@@ -236,8 +236,7 @@ func TestReceiptCommandScopesRoundTrip(t *testing.T) {
 			if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
 				t.Fatalf("unmarshal %s scopes: %v", tc.name, err)
 			}
-			var compact func(string) string
-			compact = func(s string) string {
+			compact := func(s string) string {
 				var buf json.RawMessage
 				if err := json.Unmarshal([]byte(s), &buf); err != nil {
 					return s
