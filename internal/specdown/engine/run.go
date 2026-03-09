@@ -915,7 +915,7 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 			if err != nil {
 				return core.CaseSpec{}, err
 			}
-			rendered = append(rendered, value)
+			rendered = append(rendered, core.UnescapeCell(value))
 		}
 		prepared.Cells = rendered
 		return prepared, nil
