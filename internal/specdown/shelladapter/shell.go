@@ -50,9 +50,6 @@ func runCodeCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 
 	err := cmd.Run()
 
-	block := c.Block
-	isVerify := strings.HasPrefix(block, "verify:")
-
 	if err != nil {
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
@@ -65,14 +62,7 @@ func runCodeCase(id int, c *adapterprotocol.Case) adapterprotocol.Response {
 		}
 	}
 
-	if isVerify {
-		return adapterprotocol.Response{
-			ID:   id,
-			Type: "passed",
-		}
-	}
-
-	// For run blocks, capture stdout into bindings if capture names are specified.
+	// Capture stdout into bindings if capture names are specified.
 	var bindings []adapterprotocol.Binding
 	if len(c.CaptureNames) > 0 {
 		output := strings.TrimRight(stdout.String(), "\n")

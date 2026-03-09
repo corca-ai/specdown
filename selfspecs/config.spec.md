@@ -11,7 +11,7 @@ For v1, a single `specdown.json` is sufficient.
     {
       "name": "myapp",
       "command": ["python3", "./tools/adapter.py"],
-      "blocks": ["run:myapp", "verify:myapp"],
+      "blocks": ["run:myapp"],
       "fixtures": ["user-exists"]
     }
   ],
@@ -51,7 +51,7 @@ $ grep -o '<title>[^<]*</title>' .tmp-test/entry-report.html
 
 ## Built-in Shell Adapter
 
-The shell adapter is built into specdown. Blocks `run:shell`, `verify:shell`,
+The shell adapter is built into specdown. Blocks `run:shell`
 and `doctest:shell` work without any adapter configuration.
 
 ```run:shell
@@ -84,7 +84,7 @@ the user adapter takes precedence over the built-in.
 
 A config file without `entry` must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 echo '{}' > .tmp-test/bad-config.json
 ! specdown run -config .tmp-test/bad-config.json 2>/dev/null
@@ -92,7 +92,7 @@ echo '{}' > .tmp-test/bad-config.json
 
 Two adapters with the same name must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 cat <<'CFG' > .tmp-test/dup-adapter.json
 {
@@ -108,7 +108,7 @@ CFG
 
 An adapter with an empty name must be rejected.
 
-```verify:shell
+```run:shell
 mkdir -p .tmp-test
 printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":["run:x"]}]}' > .tmp-test/empty-name.json
 ! specdown run -config .tmp-test/empty-name.json 2>/dev/null
@@ -116,21 +116,21 @@ printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":
 
 An adapter without a command must be rejected.
 
-```verify:shell
+```run:shell
 printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run:x"]}]}' > .tmp-test/no-cmd.json
 ! specdown run -config .tmp-test/no-cmd.json 2>/dev/null
 ```
 
 An adapter must declare at least one block or fixture.
 
-```verify:shell
+```run:shell
 printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > .tmp-test/no-blocks.json
 ! specdown run -config .tmp-test/no-blocks.json 2>/dev/null
 ```
 
 Only `"alloy"` is supported as a models builtin. Unknown values are rejected.
 
-```verify:shell
+```run:shell
 printf '{"entry":"i.spec.md","adapters":[],"models":{"builtin":"unknown"}}' > .tmp-test/bad-model.json
 ! specdown run -config .tmp-test/bad-model.json 2>/dev/null
 ```

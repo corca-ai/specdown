@@ -2,21 +2,13 @@ package core
 
 import "testing"
 
-func TestParseBlockSpecSupportsRunAndVerifyBoard(t *testing.T) {
+func TestParseBlockSpecSupportsRunBoard(t *testing.T) {
 	runBlock, err := parseBlockSpec("run:board")
 	if err != nil {
 		t.Fatalf("parse run block: %v", err)
 	}
 	if runBlock.Kind != BlockKindRun || runBlock.Target != "board" || !runBlock.Executable() {
 		t.Fatalf("unexpected run block %#v", runBlock)
-	}
-
-	verifyBlock, err := parseBlockSpec("verify:board")
-	if err != nil {
-		t.Fatalf("parse verify block: %v", err)
-	}
-	if verifyBlock.Kind != BlockKindVerify || verifyBlock.Target != "board" || !verifyBlock.Executable() {
-		t.Fatalf("unexpected verify block %#v", verifyBlock)
 	}
 }
 
@@ -33,29 +25,13 @@ func TestParseBlockSpecSupportsCaptureNames(t *testing.T) {
 	}
 }
 
-func TestParseBlockSpecSupportsGenericRunVerifyAndTestBlocks(t *testing.T) {
+func TestParseBlockSpecSupportsGenericRunBlocks(t *testing.T) {
 	runBlock, err := parseBlockSpec("run:shell")
 	if err != nil {
 		t.Fatalf("parse generic run block: %v", err)
 	}
 	if runBlock.Kind != BlockKindRun || runBlock.Target != "shell" {
 		t.Fatalf("unexpected generic run block %#v", runBlock)
-	}
-
-	verifyBlock, err := parseBlockSpec("verify:http")
-	if err != nil {
-		t.Fatalf("parse generic verify block: %v", err)
-	}
-	if verifyBlock.Kind != BlockKindVerify || verifyBlock.Target != "http" {
-		t.Fatalf("unexpected generic verify block %#v", verifyBlock)
-	}
-
-	testBlock, err := parseBlockSpec("test:webapp")
-	if err != nil {
-		t.Fatalf("parse test block: %v", err)
-	}
-	if testBlock.Kind != BlockKindTest || testBlock.Target != "webapp" {
-		t.Fatalf("unexpected test block %#v", testBlock)
 	}
 }
 
@@ -95,9 +71,7 @@ func TestParseBlockSpecSupportsExpectFail(t *testing.T) {
 		target string
 	}{
 		{"run:shell !fail", BlockKindRun, "shell"},
-		{"verify:shell !fail", BlockKindVerify, "shell"},
 		{"doctest:shell !fail", BlockKindDoctest, "shell"},
-		{"test:webapp !fail", BlockKindTest, "webapp"},
 	}
 	for _, tc := range cases {
 		block, err := parseBlockSpec(tc.input)
@@ -123,7 +97,7 @@ func TestParseBlockSpecRejectsExpectFailWithCaptures(t *testing.T) {
 }
 
 func TestParseBlockSpecRejectsUnsupportedReservedBlocks(t *testing.T) {
-	cases := []string{"run:", "verify:", "test:", "run:board ->", "run:board -> boardName", "alloy:model(board)"}
+	cases := []string{"run:", "run:board ->", "run:board -> boardName", "alloy:model(board)"}
 	for _, input := range cases {
 		if _, err := parseBlockSpec(input); err == nil {
 			t.Fatalf("expected parse error for %q", input)

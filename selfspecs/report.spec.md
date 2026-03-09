@@ -64,7 +64,7 @@ found
 
 The report must be readable without JavaScript (no script-gated content).
 
-```verify:shell
+```run:shell
 # The report should not require JS for basic content visibility
 # Check that headings and prose appear outside of <script> or noscript-hidden blocks
 grep -q '<h1' .tmp-test/report.html
@@ -72,7 +72,7 @@ grep -q '<h1' .tmp-test/report.html
 
 The report must include anchor links for sections.
 
-```verify:shell
+```run:shell
 grep -q 'id="section-' .tmp-test/report.html
 ```
 

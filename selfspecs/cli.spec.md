@@ -36,7 +36,7 @@ The CLI reports its version when invoked with `version`.
 specdown version
 ```
 
-```verify:shell
+```run:shell
 echo "${version}" | grep -qE '^[a-z0-9]'
 ```
 
@@ -49,7 +49,7 @@ specdown run -config selfspec.json -dry-run 2>&1
 
 The dry-run output lists discovered specs.
 
-```verify:shell
+```run:shell
 echo "${dryOutput}" | grep -q "spec"
 ```
 
@@ -61,7 +61,7 @@ echo "${dryOutput}" | grep -q "spec"
 rm -rf .tmp-test/init-test && mkdir -p .tmp-test/init-test && cd .tmp-test/init-test && specdown init 2>&1
 ```
 
-```verify:shell
+```run:shell
 test -f .tmp-test/init-test/specdown.json
 test -f .tmp-test/init-test/specs/index.spec.md
 test -f .tmp-test/init-test/specs/example.spec.md
@@ -69,13 +69,13 @@ test -f .tmp-test/init-test/specs/example.spec.md
 
 Running init again in the same directory must fail (no overwrite).
 
-```verify:shell
+```run:shell
 cd .tmp-test/init-test && ! specdown init 2>/dev/null
 ```
 
 The generated project must be runnable immediately.
 
-```verify:shell
+```run:shell
 cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep -q "spec"
 ```
 
@@ -91,7 +91,7 @@ cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep -q "spec"
 
 Every command listed above must appear in the help output.
 
-```verify:shell
+```run:shell
 help=$(specdown --help 2>&1)
 echo "$help" | grep -q "init"
 echo "$help" | grep -q "run"
@@ -119,6 +119,6 @@ The `-filter` flag runs only cases whose heading path contains the given string.
 specdown run -config selfspec.json -dry-run -filter "Filter" 2>&1
 ```
 
-```verify:shell
+```run:shell
 echo "${filterOutput}" | grep -q "Filter"
 ```

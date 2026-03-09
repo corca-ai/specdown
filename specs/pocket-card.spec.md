@@ -64,7 +64,7 @@ move-card "${boardName}" "${cardId}" done
 
 Moving to an undefined column name must return an error.
 
-```verify:board
+```run:board
 moving "${cardId}" to "invalid" should fail
 ```
 
@@ -72,7 +72,7 @@ moving "${cardId}" to "invalid" should fail
 
 Moving to the column the card is already in must be handled without error.
 
-```verify:board
+```run:board
 moving "${cardId}" to current column should succeed
 ```
 
@@ -82,7 +82,7 @@ moving "${cardId}" to current column should succeed
 
 Creating a card with an empty title must be rejected.
 
-```verify:board
+```run:board
 card with empty title should be rejected
 ```
 
@@ -90,7 +90,7 @@ card with empty title should be rejected
 
 Titles of 257 characters or more must be rejected.
 
-```verify:board
+```run:board
 card title length must be at most 256
 ```
 
@@ -102,7 +102,7 @@ It must be possible to change the title of an existing card.
 rename-card "${boardName}" "${cardId}" "spec complete"
 ```
 
-```verify:board
+```run:board
 card "${cardId}" title should be "spec complete"
 ```
 
@@ -127,7 +127,7 @@ delete-card "${boardName}" "${cardId}"
 
 Attempting to delete a card that was never created must return an error.
 
-```verify:board
+```run:board
 deleting nonexistent card should fail
 ```
 

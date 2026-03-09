@@ -40,9 +40,9 @@ func buildMainTestReport() core.Report {
 							},
 						},
 						core.CodeBlockNode{
-							Block:  core.BlockSpec{Raw: "verify:board", Kind: core.BlockKindVerify, Target: "board"},
+							Block:  core.BlockSpec{Raw: "run:board", Kind: core.BlockKindRun, Target: "board"},
 							Source: "board \"${boardName}\" should exist",
-							Raw:    "```verify:board\nboard \"${boardName}\" should exist\n```\n",
+							Raw:    "```run:board\nboard \"${boardName}\" should exist\n```\n",
 							ID: &core.SpecID{
 								File:        "specs/pocket-board.spec.md",
 								HeadingPath: []string{"Pocket Board", "Variable Flow", "Verify Created Board"},
@@ -101,8 +101,8 @@ func buildMainTestReport() core.Report {
 							Ordinal:     2,
 						},
 						Kind:           core.CaseKindCode,
-						Block:          "verify:board",
-						Label:          "verify:board @ Verify Created Board",
+						Block:          "run:board",
+						Label:          "run:board @ Verify Created Board",
 						Template:       "board \"${boardName}\" should exist",
 						RenderedSource: "board \"board-1\" should exist",
 						Status:         core.StatusPassed,

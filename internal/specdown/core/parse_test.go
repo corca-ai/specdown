@@ -19,7 +19,7 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		"",
 		"### Verify Created Board",
 		"",
-		"```verify:board",
+		"```run:board",
 		"board \"${boardName}\" should exist",
 		"```",
 		"",
