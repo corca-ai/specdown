@@ -83,16 +83,37 @@ the user adapter takes precedence over the built-in.
 | `models` | Alloy model verification. Can be omitted if not used |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
 
-## Validation
+## Defaults
 
-A config file without `entry` must be rejected.
+When fields are omitted from a config file, sensible defaults are applied:
+- `entry` defaults to `specs/index.spec.md`
+- `models.builtin` defaults to `"alloy"`
+- `reporters` defaults to HTML and JSON reporters in `specs/`
+
+An empty config `{}` is valid — all fields are defaulted.
 
 ```run:shell
-# Reject config missing the entry field
-mkdir -p .tmp-test
-echo '{}' > .tmp-test/bad-config.json
-! specdown run -config .tmp-test/bad-config.json 2>/dev/null
+# Verify empty config applies defaults
+mkdir -p .tmp-test/defaults-test
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/defaults-test/specs/index.spec.md
+mkdir -p .tmp-test/defaults-test/specs
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/defaults-test/specs/index.spec.md
+printf '# S\n\nProse.\n' > .tmp-test/defaults-test/specs/s.spec.md
+echo '{}' > .tmp-test/defaults-test/specdown.json
+cd .tmp-test/defaults-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ```
+
+specdown runs without a config file when `specs/index.spec.md` exists.
+
+```run:shell
+# Verify specdown works with no config file
+rm -rf .tmp-test/no-config-test && mkdir -p .tmp-test/no-config-test/specs
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/no-config-test/specs/index.spec.md
+printf '# S\n\nProse.\n' > .tmp-test/no-config-test/specs/s.spec.md
+cd .tmp-test/no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
+```
+
+## Validation
 
 Two adapters with the same name must be rejected.
 

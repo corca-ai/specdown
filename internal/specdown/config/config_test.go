@@ -119,6 +119,64 @@ func TestJSONReportOutFileReturnsEmptyWhenNotConfigured(t *testing.T) {
 	}
 }
 
+func TestDefault(t *testing.T) {
+	cfg := Default()
+	if cfg.Entry != "specs/index.spec.md" {
+		t.Fatalf("unexpected entry %q", cfg.Entry)
+	}
+	if cfg.Models.Builtin != "alloy" {
+		t.Fatalf("unexpected models %#v", cfg.Models)
+	}
+	if len(cfg.Reporters) != 2 {
+		t.Fatalf("expected 2 reporters, got %d", len(cfg.Reporters))
+	}
+	if cfg.HTMLReportOutFile() != "specs/report.html" {
+		t.Fatalf("unexpected html report %q", cfg.HTMLReportOutFile())
+	}
+	if cfg.JSONReportOutFile() != "specs/report.json" {
+		t.Fatalf("unexpected json report %q", cfg.JSONReportOutFile())
+	}
+}
+
+func TestLoadAppliesDefaults(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "specdown.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, _, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Entry != "specs/index.spec.md" {
+		t.Fatalf("expected default entry, got %q", cfg.Entry)
+	}
+	if cfg.Models.Builtin != "alloy" {
+		t.Fatalf("expected default models builtin, got %q", cfg.Models.Builtin)
+	}
+	if len(cfg.Reporters) != 2 {
+		t.Fatalf("expected 2 default reporters, got %d", len(cfg.Reporters))
+	}
+}
+
+func TestLoadOrDefaultWhenMissing(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "nonexistent.json")
+	cfg, dir, err := LoadOrDefault(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Entry != "specs/index.spec.md" {
+		t.Fatalf("expected default entry, got %q", cfg.Entry)
+	}
+	if cfg.Models.Builtin != "alloy" {
+		t.Fatalf("expected default models builtin, got %q", cfg.Models.Builtin)
+	}
+	if dir == "" {
+		t.Fatal("expected non-empty dir")
+	}
+}
+
 func TestLoadConfigRejectsUnknownModelBuiltin(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "specdown.json")

@@ -75,14 +75,6 @@ func initCmd(args []string) error {
 	return initProject()
 }
 
-func configLoadErr(err error) error {
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
-		return pathErr
-	}
-	return err
-}
-
 func hasHelpFlag(args []string) bool {
 	for _, a := range args {
 		if a == "-help" || a == "--help" || a == "-h" {
@@ -118,11 +110,8 @@ func run(args []string) error {
 		return err
 	}
 
-	cfg, configDir, err := config.Load(*configPath)
+	cfg, configDir, err := config.LoadOrDefault(*configPath)
 	if err != nil {
-		if os.IsNotExist(configLoadErr(err)) {
-			return fmt.Errorf("%w\nhint: run 'specdown init' to create a new project, or use -config to specify a config file", err)
-		}
 		return err
 	}
 
@@ -201,7 +190,7 @@ func alloyDump(args []string) error {
 		return err
 	}
 
-	cfg, configDir, err := config.Load(*configPath)
+	cfg, configDir, err := config.LoadOrDefault(*configPath)
 	if err != nil {
 		return err
 	}
@@ -288,9 +277,10 @@ func initProject() error {
 	configJSON := `{
   "entry": "specs/index.spec.md",
   "adapters": [],
+  "models": { "builtin": "alloy" },
   "reporters": [
-    { "builtin": "html", "outFile": ".artifacts/specdown/report.html" },
-    { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
+    { "builtin": "html", "outFile": "specs/report.html" },
+    { "builtin": "json", "outFile": "specs/report.json" }
   ]
 }
 `
@@ -341,9 +331,6 @@ func resolveReportPath(baseDir string, cfg config.Config, requested string) stri
 	reportPath := requested
 	if reportPath == "" {
 		reportPath = cfg.HTMLReportOutFile()
-	}
-	if reportPath == "" {
-		reportPath = ".artifacts/specdown/report.html"
 	}
 	return resolvePath(baseDir, reportPath)
 }
