@@ -4,76 +4,77 @@ A card is the unit for tracking work within a board.
 
 First, create a board.
 
-```run:board -> $boardName
-create-board
+```run:shell -> $boardName
+rm -f .board-state.json
+python3 tools/board.py create-board
 ```
 
 When a card is created, the system must return a new card identifier.
 
-```run:board -> $cardId
-create-card "${boardName}" "write spec"
+```run:shell -> $cardId
+python3 tools/board.py create-card "${boardName}" "write spec"
 ```
 
 ## Card Lookup
 
 A card just created must be immediately queryable within the board it was created in.
 
-> check:card-exists
-| board | card | exists |
-| --- | --- | --- |
-| ${boardName} | ${cardId} | yes |
+```run:shell
+$ python3 tools/board.py card-exists "${boardName}" "${cardId}"
+yes
+```
 
 A newly created card must always be placed in the `todo` column.
 
-> check:card-column
-| board | card | column |
-| --- | --- | --- |
-| ${boardName} | ${cardId} | todo |
+```run:shell
+$ python3 tools/board.py card-column "${boardName}" "${cardId}"
+todo
+```
 
 ## Card Movement
 
 A card must be movable to another column to reflect its current work status.
 
-```run:board
-move-card "${boardName}" "${cardId}" doing
+```run:shell
+python3 tools/board.py move-card "${boardName}" "${cardId}" doing
 ```
 
 ### Move to doing
 
 A card moved to `doing` must be queryable under the `doing` column in the same board.
 
-> check:card-column
-| board | card | column |
-| --- | --- | --- |
-| ${boardName} | ${cardId} | doing |
+```run:shell
+$ python3 tools/board.py card-column "${boardName}" "${cardId}"
+doing
+```
 
 ### Move to done
 
 A completed card must be movable to `done`.
 
-```run:board
-move-card "${boardName}" "${cardId}" done
+```run:shell
+python3 tools/board.py move-card "${boardName}" "${cardId}" done
 ```
 
-> check:card-column
-| board | card | column |
-| --- | --- | --- |
-| ${boardName} | ${cardId} | done |
+```run:shell
+$ python3 tools/board.py card-column "${boardName}" "${cardId}"
+done
+```
 
 ### Moving to a nonexistent column should fail
 
 Moving to an undefined column name must return an error.
 
-```run:board
-moving "${cardId}" to "invalid" should fail
+```run:shell
+! python3 tools/board.py move-card "${boardName}" "${cardId}" invalid 2>/dev/null
 ```
 
 ### Moving to the same column is not an error
 
 Moving to the column the card is already in must be handled without error.
 
-```run:board
-moving "${cardId}" to current column should succeed
+```run:shell
+python3 tools/board.py move-card "${boardName}" "${cardId}" done
 ```
 
 ## Card Title
@@ -82,28 +83,29 @@ moving "${cardId}" to current column should succeed
 
 Creating a card with an empty title must be rejected.
 
-```run:board
-card with empty title should be rejected
+```run:shell
+! python3 tools/board.py create-card "${boardName}" "" 2>/dev/null
 ```
 
 ### Title length must be at most 256 characters
 
 Titles of 257 characters or more must be rejected.
 
-```run:board
-card title length must be at most 256
+```run:shell
+! python3 tools/board.py create-card "${boardName}" "$(python3 -c "print('a'*257)")" 2>/dev/null
 ```
 
 ### Title can be modified
 
 It must be possible to change the title of an existing card.
 
-```run:board
-rename-card "${boardName}" "${cardId}" "spec complete"
+```run:shell
+python3 tools/board.py rename-card "${boardName}" "${cardId}" "spec complete"
 ```
 
-```run:board
-card "${cardId}" title should be "spec complete"
+```run:shell
+$ python3 tools/board.py card-title "${boardName}" "${cardId}"
+spec complete
 ```
 
 ## Card Deletion
@@ -112,23 +114,23 @@ card "${cardId}" title should be "spec complete"
 
 Once a card is deleted, it must no longer be queryable.
 
-```run:board
-delete-card "${boardName}" "${cardId}"
+```run:shell
+python3 tools/board.py delete-card "${boardName}" "${cardId}"
 ```
 
 ### A deleted card is not queryable
 
-> check:card-exists
-| board | card | exists |
-| --- | --- | --- |
-| ${boardName} | ${cardId} | no |
+```run:shell
+$ python3 tools/board.py card-exists "${boardName}" "${cardId}"
+no
+```
 
 ### Deleting a nonexistent card should fail
 
 Attempting to delete a card that was never created must return an error.
 
-```run:board
-deleting nonexistent card should fail
+```run:shell
+! python3 tools/board.py delete-card "${boardName}" nonexistent 2>/dev/null
 ```
 
 ## Formal Rules
@@ -170,4 +172,3 @@ assert cardBelongsToOneBoard {
 
 check cardBelongsToOneBoard for 5
 ```
-

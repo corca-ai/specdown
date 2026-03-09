@@ -19,88 +19,90 @@ Completed cards are moved to `done`.
 When a board is created, the system must return a new board name.
 The returned name must be referenceable in subsequent commands and verifications.
 
-```run:board -> $boardName
-create-board
+```run:shell -> $boardName
+rm -f .board-state.json
+python3 tools/board.py create-board
 ```
 
 ### A created board must exist immediately
 
 A board just created must be immediately queryable.
 
-```run:board
-board "${boardName}" should exist
+```run:shell
+$ python3 tools/board.py board-exists "${boardName}"
+yes
 ```
 
 ### A board that was not created must not exist
 
 A board name that was never created must not exist.
 
-```run:board
-board "${boardName}-archive" should not exist
+```run:shell
+$ python3 tools/board.py board-exists "${boardName}-archive"
+no
 ```
-
-### Board Existence Rules
-
-Board existence can be independently verified for each row in a table.
-
-> check:board-exists
-| board | exists |
-| --- | --- |
-| ${boardName} | yes |
-| ${boardName}-archive | no |
 
 ## Board Name Rules
 
 Board names are subject to validation rules.
 
-```run:board
-board "invalid name" should be rejected
+Board names must not contain spaces.
+
+```run:shell
+! python3 tools/board.py create-board "invalid name" 2>/dev/null
 ```
 
-```run:board
-board name length must be at most 64
+Board names must be at most 64 characters.
+
+```run:shell
+! python3 tools/board.py create-board "$(python3 -c "print('a'*65)")" 2>/dev/null
 ```
 
-```run:board
-duplicate board should be rejected
+Duplicate board names are rejected.
+
+```run:shell
+! python3 tools/board.py create-board "${boardName}" 2>/dev/null
 ```
 
 ## Board Deletion
 
 Deleting a created board must make it no longer queryable.
 
-```run:board
-delete-board "${boardName}"
+```run:shell
+python3 tools/board.py delete-board "${boardName}"
 ```
 
 The deleted board must no longer exist.
 
-```run:board
-board "${boardName}" should not exist
+```run:shell
+$ python3 tools/board.py board-exists "${boardName}"
+no
 ```
 
 Attempting to delete a board that was never created must return an error.
 
-```run:board
-deleting nonexistent board should fail
+```run:shell
+! python3 tools/board.py delete-board nonexistent 2>/dev/null
 ```
 
 ## Board List
 
 After creating a new board, we can test list behavior.
 
-```run:board -> $boardName2
-create-board
+```run:shell -> $boardName2
+python3 tools/board.py create-board
 ```
 
 The board list must contain at least one entry.
 
-```run:board
-board list should contain at least one entry
+```run:shell
+test "$(python3 tools/board.py list-boards | wc -l)" -gt 0
 ```
 
-When multiple boards exist, the list must be sorted alphabetically by name.
+When multiple boards exist, the list must be sorted alphabetically.
 
-```run:board
-board list should be sorted alphabetically
+```run:shell
+boards=$(python3 tools/board.py list-boards)
+sorted=$(echo "$boards" | sort)
+test "$boards" = "$sorted"
 ```

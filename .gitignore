@@ -5,4 +5,5 @@ specs/report.json
 .envrc
 mise.toml
 .tmp-test/
+.board-state.json
 .playwright-cli/
