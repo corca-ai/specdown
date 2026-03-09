@@ -2,28 +2,23 @@
   "entry": "specs/index.spec.md",
   "adapters": [
     {
-      "name": "pocket-board",
-      "command": [
-        "python3",
-        "./tools/pocket_board_adapter.py"
-      ],
-      "blocks": [
-        "run:board"
-      ],
-      "checks": [
-        "board-exists",
-        "card-exists",
-        "card-column"
-      ]
+      "name": "shell-fixtures",
+      "command": ["./bin/specdown-adapter-shell", "-checks-dir", "./specs/fixtures"],
+      "blocks": [],
+      "checks": ["block-kind", "cell-escape", "echo-value"]
+    }
+  ],
+  "reporters": [
+    {
+      "builtin": "html",
+      "outFile": "specs/report.html"
+    },
+    {
+      "builtin": "json",
+      "outFile": "specs/report.json"
     }
   ],
   "models": {
     "builtin": "alloy"
-  },
-  "reporters": [
-    {
-      "builtin": "html",
-      "outFile": ".artifacts/specdown/report.html"
-    }
-  ]
+  }
 }

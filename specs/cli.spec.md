@@ -42,7 +42,7 @@ Dry-run mode parses and validates spec files without executing adapters.
 This is useful for checking syntax before a full run.
 
 ```run:shell
-$ specdown run -config selfspec.json -dry-run 2>&1 | grep 'spec(s)'
+$ specdown run -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
 
@@ -118,6 +118,6 @@ echo "$help" | grep -q "alloy dump"
 The `-filter` flag runs only cases whose heading path contains the given string.
 
 ```run:shell
-$ specdown run -config selfspec.json -dry-run -filter "Filter" 2>&1 | head -1
+$ specdown run -dry-run -filter "Filter" 2>&1 | head -1
 ...
 ```

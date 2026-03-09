@@ -1,4 +1,6 @@
 .artifacts/
+specs/report.html
+specs/report.json
 /bin/
 .envrc
 mise.toml

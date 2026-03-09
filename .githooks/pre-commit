@@ -11,6 +11,6 @@ exec direnv exec . bash -c '
   go build -o bin/specdown ./cmd/specdown/
   go build -o bin/specdown-adapter-shell ./cmd/specdown-adapter-shell/
   export PATH="$(pwd)/bin:$PATH"
-  bin/specdown run -config selfspec.json
-  bin/specdown run -config specdown.json
+  bin/specdown run
+  cd examples/pocket-board && ../../bin/specdown run
 '

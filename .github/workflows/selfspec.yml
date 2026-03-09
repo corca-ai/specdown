@@ -39,14 +39,14 @@ jobs:
       - name: Run self-spec
         run: |
           export PATH="$(pwd)/bin:$PATH"
-          bin/specdown run -config selfspec.json
+          bin/specdown run
 
       - name: Prepare Pages artifact
         if: github.ref == 'refs/heads/main'
         run: |
           mkdir -p _site
-          cp .artifacts/specdown/self-report.html _site/index.html
-          cp .artifacts/specdown/self-report.json _site/report.json
+          cp specs/report.html _site/index.html
+          cp specs/report.json _site/report.json
 
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'

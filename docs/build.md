@@ -38,7 +38,7 @@ specdown version          # print build version
 specdown alloy dump       # generate only Alloy model .als files
 ```
 
-Reports are generated at `.artifacts/specdown/report.html`.
+Reports are generated at `specs/report.html`.
 
 ## Test
 
@@ -48,15 +48,21 @@ go test ./...
 
 ### Selfspecs
 
-The project's own specifications are executable. Run them with the
-dedicated config (`selfspec.json`) after building both binaries.
-Selfspecs invoke `specdown` recursively, so `bin/` must be on `PATH`:
+The project's own specifications are executable. After building both
+binaries, run them from the project root. Selfspecs invoke `specdown`
+recursively, so `bin/` must be on `PATH`:
 
 ```sh
-PATH="$(pwd)/bin:$PATH" bin/specdown run -config selfspec.json
+PATH="$(pwd)/bin:$PATH" bin/specdown run
 ```
 
-Reports are generated at `.artifacts/specdown/self-report.html`.
+Reports are generated at `specs/report.html`.
+
+### Pocket-Board Example
+
+```sh
+cd examples/pocket-board && PATH="$(pwd)/../../bin:$PATH" ../../bin/specdown run
+```
 
 ## Lint
 
