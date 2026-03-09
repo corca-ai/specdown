@@ -1,9 +1,5 @@
 version: 2
 
-before:
-  hooks:
-    - go generate ./cmd/specdown/...
-
 builds:
   - id: specdown
     main: ./cmd/specdown

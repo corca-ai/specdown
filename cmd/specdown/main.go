@@ -10,6 +10,7 @@ import (
 
 	_ "embed"
 
+	specdown "github.com/corca-ai/specdown"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/engine"
@@ -21,18 +22,6 @@ var version = "dev"
 
 //go:embed skills/specdown/SKILL.md
 var skillSpecdown string
-
-//go:generate cp ../../selfspecs/best-practices.spec.md skills/specdown/guide-writing.md
-//go:generate cp ../../selfspecs/adapter-protocol.spec.md skills/specdown/adapter-protocol.md
-//go:generate cp ../../selfspecs/syntax.spec.md skills/specdown/syntax.md
-//go:embed skills/specdown/guide-writing.md
-var skillWritingGuide string
-
-//go:embed skills/specdown/adapter-protocol.md
-var skillAdapterProtocol string
-
-//go:embed skills/specdown/syntax.md
-var skillSyntax string
 
 func main() {
 	if len(os.Args) < 2 {
@@ -267,15 +256,15 @@ func installSkillsCmd(args []string) error {
 		return err
 	}
 	guideDest := filepath.Join(dir, "guide-writing.md")
-	if err := os.WriteFile(guideDest, []byte(skillWritingGuide), 0o644); err != nil {
+	if err := os.WriteFile(guideDest, []byte(specdown.SkillWritingGuide), 0o644); err != nil {
 		return err
 	}
 	protocolDest := filepath.Join(dir, "adapter-protocol.md")
-	if err := os.WriteFile(protocolDest, []byte(skillAdapterProtocol), 0o644); err != nil {
+	if err := os.WriteFile(protocolDest, []byte(specdown.SkillAdapterProtocol), 0o644); err != nil {
 		return err
 	}
 	syntaxDest := filepath.Join(dir, "syntax.md")
-	if err := os.WriteFile(syntaxDest, []byte(skillSyntax), 0o644); err != nil {
+	if err := os.WriteFile(syntaxDest, []byte(specdown.SkillSyntax), 0o644); err != nil {
 		return err
 	}
 
