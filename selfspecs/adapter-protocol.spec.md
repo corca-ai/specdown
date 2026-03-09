@@ -127,8 +127,55 @@ Capabilities are declared in config, not negotiated at runtime.
 - A non-zero exit indicates an adapter crash or infrastructure failure, not a case failure
 - Only protocol messages are written to stdout; stderr is for diagnostic output
 - Adapters may ignore `setup`/`teardown` (no response required)
-- The shell adapter (`run:shell`, `verify:shell`, `doctest:shell`) is built in and works without configuration
-- Built-in adapters follow the same protocol contract
+- Built-in adapters follow the same protocol contract (see below)
+
+## Built-in Shell Adapter
+
+The shell adapter is the only built-in adapter. It handles `run:shell`,
+`verify:shell`, and `doctest:shell` blocks without any adapter configuration.
+
+### Execution Model
+
+The built-in shell adapter runs in-process rather than as a spawned subprocess.
+It still follows the same NDJSON protocol contract — the difference is
+transparent to spec authors.
+
+All commands are executed via `sh -c`.
+
+### Block Behaviors
+
+**`run:shell`** — Executes the block source as a shell command. A non-zero exit
+code fails the case. If capture names are specified (`-> $var`), stdout lines
+are split and bound to variables in order.
+
+**`verify:shell`** — Executes the block source and checks the exit code.
+Exit 0 passes; non-zero fails. Stdout is ignored.
+
+**`doctest:shell`** — Parses `$ ` prefixed commands and their expected output,
+executes each command in sequence, and compares actual stdout against expected
+output. The first mismatch fails the entire block. A `...` line in expected
+output matches zero or more lines (see [Spec Syntax](syntax.spec.md) for
+wildcard details).
+
+### Fixture Tables
+
+The shell adapter handles fixture table rows by executing
+`{fixturesDir}/{fixture}.sh` scripts. Table columns and fixture params are
+passed as environment variables:
+
+| Variable pattern | Source |
+|---|---|
+| `COL_{COLUMN}` | Table cell value (column name uppercased, hyphens become underscores) |
+| `FIXTURE_PARAM_{KEY}` | Fixture directive parameter (key uppercased) |
+| `FIXTURE` | Fixture name |
+
+Exit 0 passes; non-zero fails (stderr or stdout used as error message).
+
+### Override Precedence
+
+If a user adapter explicitly claims a shell block (e.g., `"blocks": ["run:shell"]`),
+the user adapter takes precedence. The built-in only registers blocks that no
+user adapter has claimed.
 
 ## Writing an Adapter
 
