@@ -57,7 +57,7 @@ and `doctest:shell` work without any adapter configuration.
 ```run:shell
 mkdir -p .tmp-test
 printf '# T\n\n- [S](builtin-shell-test.spec.md)\n' > .tmp-test/builtin-shell-index.spec.md
-BT=$(printf '\x60\x60\x60')
+BT=$(printf '\140\140\140')
 printf '%s\n' '# Builtin Shell' '' "$BT"'doctest:shell' '$ echo works' 'works' "$BT" > .tmp-test/builtin-shell-test.spec.md
 printf '{"entry":"builtin-shell-index.spec.md","adapters":[]}' > .tmp-test/builtin-shell-cfg.json
 specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true

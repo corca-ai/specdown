@@ -14,7 +14,7 @@ It preserves the document structure, annotating execution results inline.
 
 ```run:shell
 mkdir -p .tmp-test
-BT=$(printf '\x60\x60\x60')
+BT=$(printf '\140\140\140')
 printf '%s\n' '# Summary Test' '' "\${BT}doctest:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
 printf '# T\n\n- [Summary](summary-test.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}' > .tmp-test/summary-cfg.json

@@ -35,7 +35,7 @@ so typos like `runn:shell` are caught early.
 
 ```run:shell
 mkdir -p .tmp-test
-BT=$(printf '\x60\x60\x60')
+BT=$(printf '\140\140\140')
 printf '%s\n' '# Plain' '' "\${BT}verify:shell" 'echo hello' "\${BT}" '' "\${BT}test:webapp" 'some test' "\${BT}" > .tmp-test/unrecognized.spec.md
 printf '# T\n\n- [U](unrecognized.spec.md)\n' > .tmp-test/index.spec.md
 printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/unrecognized-cfg.json

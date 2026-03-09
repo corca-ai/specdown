@@ -17,15 +17,6 @@ export PATH="$(mise where go)/bin:$PATH"
 
 ## Build
 
-The `specdown` binary embeds skill files via `go:embed`. These files are
-copied from `selfspecs/` by `go generate` and must exist before building:
-
-```sh
-go generate ./cmd/specdown/
-```
-
-Then build the binaries:
-
 ```sh
 go build -o bin/specdown ./cmd/specdown
 go build -o bin/specdown-adapter-shell ./cmd/specdown-adapter-shell
@@ -58,10 +49,11 @@ go test ./...
 ### Selfspecs
 
 The project's own specifications are executable. Run them with the
-dedicated config (`selfspec.json`) after building both binaries:
+dedicated config (`selfspec.json`) after building both binaries.
+Selfspecs invoke `specdown` recursively, so `bin/` must be on `PATH`:
 
 ```sh
-specdown run -config selfspec.json
+PATH="$(pwd)/bin:$PATH" bin/specdown run -config selfspec.json
 ```
 
 Reports are generated at `.artifacts/specdown/self-report.html`.
