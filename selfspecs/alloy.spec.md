@@ -56,6 +56,49 @@ assert rowBelongsToOneScope {
 check rowBelongsToOneScope for 5
 ```
 
+## Scoped Checks with `but` Clauses
+
+Alloy's `check` command supports type-specific scope overrides via
+`but` clauses — for example, `check foo for 5 but 6 Int` sets the
+default scope to 5 but widens the integer bitwidth to 6 bits.
+
+This is essential when a model uses integer values outside the default
+4-bit range (-8 to 7).
+
+```alloy:model(scoring)
+module scoring
+
+sig Player {
+  score: one Int
+}
+
+fact validScores {
+  all p: Player | p.score >= 0 and p.score <= 21
+}
+
+assert scoreBound {
+  all p: Player | p.score >= 0 implies p.score <= 21
+}
+
+check scoreBound for 3 but 6 Int
+```
+
+Without `but 6 Int`, Alloy's default 4-bit integers only cover -8 to 7,
+which cannot represent values like 10 or 21. The wider bitwidth lets the
+solver explore the full range declared in the fact.
+
+```run:shell
+mkdir -p .tmp-test
+printf '# T\n\n- [But](but-scope.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"},"reporters":[{"builtin":"json","outFile":"but-report.json"}]}' > .tmp-test/but-cfg.json
+printf '%s\n' '# But Scope Test' '' '```alloy:model(scoring)' 'module scoring' '' 'sig Player {' '  score: one Int' '}' '' 'fact validScores {' '  all p: Player | p.score >= 0 and p.score <= 21' '}' '' 'assert scoreBound {' '  all p: Player | p.score >= 0 implies p.score <= 21' '}' '' 'check scoreBound for 3 but 6 Int' '```' > .tmp-test/but-scope.spec.md
+specdown run -config .tmp-test/but-cfg.json 2>&1 || true
+```
+
+```verify:shell
+grep -q '"status": "passed"' .tmp-test/but-report.json
+```
+
 ## Combination Rules
 
 Fragments with the same model name are merged into a single virtual `.als` file.

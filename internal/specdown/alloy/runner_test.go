@@ -1,6 +1,7 @@
 package alloy
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,5 +149,78 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 	}
 	if ext := filepath.Ext(bundle.SourceMapAbsolutePath); ext != ".json" {
 		t.Fatalf("unexpected source map extension %q", ext)
+	}
+}
+
+func TestParseReceiptWithMapScopes(t *testing.T) {
+	dir := t.TempDir()
+	receiptPath := filepath.Join(dir, "receipt.json")
+	data := `{
+		"commands": {
+			"0": {
+				"type": "check",
+				"source": "check cardShape for 5",
+				"scopes": {"Card": "5"},
+				"solution": []
+			}
+		}
+	}`
+	if err := os.WriteFile(receiptPath, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := parseReceipt(receiptPath)
+	if err != nil {
+		t.Fatalf("parseReceipt with map scopes: %v", err)
+	}
+	if _, ok := results["check cardShape for 5"]; !ok {
+		t.Fatal("expected command entry for 'check cardShape for 5'")
+	}
+}
+
+func TestParseReceiptWithArrayScopes(t *testing.T) {
+	dir := t.TempDir()
+	receiptPath := filepath.Join(dir, "receipt.json")
+	data := `{
+		"commands": {
+			"0": {
+				"type": "check",
+				"source": "check cardShape for 5 but 6 Int",
+				"scopes": [{"sig": "univ", "scope": "5"}, {"sig": "Int", "scope": "6"}],
+				"solution": []
+			}
+		}
+	}`
+	if err := os.WriteFile(receiptPath, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := parseReceipt(receiptPath)
+	if err != nil {
+		t.Fatalf("parseReceipt with array scopes: %v", err)
+	}
+	cmd, ok := results["check cardShape for 5 but 6 Int"]
+	if !ok {
+		t.Fatal("expected command entry for 'check cardShape for 5 but 6 Int'")
+	}
+	if cmd.Scopes == nil {
+		t.Fatal("expected non-nil scopes")
+	}
+}
+
+func TestReceiptCommandScopesRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+	}{
+		{"map", `{"Card":"5"}`},
+		{"array", `[{"sig":"univ","scope":"5"},{"sig":"Int","scope":"6"}]`},
+		{"null", `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cmd receiptCommand
+			raw := `{"type":"check","source":"check x for 5","scopes":` + tc.input + `,"solution":[]}`
+			if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
+				t.Fatalf("unmarshal %s scopes: %v", tc.name, err)
+			}
+		})
 	}
 }
