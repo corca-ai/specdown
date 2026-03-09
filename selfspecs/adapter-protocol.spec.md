@@ -127,6 +127,7 @@ Capabilities are declared in config, not negotiated at runtime.
 - A non-zero exit indicates an adapter crash or infrastructure failure, not a case failure
 - Only protocol messages are written to stdout; stderr is for diagnostic output
 - Adapters may ignore `setup`/`teardown` (no response required)
+- The shell adapter (`run:shell`, `verify:shell`, `doctest:shell`) is built in and works without configuration
 - Built-in adapters follow the same protocol contract
 
 ## Writing an Adapter

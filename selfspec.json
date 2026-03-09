@@ -2,9 +2,9 @@
   "entry": "selfspecs/index.spec.md",
   "adapters": [
     {
-      "name": "shell",
+      "name": "shell-fixtures",
       "command": ["./bin/specdown-adapter-shell", "-fixtures-dir", "./selfspecs/fixtures"],
-      "blocks": ["run:shell", "verify:shell", "doctest:shell"],
+      "blocks": [],
       "fixtures": ["block-kind", "cell-escape", "echo-value"]
     }
   ],

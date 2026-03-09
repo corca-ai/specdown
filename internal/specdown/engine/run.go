@@ -246,6 +246,18 @@ func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 			registry.fixtures[fixture] = entry
 		}
 	}
+
+	// Auto-register built-in shell adapter for unclaimed shell blocks.
+	builtinEntry := adapterEntry{Config: config.AdapterConfig{
+		Name:         "__builtin_shell",
+		BuiltinShell: true,
+	}}
+	for _, block := range []string{"run:shell", "verify:shell", "doctest:shell"} {
+		if _, exists := registry.blocks[block]; !exists {
+			registry.blocks[block] = builtinEntry
+		}
+	}
+
 	return registry, nil
 }
 
@@ -598,7 +610,13 @@ func sessionFor(sessions map[string]*adapterhost.Session, host adapterhost.Host,
 	if session, ok := sessions[adapter.Name]; ok {
 		return session, nil
 	}
-	session, err := host.StartSession(adapter)
+	var session *adapterhost.Session
+	var err error
+	if adapter.BuiltinShell {
+		session, err = host.StartBuiltinShellSession(adapter)
+	} else {
+		session, err = host.StartSession(adapter)
+	}
 	if err != nil {
 		return nil, err
 	}

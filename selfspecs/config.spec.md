@@ -49,6 +49,28 @@ $ grep -o '<title>[^<]*</title>' .tmp-test/entry-report.html
 <title>My Project Title</title>
 ```
 
+## Built-in Shell Adapter
+
+The shell adapter is built into specdown. Blocks `run:shell`, `verify:shell`,
+and `doctest:shell` work without any adapter configuration.
+
+```run:shell
+mkdir -p .tmp-test
+printf '# T\n\n- [S](builtin-shell-test.spec.md)\n' > .tmp-test/builtin-shell-index.spec.md
+BT=$(printf '\x60\x60\x60')
+printf '%s\n' '# Builtin Shell' '' "$BT"'doctest:shell' '$ echo works' 'works' "$BT" > .tmp-test/builtin-shell-test.spec.md
+printf '{"entry":"builtin-shell-index.spec.md","adapters":[]}' > .tmp-test/builtin-shell-cfg.json
+specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true
+```
+
+```doctest:shell
+$ grep -o 'PASS' .tmp-test/builtin-shell-cfg.json 2>/dev/null; specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | head -1
+PASS 1 spec(s), 1 case(s), 0 alloy check(s)
+```
+
+If a user adapter explicitly claims a shell block (e.g., `"blocks": ["run:shell"]`),
+the user adapter takes precedence over the built-in.
+
 ## Config Fields
 
 | Field | Description |

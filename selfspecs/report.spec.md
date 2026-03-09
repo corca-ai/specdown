@@ -17,7 +17,7 @@ mkdir -p .tmp-test
 BT=$(printf '\x60\x60\x60')
 printf '%s\n' '# Summary Test' '' "\${BT}doctest:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
 printf '# T\n\n- [Summary](summary-test.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["specdown-adapter-shell"],"blocks":["doctest:shell"]}],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}' > .tmp-test/summary-cfg.json
+printf '{"entry":"index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}' > .tmp-test/summary-cfg.json
 specdown run -config .tmp-test/summary-cfg.json 2>&1 || true
 ```
 

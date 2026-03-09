@@ -19,10 +19,12 @@ type ModelConfig struct {
 }
 
 type AdapterConfig struct {
-	Name     string   `json:"name"`
-	Command  []string `json:"command"`
-	Blocks   []string `json:"blocks"`
-	Fixtures []string `json:"fixtures,omitempty"`
+	Name        string   `json:"name"`
+	Command     []string `json:"command"`
+	Blocks      []string `json:"blocks"`
+	Fixtures    []string `json:"fixtures,omitempty"`
+	FixturesDir string   `json:"fixturesDir,omitempty"`
+	BuiltinShell bool    `json:"-"` // set internally for the auto-registered shell adapter
 }
 
 type Reporter struct {
@@ -62,6 +64,9 @@ func Load(path string) (Config, string, error) {
 func validateAdapters(adapters []AdapterConfig) error {
 	seen := make(map[string]struct{}, len(adapters))
 	for _, adapter := range adapters {
+		if adapter.BuiltinShell {
+			continue
+		}
 		if adapter.Name == "" {
 			return fmt.Errorf("adapter name must not be empty")
 		}

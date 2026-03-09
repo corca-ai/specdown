@@ -15,6 +15,7 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
 )
 
 type Host struct {
@@ -33,6 +34,8 @@ type Session struct {
 	stdinClosed bool
 	setupDone   bool
 	nextID      int
+	builtin     bool
+	done        chan struct{} // signals builtin goroutine completion
 }
 
 func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
@@ -68,6 +71,56 @@ func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
 		encoder: json.NewEncoder(stdin),
 		stderr:  stderr,
 	}, nil
+}
+
+func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, error) {
+	stdinReader, stdinWriter := io.Pipe()
+	stdoutReader, stdoutWriter := io.Pipe()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		builtinShellLoop(stdinReader, stdoutWriter, adapter.FixturesDir)
+		_ = stdoutWriter.Close()
+	}()
+
+	scanner := bufio.NewScanner(stdoutReader)
+	scanner.Buffer(make([]byte, 1024), 1024*1024)
+
+	return &Session{
+		adapter: adapter,
+		stdin:   stdinWriter,
+		scanner: scanner,
+		encoder: json.NewEncoder(stdinWriter),
+		stderr:  &bytes.Buffer{},
+		builtin: true,
+		done:    done,
+	}, nil
+}
+
+func builtinShellLoop(reader io.Reader, writer io.Writer, fixturesDir string) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 1024), 1024*1024)
+	encoder := json.NewEncoder(writer)
+
+	for scanner.Scan() {
+		var request adapterprotocol.Request
+		if err := json.Unmarshal(scanner.Bytes(), &request); err != nil {
+			return
+		}
+
+		switch request.Type {
+		case "setup", "teardown":
+			continue
+		case "runCase":
+			result := shelladapter.RunCase(request.ID, request.Case, fixturesDir)
+			if err := encoder.Encode(result); err != nil {
+				return
+			}
+		default:
+			return
+		}
+	}
 }
 
 func (s *Session) Setup() error {
@@ -225,6 +278,10 @@ func (s *Session) wait() error {
 		return nil
 	}
 	s.waited = true
+	if s.builtin {
+		<-s.done
+		return nil
+	}
 	if err := s.cmd.Wait(); err != nil {
 		message := strings.TrimSpace(s.stderr.String())
 		if message == "" {

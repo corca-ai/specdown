@@ -1,10 +1,14 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
+)
 
 func TestParseDoctestSource(t *testing.T) {
 	source := "$ echo hello\nhello\n$ echo world\nworld"
-	steps := parseDoctestSource(source)
+	steps := shelladapter.ParseDoctestSource(source)
 	if len(steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(steps))
 	}
@@ -18,7 +22,7 @@ func TestParseDoctestSource(t *testing.T) {
 
 func TestParseDoctestSourceMultilineOutput(t *testing.T) {
 	source := "$ printf 'a\\nb\\nc'\na\nb\nc"
-	steps := parseDoctestSource(source)
+	steps := shelladapter.ParseDoctestSource(source)
 	if len(steps) != 1 {
 		t.Fatalf("expected 1 step, got %d", len(steps))
 	}
@@ -29,7 +33,7 @@ func TestParseDoctestSourceMultilineOutput(t *testing.T) {
 
 func TestParseDoctestSourceNoOutput(t *testing.T) {
 	source := "$ mkdir -p /tmp/test\n$ echo done\ndone"
-	steps := parseDoctestSource(source)
+	steps := shelladapter.ParseDoctestSource(source)
 	if len(steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(steps))
 	}
@@ -42,7 +46,7 @@ func TestParseDoctestSourceNoOutput(t *testing.T) {
 }
 
 func TestParseDoctestSourceEmpty(t *testing.T) {
-	steps := parseDoctestSource("just some text")
+	steps := shelladapter.ParseDoctestSource("just some text")
 	if len(steps) != 0 {
 		t.Fatalf("expected 0 steps, got %d", len(steps))
 	}
@@ -75,9 +79,9 @@ func TestMatchWithWildcard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchWithWildcard(tt.actual, tt.expected)
+			got := shelladapter.MatchWithWildcard(tt.actual, tt.expected)
 			if got != tt.match {
-				t.Errorf("matchWithWildcard(%q, %q) = %v, want %v", tt.actual, tt.expected, got, tt.match)
+				t.Errorf("MatchWithWildcard(%q, %q) = %v, want %v", tt.actual, tt.expected, got, tt.match)
 			}
 		})
 	}
