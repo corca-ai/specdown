@@ -79,6 +79,7 @@ the user adapter takes precedence over the built-in.
 | `adapters` | List of adapters that handle executable blocks and fixtures |
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification. Can be omitted if not used |
+| `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
 
 ## Validation
 

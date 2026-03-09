@@ -30,7 +30,8 @@ The parser must recognize `run` and `doctest` as executable block kinds.
 
 Other prefixes (e.g. `verify:`, `test:`) are not recognized and produce
 plain, non-executable code blocks. A spec containing only unrecognized
-blocks has zero cases.
+blocks has zero cases. Unrecognized prefixes emit a warning to stderr
+so typos like `runn:shell` are caught early.
 
 ```run:shell
 mkdir -p .tmp-test
@@ -44,6 +45,26 @@ printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/unrecognized-cfg.js
 $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | tail -1
 total: 1 spec(s), 0 case(s), 0 alloy check(s)
 ```
+
+The warnings appear on stderr:
+
+```doctest:shell
+$ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^warning:' | wc -l | tr -d ' '
+2
+```
+
+To suppress warnings for specific prefixes, add `ignorePrefixes` to `specdown.json`:
+
+```run:shell
+printf '{"entry":"index.spec.md","adapters":[],"ignorePrefixes":["verify","test"]}' > .tmp-test/unrecognized-cfg.json
+```
+
+```doctest:shell
+$ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^warning:' | wc -l | tr -d ' '
+0
+```
+
+Plain info strings without a colon (e.g. `json`, `go`, `python`) never warn.
 
 ## Intent Captions
 

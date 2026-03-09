@@ -31,7 +31,8 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		"| ${boardName} | yes |",
 		"| ${boardName}-archive | yes |",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -112,7 +113,8 @@ func TestParseDocumentRejectsFixtureDirectiveWithoutTable(t *testing.T) {
 		"",
 		"not a table",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -122,7 +124,7 @@ func TestParseDocumentRejectsFixtureDirectiveWithoutTable(t *testing.T) {
 }
 
 func TestParseDocumentTreatsExpectAsPlainCodeBlock(t *testing.T) {
-	doc, err := ParseDocument("test.spec.md", "# T\n\n```expect\n${value} matches /x/\n```\n")
+	doc, err := ParseDocument("test.spec.md", "# T\n\n```expect\n${value} matches /x/\n```\n", nil)
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
@@ -158,7 +160,8 @@ func TestParseDocumentSupportsAlloyModelBlocksAndReferences(t *testing.T) {
 		"",
 		"> alloy:ref(board#cardExists, scope=5)",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse document: %v", err)
 	}
@@ -194,7 +197,7 @@ func TestParseDocumentSupportsAlloyModelBlocksAndReferences(t *testing.T) {
 }
 
 func TestParseDocumentExtractsFrontmatterTimeout(t *testing.T) {
-	doc, err := ParseDocument("test.spec.md", "---\ntimeout: 3000\n---\n\n# Title\n\nBody.\n")
+	doc, err := ParseDocument("test.spec.md", "---\ntimeout: 3000\n---\n\n# Title\n\nBody.\n", nil)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -207,7 +210,7 @@ func TestParseDocumentExtractsFrontmatterTimeout(t *testing.T) {
 }
 
 func TestParseDocumentDefaultsFrontmatterWhenAbsent(t *testing.T) {
-	doc, err := ParseDocument("test.spec.md", "# Title\n\nBody.\n")
+	doc, err := ParseDocument("test.spec.md", "# Title\n\nBody.\n", nil)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -225,7 +228,8 @@ func TestParseDocumentParsesFixtureParams(t *testing.T) {
 		"| --- | --- |",
 		"| /tmp | yes |",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -259,7 +263,8 @@ func TestParseDocumentParsesFixtureMultipleParams(t *testing.T) {
 		"| --- | --- |",
 		"| a | b |",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -284,7 +289,8 @@ func TestParseDocumentFixtureWithoutParamsHasNilParams(t *testing.T) {
 		"| --- | --- |",
 		"| x | yes |",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -309,7 +315,8 @@ func TestParseTableCellsWithEscapedPipe(t *testing.T) {
 		`| --- | --- |`,
 		`| a\|b | a\|b |`,
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -362,7 +369,8 @@ func TestParseDocumentAllowsFixtureWithParamsAndNoTable(t *testing.T) {
 		"",
 		"More prose.",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -395,7 +403,8 @@ func TestParseDocumentRejectsFixtureWithoutParamsAndNoTable(t *testing.T) {
 		"",
 		"not a table",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -424,7 +433,8 @@ func TestParseDocumentParsesHookDirectives(t *testing.T) {
 		"",
 		"Prose here.",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -461,7 +471,8 @@ func TestParseDocumentParsesNonEachHook(t *testing.T) {
 		"init-db",
 		"```",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -488,7 +499,8 @@ func TestParseDocumentRejectsHookWithoutCodeBlock(t *testing.T) {
 		"",
 		"Just prose.",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -503,11 +515,81 @@ func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
 		"",
 		"> alloy:ref(board#cardExists)",
 		"",
-	}, "\n"))
+	}, "\n"), nil)
+
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
 	if !strings.Contains(err.Error(), "invalid alloy reference directive") {
 		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestParseDocumentWarnsOnUnknownBlockPrefix(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"```verify:shell",
+		"echo hello",
+		"```",
+		"",
+		"```test:webapp",
+		"some test",
+		"```",
+		"",
+	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if len(doc.Warnings) != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %v", len(doc.Warnings), doc.Warnings)
+	}
+	if !strings.Contains(doc.Warnings[0], "verify") {
+		t.Fatalf("expected warning about verify prefix, got %q", doc.Warnings[0])
+	}
+	if !strings.Contains(doc.Warnings[1], "test") {
+		t.Fatalf("expected warning about test prefix, got %q", doc.Warnings[1])
+	}
+}
+
+func TestParseDocumentSuppressesWarningForIgnoredPrefix(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"```verify:shell",
+		"echo hello",
+		"```",
+		"",
+		"```test:webapp",
+		"some test",
+		"```",
+		"",
+	}, "\n"), []string{"verify", "test"})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if len(doc.Warnings) != 0 {
+		t.Fatalf("expected 0 warnings with ignore list, got %d: %v", len(doc.Warnings), doc.Warnings)
+	}
+}
+
+func TestParseDocumentNoWarningForPlainInfoStrings(t *testing.T) {
+	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
+		"# Test",
+		"",
+		"```json",
+		`{"key": "value"}`,
+		"```",
+		"",
+		"```go",
+		"package main",
+		"```",
+		"",
+	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if len(doc.Warnings) != 0 {
+		t.Fatalf("expected 0 warnings for plain blocks, got %d: %v", len(doc.Warnings), doc.Warnings)
 	}
 }

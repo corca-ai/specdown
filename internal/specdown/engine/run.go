@@ -37,7 +37,7 @@ type scopedBinding struct {
 }
 
 func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
-	title, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry)
+	title, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -46,7 +46,7 @@ func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error
 }
 
 func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
-	_, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry)
+	_, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return nil, err
 	}

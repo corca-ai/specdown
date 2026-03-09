@@ -52,7 +52,7 @@ type Plan struct {
 	Documents []DocumentPlan
 }
 
-func DiscoverFromEntry(baseDir string, entryPath string) (string, []Document, error) {
+func DiscoverFromEntry(baseDir string, entryPath string, ignorePrefixes []string) (string, []Document, error) {
 	fullPath := filepath.Join(baseDir, filepath.FromSlash(entryPath))
 	body, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -79,7 +79,7 @@ func DiscoverFromEntry(baseDir string, entryPath string) (string, []Document, er
 			continue
 		}
 		seen[relativePath] = struct{}{}
-		doc, err := readDocument(baseDir, relativePath)
+		doc, err := readDocument(baseDir, relativePath, ignorePrefixes)
 		if err != nil {
 			return "", nil, err
 		}

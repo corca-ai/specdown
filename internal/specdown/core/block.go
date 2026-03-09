@@ -108,6 +108,43 @@ func extractCaptures(working string) (string, []string, error) {
 
 var captureNamePattern = regexp.MustCompile(`^\$([A-Za-z_][A-Za-z0-9_]*)$`)
 
+// unknownBlockPrefix returns the prefix if the info string has a "prefix:target"
+// pattern where the prefix is not a recognized specdown block kind.
+func unknownBlockPrefix(info string) string {
+	trimmed := strings.TrimSpace(info)
+	if trimmed == "" {
+		return ""
+	}
+	parts := strings.SplitN(trimmed, ":", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	prefix := parts[0]
+	target := strings.TrimSpace(parts[1])
+	if target == "" {
+		return ""
+	}
+	// Skip URIs (e.g. http://example)
+	if strings.HasPrefix(target, "//") {
+		return ""
+	}
+	// Only flag alphabetic prefixes (avoid false positives on paths etc.)
+	for _, r := range prefix {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return ""
+		}
+	}
+	switch BlockKind(prefix) {
+	case BlockKindRun, BlockKindDoctest:
+		return ""
+	}
+	// alloy: is handled separately in the parser
+	if prefix == "alloy" {
+		return ""
+	}
+	return prefix
+}
+
 func parseCaptureNames(raw string) ([]string, error) {
 	parts := strings.Split(raw, ",")
 	names := make([]string, 0, len(parts))

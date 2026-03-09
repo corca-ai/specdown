@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	Entry     string          `json:"entry"`
-	Adapters  []AdapterConfig `json:"adapters"`
-	Models    ModelConfig     `json:"models"`
-	Reporters []Reporter      `json:"reporters"`
+	Entry          string          `json:"entry"`
+	Adapters       []AdapterConfig `json:"adapters"`
+	Models         ModelConfig     `json:"models"`
+	Reporters      []Reporter      `json:"reporters"`
+	IgnorePrefixes []string        `json:"ignorePrefixes,omitempty"`
 }
 
 type ModelConfig struct {

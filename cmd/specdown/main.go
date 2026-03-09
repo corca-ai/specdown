@@ -148,6 +148,8 @@ func run(args []string) error {
 		return err
 	}
 
+	printWarnings(report)
+
 	if *dryRun {
 		printDryRun(report)
 		return nil
@@ -441,6 +443,14 @@ func printBindings(report core.Report) {
 				pairs = append(pairs, fmt.Sprintf("$%s=%s", b.Name, b.Value))
 			}
 			fmt.Fprintf(os.Stderr, "  BIND  %s  [%s]  %s\n", path, kind, strings.Join(pairs, ", "))
+		}
+	}
+}
+
+func printWarnings(report core.Report) {
+	for _, doc := range report.Results {
+		for _, w := range doc.Document.Warnings {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 		}
 	}
 }
