@@ -164,3 +164,17 @@ CFG
 specdown run -config .tmp-test/unresolved-cfg.json 2>&1 | grep -q "missing"
 ! specdown run -config .tmp-test/unresolved-cfg.json 2>/dev/null
 ```
+
+## Unresolved variable in prose
+
+Referencing an undefined variable in prose text is also a compile-time error.
+
+```run:shell
+# Reject reference to uncaptured variable in prose
+mkdir -p .tmp-test
+printf '# Bad\n\nThe value is \${undefined}.\n' > .tmp-test/prose-unresolved.spec.md
+printf '# T\n\n- [PU](prose-unresolved.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/prose-unresolved-cfg.json
+specdown run -config .tmp-test/prose-unresolved-cfg.json 2>&1 | grep -q "undefined"
+! specdown run -config .tmp-test/prose-unresolved-cfg.json 2>/dev/null
+```

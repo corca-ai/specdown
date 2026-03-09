@@ -78,12 +78,12 @@ The report must include anchor links for sections.
 grep -q 'id="section-' .tmp-test/report.html
 ```
 
-### Intent Captions
+### Summary Lines
 
 Blocks whose first line is a comment render collapsed in the report.
-The caption text appears in an `exec-caption-text` span inside a
+The summary text appears in an `exec-summary-text` span inside a
 `<summary>` element, with an expand marker on the right.
-The containing section gets the `has-caption` class.
+The containing section gets the `has-summary` class.
 
 ## Output Files
 

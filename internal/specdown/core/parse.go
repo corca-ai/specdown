@@ -175,14 +175,14 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 				raw := hookRaw + strings.Join(lines[i:end+1], "")
 				source := strings.Join(lines[i+1:end], "")
 				trimmedSource := strings.TrimSuffix(source, "\n")
-				hookCaption := extractCaption(trimmedSource)
+				hookSummary := extractSummary(trimmedSource)
 				nodes = append(nodes, HookNode{
 					Hook:        hookKind,
 					Each:        hookEach,
 					Block:       block,
 					Source:      trimmedSource,
 					Raw:         raw,
-					Caption:     hookCaption,
+					Summary:     hookSummary,
 					HeadingPath: append([]string(nil), headingPath...),
 				})
 				hookKind = ""
@@ -247,7 +247,7 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 				Raw:    raw,
 			}
 			if block.Executable() && !isDoctestContent(trimmedSource) {
-				node.Caption = extractCaption(trimmedSource)
+				node.Summary = extractSummary(trimmedSource)
 			}
 			if block.Executable() {
 				ordinal++
@@ -743,12 +743,12 @@ func parseInlineElements(raw string, relativePath string, ordinal *int, headingP
 	return elements
 }
 
-// commentPrefixes maps common comment markers to check for intent lines.
+// commentPrefixes maps common comment markers to check for summary lines.
 var commentPrefixes = []string{"# ", "// ", "-- "}
 
-// extractCaption checks if the first line of source is a comment and returns
-// the caption text. If no caption is found, returns empty string.
-func extractCaption(source string) string {
+// extractSummary checks if the first line of source is a comment and returns
+// the summary text. If no summary is found, returns empty string.
+func extractSummary(source string) string {
 	if source == "" {
 		return ""
 	}

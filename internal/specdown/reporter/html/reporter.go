@@ -265,15 +265,15 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block `)
 	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	if node.Caption != "" {
-		out.WriteString(` has-caption`)
+	if node.Summary != "" {
+		out.WriteString(` has-summary`)
 	}
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
 
-	if node.Caption != "" {
-		// Collapsible block: summary shows caption, code is hidden by default.
+	if node.Summary != "" {
+		// Collapsible block: summary line shown, code is hidden by default.
 		// Failed blocks auto-expand so failures are never hidden.
 		out.WriteString(`<details class="exec-detail"`)
 		if result.Status == core.StatusFailed {
@@ -281,8 +281,8 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		}
 		out.WriteString(`>`)
 		out.WriteString(`<summary class="exec-source">`)
-		out.WriteString(`<span class="exec-caption-text">`)
-		out.WriteString(template.HTMLEscapeString(node.Caption))
+		out.WriteString(`<span class="exec-summary-text">`)
+		out.WriteString(template.HTMLEscapeString(node.Summary))
 		out.WriteString(`</span>`)
 		out.WriteString(`<span class="exec-expand-marker"></span>`)
 		out.WriteString(`</summary>`)
@@ -325,7 +325,7 @@ func renderCodeSource(out *strings.Builder, result core.CaseResult) {
 }
 
 // renderCodeSourceStripped renders the code block with the first comment line
-// (the caption) stripped from the displayed source.
+// (the summary line) stripped from the displayed source.
 func renderCodeSourceStripped(out *strings.Builder, result core.CaseResult) {
 	source := result.Template
 	if result.RenderedSource != "" {
@@ -563,16 +563,16 @@ func renderHookBlock(node core.HookNode) string {
 	}
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block hook-block`)
-	if node.Caption != "" {
-		out.WriteString(` has-caption`)
+	if node.Summary != "" {
+		out.WriteString(` has-summary`)
 	}
 	out.WriteString(`">`)
 
-	if node.Caption != "" {
+	if node.Summary != "" {
 		out.WriteString(`<details class="exec-detail">`)
 		out.WriteString(`<summary class="exec-source">`)
-		out.WriteString(`<span class="exec-caption-text">`)
-		out.WriteString(template.HTMLEscapeString(node.Caption))
+		out.WriteString(`<span class="exec-summary-text">`)
+		out.WriteString(template.HTMLEscapeString(node.Summary))
 		out.WriteString(`</span>`)
 		out.WriteString(`<span class="exec-expand-marker"></span>`)
 		out.WriteString(`</summary>`)
@@ -1322,7 +1322,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       background: var(--fail-bg);
     }
 
-    /* ── Collapsible blocks with intent captions ── */
+    /* ── Collapsible blocks with summary lines ── */
     .exec-detail {
       border-radius: 0.2rem;
     }

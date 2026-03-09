@@ -68,13 +68,13 @@ $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^wa
 
 Plain info strings without a colon (e.g. `json`, `go`, `python`) never warn.
 
-## Intent Captions
+## Summary Lines
 
 If the first line of a `run:` block is a comment,
-specdown extracts it as the block's **intent caption**.
+specdown extracts it as the block's **summary line**.
 
-In the HTML report, blocks with a caption are rendered collapsed:
-only the caption text and pass/fail indicator are visible. A `>` marker
+In the HTML report, blocks with a summary are rendered collapsed:
+only the summary text and pass/fail indicator are visible. A `>` marker
 on the right side lets readers expand the block to see the full code.
 Failed blocks auto-expand so failures are never hidden.
 
@@ -82,18 +82,18 @@ This makes specs readable for non-technical stakeholders without
 removing any detail for developers.
 
 The comment prefixes recognized are `# `, `// `, and `-- `.
-Only the text after the prefix becomes the caption;
+Only the text after the prefix becomes the summary;
 the prefix itself and leading/trailing whitespace are stripped.
 
-Blocks with doctest content (`$ ` lines) never get captions — they use
+Blocks with doctest content (`$ ` lines) never get summaries — they use
 a different rendering model with command/output pairs.
 
 Here is an example: the following block's first line is a comment,
-so the report will render it collapsed with the caption
-"Demonstrate intent caption" and a pass/fail indicator.
+so the report will render it collapsed with the summary
+"Demonstrate summary line" and a pass/fail indicator.
 
 ```run:shell
-# Demonstrate intent caption
+# Demonstrate summary line
 test 1 -eq 1
 ```
 
@@ -379,7 +379,8 @@ HTML report.
 
 Variables captured by earlier blocks can appear in prose text as `${name}`.
 In the HTML report, resolved variables are displayed with their actual values
-highlighted in green. Unresolved variables remain as literal `${name}` text.
+highlighted in green. Referencing an undefined variable in prose is a
+compile-time error, just like in executable blocks.
 
 ```markdown
 The greeting is ${greeting} and it was captured successfully.

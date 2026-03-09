@@ -147,6 +147,10 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 		}
 	}
 
+	if err := validateProseVariables(doc); err != nil {
+		return DocumentPlan{}, err
+	}
+
 	return DocumentPlan{
 		Document:    doc,
 		Cases:       cases,
@@ -154,6 +158,44 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 		AlloyModels: alloyModels,
 		AlloyChecks: alloyChecks,
 	}, nil
+}
+
+// validateProseVariables walks document nodes in order, accumulating bindings
+// from code blocks and checking that prose ${var} references are resolvable.
+func validateProseVariables(doc Document) error {
+	bindings := make([]bindingDefinition, 0)
+	for _, node := range doc.Nodes {
+		bindings = appendNodeBindings(bindings, node)
+		if prose, ok := node.(ProseNode); ok {
+			if err := checkProseRefs(doc.RelativeTo, prose, bindings); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func appendNodeBindings(bindings []bindingDefinition, node Node) []bindingDefinition {
+	block, ok := node.(CodeBlockNode)
+	if !ok || block.ID == nil {
+		return bindings
+	}
+	for _, name := range block.Block.CaptureNames {
+		bindings = append(bindings, bindingDefinition{
+			Name:        name,
+			HeadingPath: append([]string(nil), block.ID.HeadingPath...),
+		})
+	}
+	return bindings
+}
+
+func checkProseRefs(file string, prose ProseNode, bindings []bindingDefinition) error {
+	for _, name := range proseVariableReferences(prose.Raw) {
+		if !bindingVisible(bindings, name, prose.HeadingPath) {
+			return fmt.Errorf("%s: unresolved variable %q in prose", file, name)
+		}
+	}
+	return nil
 }
 
 type bindingDefinition struct {
@@ -331,6 +373,14 @@ func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
 }
 
 var variableRefPattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
+var codeSpanPattern = regexp.MustCompile("``[\\s\\S]*?``|`[^`]+`")
+
+// proseVariableReferences extracts variable references from prose text,
+// excluding references inside backtick code spans.
+func proseVariableReferences(raw string) []string {
+	stripped := codeSpanPattern.ReplaceAllString(raw, "")
+	return variableReferences(stripped)
+}
 
 func variableReferences(source string) []string {
 	matches := variableRefPattern.FindAllStringSubmatch(source, -1)

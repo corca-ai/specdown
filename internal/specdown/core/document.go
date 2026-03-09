@@ -92,7 +92,7 @@ type CodeBlockNode struct {
 	Block   BlockSpec `json:"block"`
 	Source  string    `json:"source"`
 	Raw     string    `json:"raw"`
-	Caption string    `json:"caption,omitempty"`
+	Summary string    `json:"summary,omitempty"`
 	ID      *SpecID   `json:"id,omitempty"`
 }
 
@@ -163,7 +163,7 @@ type HookNode struct {
 	Block       BlockSpec `json:"block"`
 	Source      string    `json:"source"`
 	Raw         string    `json:"raw"`
-	Caption     string    `json:"caption,omitempty"`
+	Summary     string    `json:"summary,omitempty"`
 	HeadingPath []string  `json:"headingPath,omitempty"`
 }
 
