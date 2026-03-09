@@ -28,6 +28,23 @@ The parser must recognize `run` and `doctest` as executable block kinds.
 | run:shell | run | shell |
 | doctest:shell | doctest | shell |
 
+Other prefixes (e.g. `verify:`, `test:`) are not recognized and produce
+plain, non-executable code blocks. A spec containing only unrecognized
+blocks has zero cases.
+
+```run:shell
+mkdir -p .tmp-test
+BT=$(printf '\x60\x60\x60')
+printf '%s\n' '# Plain' '' "\${BT}verify:shell" 'echo hello' "\${BT}" '' "\${BT}test:webapp" 'some test' "\${BT}" > .tmp-test/unrecognized.spec.md
+printf '# T\n\n- [U](unrecognized.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/unrecognized-cfg.json
+```
+
+```doctest:shell
+$ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | tail -1
+total: 1 spec(s), 0 case(s), 0 alloy check(s)
+```
+
 ## Intent Captions
 
 If the first line of a `run:` block is a comment,
