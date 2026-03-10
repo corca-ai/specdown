@@ -20,12 +20,13 @@ import (
 )
 
 type pageView struct {
-	Title     string
-	Meta      template.HTML
-	AssetRoot string
-	GlobalTOC []globalTocEntry
-	Headings  []tocItemView
-	Body      template.HTML
+	Title        string
+	Meta         template.HTML
+	AssetRoot    string
+	GlobalTOC    []globalTocEntry
+	Headings     []tocItemView
+	Body         template.HTML
+	TraceContext template.HTML
 }
 
 type tocItemView struct {
@@ -184,9 +185,10 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 	body = rewriteMarkdownLinks(body)
 	body = rewriteTraceLinks(body)
 
-	// Append per-page trace sidebar if trace data exists.
+	// Build per-page trace context panel if trace data exists.
+	var traceCtx string
 	if traceGraph != nil {
-		body += renderPageTraceLinks(result.Document.RelativeTo, traceGraph, entryDir)
+		traceCtx = renderPageTraceContext(result.Document.RelativeTo, result.Document.Title, traceGraph, entryDir)
 	}
 
 	title := result.Document.Title
@@ -204,12 +206,13 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 	}
 
 	view := pageView{
-		Title:     title,
-		Meta:      template.HTML(meta), //nolint:gosec // meta is internally generated
-		AssetRoot: computeAssetRoot(path.Dir(htmlPath)),
-		GlobalTOC: globalTOC,
-		Headings:  headings,
-		Body:      template.HTML(body), //nolint:gosec // body is internally generated
+		Title:        title,
+		Meta:         template.HTML(meta), //nolint:gosec // meta is internally generated
+		AssetRoot:    computeAssetRoot(path.Dir(htmlPath)),
+		GlobalTOC:    globalTOC,
+		Headings:     headings,
+		Body:         template.HTML(body),         //nolint:gosec // body is internally generated
+		TraceContext: template.HTML(traceCtx), //nolint:gosec // internally generated
 	}
 
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
@@ -308,21 +311,34 @@ func rewriteTraceLinks(html string) string {
 	})
 }
 
-// renderPageTraceLinks builds an HTML section showing incoming/outgoing trace edges for a document.
-func renderPageTraceLinks(docPath string, tg *core.TraceGraphData, entryDir string) string {
+// renderPageTraceContext builds a right-side traceability panel showing parents → current → children.
+func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, entryDir string) string {
 	type link struct {
-		edge string
-		doc  string
-		href string
+		edge     string
+		doc      string
+		docType  string
+		href     string
+	}
+
+	// Build type lookup.
+	typeOf := make(map[string]string, len(tg.Documents))
+	for _, d := range tg.Documents {
+		typeOf[d.Path] = d.Type
 	}
 
 	var incoming, outgoing []link
 	for _, e := range tg.Edges {
 		if e.Target == docPath {
-			incoming = append(incoming, link{edge: e.EdgeName, doc: e.Source, href: docToHTMLPath(e.Source, entryDir)})
+			incoming = append(incoming, link{
+				edge: e.EdgeName, doc: e.Source,
+				docType: typeOf[e.Source], href: docToHTMLPath(e.Source, entryDir),
+			})
 		}
 		if e.Source == docPath {
-			outgoing = append(outgoing, link{edge: e.EdgeName, doc: e.Target, href: docToHTMLPath(e.Target, entryDir)})
+			outgoing = append(outgoing, link{
+				edge: e.EdgeName, doc: e.Target,
+				docType: typeOf[e.Target], href: docToHTMLPath(e.Target, entryDir),
+			})
 		}
 	}
 	if len(incoming) == 0 && len(outgoing) == 0 {
@@ -330,31 +346,55 @@ func renderPageTraceLinks(docPath string, tg *core.TraceGraphData, entryDir stri
 	}
 
 	var b strings.Builder
-	b.WriteString(`<div class="trace-sidebar">`)
-	b.WriteString(`<p class="trace-sidebar-title">Trace Links</p>`)
+	b.WriteString(`<p class="trace-ctx-title">Traceability</p>`)
 
-	writeLinks := func(label string, links []link) {
-		if len(links) == 0 {
+	// Write type tag.
+	writeTag := func(t string) {
+		if t == "" {
 			return
 		}
-		b.WriteString(`<p class="trace-sidebar-label">`)
-		b.WriteString(template.HTMLEscapeString(label))
-		b.WriteString(`</p><ul class="trace-sidebar-list">`)
-		for _, l := range links {
-			b.WriteString(`<li><a href="`)
-			b.WriteString(template.HTMLEscapeString(l.href))
-			b.WriteString(`">`)
-			b.WriteString(template.HTMLEscapeString(titleFromPath(l.doc)))
-			b.WriteString(`</a> <span class="trace-sidebar-edge">`)
-			b.WriteString(template.HTMLEscapeString(l.edge))
-			b.WriteString(`</span></li>`)
-		}
-		b.WriteString(`</ul>`)
+		fmt.Fprintf(&b, `<span class="trace-tag" style="--type-hue:%d">%s</span> `,
+			typeHue(t), template.HTMLEscapeString(t))
 	}
 
-	writeLinks("Traced by", incoming)
-	writeLinks("Traces to", outgoing)
+	// Parents: each with arrow pointing into current.
+	for _, l := range incoming {
+		b.WriteString(`<div class="trace-ctx-parent">`)
+		b.WriteString(`<a href="`)
+		b.WriteString(template.HTMLEscapeString(l.href))
+		b.WriteString(`">`)
+		writeTag(l.docType)
+		b.WriteString(template.HTMLEscapeString(titleFromPath(l.doc)))
+		b.WriteString(`</a>`)
+		fmt.Fprintf(&b, `<span class="trace-ctx-arrow">%s</span>`,
+			template.HTMLEscapeString(l.edge))
+		b.WriteString(`</div>`)
+	}
+
+	// Current document.
+	curTitle := docTitle
+	if curTitle == "" {
+		curTitle = titleFromPath(docPath)
+	}
+	b.WriteString(`<div class="trace-ctx-current">`)
+	writeTag(typeOf[docPath])
+	b.WriteString(template.HTMLEscapeString(curTitle))
 	b.WriteString(`</div>`)
+
+	// Children: arrow then linked child.
+	for _, l := range outgoing {
+		b.WriteString(`<div class="trace-ctx-child">`)
+		fmt.Fprintf(&b, `<span class="trace-ctx-arrow">%s</span>`,
+			template.HTMLEscapeString(l.edge))
+		b.WriteString(`<a href="`)
+		b.WriteString(template.HTMLEscapeString(l.href))
+		b.WriteString(`">`)
+		writeTag(l.docType)
+		b.WriteString(template.HTMLEscapeString(titleFromPath(l.doc)))
+		b.WriteString(`</a>`)
+		b.WriteString(`</div>`)
+	}
+
 	return b.String()
 }
 
@@ -1761,6 +1801,11 @@ var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
           </article>
         </div>
       </div>
+      {{ if .TraceContext }}
+      <aside class="trace-context" aria-label="Traceability">
+        <div class="trace-ctx-inner">{{ .TraceContext }}</div>
+      </aside>
+      {{ end }}
     </div>
   </main>
   <footer class="site-footer">
@@ -1824,7 +1869,7 @@ main {
 
 .layout {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 54rem);
+  grid-template-columns: 16rem minmax(0, 54rem) auto;
   column-gap: 2.5rem;
   align-items: start;
 }
@@ -2436,6 +2481,16 @@ code, pre, kbd, samp {
   .toc-inner { padding-left: 0; padding-bottom: 1rem; }
   .content-header { order: 1; }
   .content-body { order: 3; }
+
+  .trace-context {
+    position: static;
+    order: 4;
+    max-width: none;
+    min-width: 0;
+    margin-top: 2rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 1rem;
+  }
 }
 
 .site-footer {
@@ -2533,45 +2588,68 @@ code, pre, kbd, samp {
   line-height: 1.45;
 }
 
-/* ── Per-page trace sidebar ── */
-.trace-sidebar {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
+/* ── Per-page trace context (right panel) ── */
+.trace-context {
+  position: sticky;
+  top: calc(2.75rem + var(--safe-top));
+  max-height: calc(100dvh - 2.75rem - var(--safe-top) - var(--safe-bottom));
+  overflow-y: auto;
+  min-width: 14rem;
+  max-width: 18rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
-.trace-sidebar-title {
-  font-size: 0.82rem;
+.trace-ctx-inner { padding: 0 0.85rem 0 0; }
+
+.trace-ctx-title {
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   margin-bottom: 0.75rem;
 }
 
-.trace-sidebar-label {
-  font-size: 0.82rem;
+.trace-ctx-parent {
+  padding-left: 0;
+}
+
+.trace-ctx-parent a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.trace-ctx-parent a:hover { color: var(--accent); }
+
+.trace-ctx-arrow {
+  display: block;
+  font-size: 0.75rem;
   color: var(--muted);
-  margin: 0.5rem 0 0.25rem;
-  font-style: italic;
+  padding: 0.1rem 0 0.1rem 0.5rem;
+}
+.trace-ctx-parent .trace-ctx-arrow::before { content: "── "; }
+.trace-ctx-parent .trace-ctx-arrow::after  { content: " →"; }
+.trace-ctx-child  .trace-ctx-arrow::before { content: "── "; }
+.trace-ctx-child  .trace-ctx-arrow::after  { content: " →"; }
+
+.trace-ctx-current {
+  padding: 0.3rem 0.5rem;
+  margin: 0.15rem 0;
+  background: var(--bg);
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: 0.75rem;
 }
 
-.trace-sidebar-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.trace-ctx-child {
+  margin-left: 1.5rem;
 }
 
-.trace-sidebar-list li {
-  font-size: 0.88rem;
-  margin: 0.2rem 0;
+.trace-ctx-child a {
+  color: var(--ink);
+  text-decoration: none;
 }
-
-.trace-sidebar-edge {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--muted);
-}
+.trace-ctx-child a:hover { color: var(--accent); }
 `
 
 const scriptJS = `(() => {
