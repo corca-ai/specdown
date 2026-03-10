@@ -1998,7 +1998,7 @@ main {
 
 .spec-body > :first-child > :first-child { margin-top: 0; }
 
-.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0; }
+.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):not(.trace-forest ul):not(.trace-tree) { margin: 1.25rem 0 0; }
 .spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
 .spec-body pre { margin: 1rem 0; }
 .spec-body li { margin: 0.25rem 0; }
@@ -2485,7 +2485,7 @@ code, pre, kbd, samp {
 
 .trace-node {
   font-size: 0.88rem;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .trace-tag {
