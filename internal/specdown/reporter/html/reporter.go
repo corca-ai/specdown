@@ -520,11 +520,11 @@ func renderTraceGraph(tg *core.TraceGraphData) string {
 	writeNode = func(path string) {
 		d := sf.docByPath[path]
 		b.WriteString(`<li class="trace-node">`)
-		b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
 		if d.Type != "" {
-			fmt.Fprintf(&b, ` <span class="doc-type" style="--type-hue:%d">%s</span>`,
+			fmt.Fprintf(&b, `<span class="trace-tag" style="--type-hue:%d">%s</span> `,
 				typeHue(d.Type), template.HTMLEscapeString(d.Type))
 		}
+		b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
 		writeExtraParents(&b, sf.extraParents[path])
 		writeBackEdges(&b, sf.backEdges[path])
 		if children := sf.treeChildren[path]; len(children) > 0 {
@@ -2480,19 +2480,37 @@ code, pre, kbd, samp {
 }
 
 .trace-node {
-  font-size: 0.9rem;
-  line-height: 1.75;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  padding: 1px 0;
+}
+
+.trace-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1em 0.4em;
+  border-radius: 0.15rem;
+  min-width: 2.5em;
+  text-align: center;
+  vertical-align: baseline;
+  background: hsl(var(--type-hue) 55% 92%);
+  color: hsl(var(--type-hue) 50% 35%);
+  border: 1px solid hsl(var(--type-hue) 40% 82%);
 }
 
 .trace-also {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-style: italic;
 }
 
 .trace-cycle {
   color: var(--fail-mark);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 
 /* ── Trace errors ── */
