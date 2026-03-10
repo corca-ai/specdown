@@ -2485,13 +2485,8 @@ code, pre, kbd, samp {
 
 .trace-node {
   font-size: 0.88rem;
-  line-height: 1.5;
-  padding: 1px 0;
+  line-height: 1.4;
 }
-
-/* Gestalt proximity: gap before sibling nodes that have children */
-.trace-node:has(> ul) + .trace-node { padding-top: 0.25rem; }
-.trace-node + .trace-node:has(> ul) { padding-top: 0.25rem; }
 
 .trace-tag {
   display: inline-block;
