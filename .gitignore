@@ -7,3 +7,4 @@ mise.toml
 .tmp-test/
 .board-state.json
 .playwright-cli/
+.claude/skills/specdown/
