@@ -1066,8 +1066,6 @@ func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 		Edges:           edges,
 		TransitiveEdges: transitive,
 		Class:           string(c.Class),
-		Layout:          string(c.Layout),
-		Layers:          c.Layers,
 	}
 }
 

@@ -97,8 +97,6 @@ type TraceGraphData struct {
 	Edges           []TraceEdge     `json:"edges"`
 	TransitiveEdges []TraceEdge     `json:"transitiveEdges,omitempty"`
 	Class           string          `json:"class"`
-	Layout          string          `json:"layout"`
-	Layers          []string        `json:"layers,omitempty"`
 }
 
 // TraceDocument is a document node in the trace graph.

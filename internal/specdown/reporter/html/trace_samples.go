@@ -20,15 +20,13 @@ type TraceSample struct {
 	Class       trace.Classification
 }
 
-// BuildTraceSamples returns realistic sample graphs for every layout class.
+// BuildTraceSamples returns realistic sample graphs covering tree, forest,
+// DAG, and cyclic structures.
 func BuildTraceSamples() []TraceSample {
 	samples := []TraceSample{
-		buildLinearChainSample(),
-		buildFlatStarSample(),
 		buildTreeSample(),
 		buildForestSample(),
-		buildLayeredDAGSample(),
-		buildDiamondDAGSample(),
+		buildDAGSample(),
 		buildCyclicSample(),
 	}
 	for i := range samples {
@@ -61,8 +59,8 @@ func WriteTraceSampleGallery(outDir string) error {
 	for _, s := range samples {
 		slug := slugify(s.Name)
 		fmt.Fprintf(&indexBody,
-			`<li><a href="%s.html"><strong>%s</strong></a> — %s<br><code>class=%s layout=%s</code></li>`,
-			slug, s.Name, s.Description, s.Class.Class, s.Class.Layout)
+			`<li><a href="%s.html"><strong>%s</strong></a> — %s</li>`,
+			slug, s.Name, s.Description)
 	}
 	indexBody.WriteString(`</ul>`)
 
@@ -160,14 +158,12 @@ func sampleToTraceGraphData(s TraceSample) core.TraceGraphData {
 		Edges:           edges,
 		TransitiveEdges: transitive,
 		Class:           string(s.Class.Class),
-		Layout:          string(s.Class.Layout),
-		Layers:          s.Class.Layers,
 	}
 }
 
 func sampleTraceErrors(s TraceSample) []string {
 	// Only add sample errors for the cyclic graph.
-	if s.Class.Class == trace.ClassGeneral {
+	if s.Class.Class == trace.ClassCyclic {
 		return []string{
 			"GRAPH: [depends] cycle detected — auth.spec.md → session.spec.md → auth.spec.md",
 			"GRAPH: [depends] cardinality — spec \"logging.spec.md\" has 0 outgoing \"depends\" edges (expected 1..*)",
@@ -191,50 +187,6 @@ func htmlSafe(s string) template.HTML {
 }
 
 // ── Sample graph builders ──
-
-func buildLinearChainSample() TraceSample {
-	return TraceSample{
-		Name:        "Linear Chain",
-		Description: "A pipeline of specs where each depends on the previous. Common for sequential workflows like parse → compile → run → report.",
-		Graph: trace.Graph{
-			Documents: []trace.TypedDocument{
-				{Path: "parse.spec.md", Type: "spec"},
-				{Path: "compile.spec.md", Type: "spec"},
-				{Path: "execute.spec.md", Type: "spec"},
-				{Path: "report.spec.md", Type: "spec"},
-			},
-			DirectEdges: []trace.Edge{
-				{Source: "parse.spec.md", Target: "compile.spec.md", EdgeName: "depends"},
-				{Source: "compile.spec.md", Target: "execute.spec.md", EdgeName: "depends"},
-				{Source: "execute.spec.md", Target: "report.spec.md", EdgeName: "depends"},
-			},
-		},
-	}
-}
-
-func buildFlatStarSample() TraceSample {
-	return TraceSample{
-		Name:        "Flat Star",
-		Description: "A single index document that fans out to all feature specs. Typical for a project overview page.",
-		Graph: trace.Graph{
-			Documents: []trace.TypedDocument{
-				{Path: "index.spec.md", Type: "index"},
-				{Path: "auth.spec.md", Type: "spec"},
-				{Path: "billing.spec.md", Type: "spec"},
-				{Path: "notifications.spec.md", Type: "spec"},
-				{Path: "search.spec.md", Type: "spec"},
-				{Path: "admin.spec.md", Type: "spec"},
-			},
-			DirectEdges: []trace.Edge{
-				{Source: "index.spec.md", Target: "auth.spec.md", EdgeName: "covers"},
-				{Source: "index.spec.md", Target: "billing.spec.md", EdgeName: "covers"},
-				{Source: "index.spec.md", Target: "notifications.spec.md", EdgeName: "covers"},
-				{Source: "index.spec.md", Target: "search.spec.md", EdgeName: "covers"},
-				{Source: "index.spec.md", Target: "admin.spec.md", EdgeName: "covers"},
-			},
-		},
-	}
-}
 
 func buildTreeSample() TraceSample {
 	return TraceSample{
@@ -289,46 +241,10 @@ func buildForestSample() TraceSample {
 	}
 }
 
-func buildLayeredDAGSample() TraceSample {
+func buildDAGSample() TraceSample {
 	return TraceSample{
-		Name:        "Layered DAG",
-		Description: "A Theme → Epic → Story → Acceptance Test hierarchy. Types form strict layers; stories can be covered by multiple epics.",
-		Graph: trace.Graph{
-			Documents: []trace.TypedDocument{
-				{Path: "user-management.md", Type: "theme"},
-				{Path: "registration.md", Type: "epic"},
-				{Path: "profile.md", Type: "epic"},
-				{Path: "email-signup.md", Type: "story"},
-				{Path: "social-login.md", Type: "story"},
-				{Path: "edit-avatar.md", Type: "story"},
-				{Path: "change-password.md", Type: "story"},
-				{Path: "verify-email-flow.md", Type: "at"},
-				{Path: "verify-oauth-flow.md", Type: "at"},
-				{Path: "verify-avatar-upload.md", Type: "at"},
-				{Path: "verify-password-reset.md", Type: "at"},
-			},
-			DirectEdges: []trace.Edge{
-				{Source: "user-management.md", Target: "registration.md", EdgeName: "owns"},
-				{Source: "user-management.md", Target: "profile.md", EdgeName: "owns"},
-				{Source: "registration.md", Target: "email-signup.md", EdgeName: "covers"},
-				{Source: "registration.md", Target: "social-login.md", EdgeName: "covers"},
-				{Source: "profile.md", Target: "edit-avatar.md", EdgeName: "covers"},
-				{Source: "profile.md", Target: "change-password.md", EdgeName: "covers"},
-				// Cross-link: registration also covers social-login's password aspect
-				{Source: "profile.md", Target: "social-login.md", EdgeName: "covers"},
-				{Source: "email-signup.md", Target: "verify-email-flow.md", EdgeName: "tests"},
-				{Source: "social-login.md", Target: "verify-oauth-flow.md", EdgeName: "tests"},
-				{Source: "edit-avatar.md", Target: "verify-avatar-upload.md", EdgeName: "tests"},
-				{Source: "change-password.md", Target: "verify-password-reset.md", EdgeName: "tests"},
-			},
-		},
-	}
-}
-
-func buildDiamondDAGSample() TraceSample {
-	return TraceSample{
-		Name:        "Diamond DAG",
-		Description: "Specs with shared dependencies forming diamonds. Auth and Database are both needed by API and Worker, creating convergence points.",
+		Name:        "DAG",
+		Description: "Specs with shared dependencies forming diamonds. Some nodes have multiple parents, shown as inline annotations.",
 		Graph: trace.Graph{
 			Documents: []trace.TypedDocument{
 				{Path: "config.spec.md", Type: "spec"},

@@ -521,6 +521,10 @@ func renderTraceGraph(tg *core.TraceGraphData) string {
 		d := sf.docByPath[path]
 		b.WriteString(`<li class="trace-node">`)
 		b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
+		if d.Type != "" {
+			fmt.Fprintf(&b, ` <span class="doc-type" style="--type-hue:%d">%s</span>`,
+				typeHue(d.Type), template.HTMLEscapeString(d.Type))
+		}
 		writeExtraParents(&b, sf.extraParents[path])
 		writeBackEdges(&b, sf.backEdges[path])
 		if children := sf.treeChildren[path]; len(children) > 0 {
