@@ -430,61 +430,50 @@ func usage() {
 
 func installSkillsCmd(args []string) error {
 	if len(args) == 0 || hasHelpFlag(args) {
-		fmt.Fprintln(os.Stderr, "Usage: specdown install skills")
+		fmt.Fprintln(os.Stderr, "Usage: specdown install skills [--overwrite]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Install Claude Code skills for this project.")
 		fmt.Fprintln(os.Stderr, "Creates .claude/skills/specdown/SKILL.md in the current directory.")
+		fmt.Fprintln(os.Stderr, "Use --overwrite to replace existing files.")
 		return nil
 	}
 	if args[0] != "skills" {
 		return fmt.Errorf("unknown install target %q\nhint: run 'specdown install --help'", args[0])
 	}
 
+	overwrite := false
+	for _, a := range args[1:] {
+		if a == "--overwrite" {
+			overwrite = true
+		}
+	}
+
 	dir := filepath.Join(".claude", "skills", "specdown")
 	dest := filepath.Join(dir, "SKILL.md")
 
-	if _, err := os.Stat(dest); err == nil {
-		return fmt.Errorf("%s already exists", dest)
+	if _, err := os.Stat(dest); err == nil && !overwrite {
+		return fmt.Errorf("%s already exists\nhint: use --overwrite to replace existing files", dest)
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dest, []byte(skillSpecdown), 0o644); err != nil {
-		return err
+	files := []struct{ name, content string }{
+		{"SKILL.md", skillSpecdown},
+		{"guide-writing.md", specdown.SkillWritingGuide},
+		{"adapter-protocol.md", specdown.SkillAdapterProtocol},
+		{"syntax.md", specdown.SkillSyntax},
+		{"config.md", specdown.SkillConfig},
+		{"trace.md", specdown.SkillTrace},
+		{"alloy.md", specdown.SkillAlloy},
 	}
-	guideDest := filepath.Join(dir, "guide-writing.md")
-	if err := os.WriteFile(guideDest, []byte(specdown.SkillWritingGuide), 0o644); err != nil {
-		return err
+	for _, f := range files {
+		p := filepath.Join(dir, f.name)
+		if err := os.WriteFile(p, []byte(f.content), 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("Created %s\n", p)
 	}
-	protocolDest := filepath.Join(dir, "adapter-protocol.md")
-	if err := os.WriteFile(protocolDest, []byte(specdown.SkillAdapterProtocol), 0o644); err != nil {
-		return err
-	}
-	syntaxDest := filepath.Join(dir, "syntax.md")
-	if err := os.WriteFile(syntaxDest, []byte(specdown.SkillSyntax), 0o644); err != nil {
-		return err
-	}
-	configDest := filepath.Join(dir, "config.md")
-	if err := os.WriteFile(configDest, []byte(specdown.SkillConfig), 0o644); err != nil {
-		return err
-	}
-	traceDest := filepath.Join(dir, "trace.md")
-	if err := os.WriteFile(traceDest, []byte(specdown.SkillTrace), 0o644); err != nil {
-		return err
-	}
-	alloyDest := filepath.Join(dir, "alloy.md")
-	if err := os.WriteFile(alloyDest, []byte(specdown.SkillAlloy), 0o644); err != nil {
-		return err
-	}
-
-	fmt.Printf("Created %s\n", dest)
-	fmt.Printf("Created %s\n", guideDest)
-	fmt.Printf("Created %s\n", protocolDest)
-	fmt.Printf("Created %s\n", syntaxDest)
-	fmt.Printf("Created %s\n", configDest)
-	fmt.Printf("Created %s\n", traceDest)
-	fmt.Printf("Created %s\n", alloyDest)
 	fmt.Println("Use /specdown in Claude Code to run and fix specs.")
 	return nil
 }
