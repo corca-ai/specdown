@@ -91,10 +91,34 @@ type Summary struct {
 	TraceErrorCount      int `json:"traceErrorCount,omitempty"`
 }
 
+// TraceGraphData holds the trace graph and its classification for report rendering.
+type TraceGraphData struct {
+	Documents       []TraceDocument `json:"documents"`
+	Edges           []TraceEdge     `json:"edges"`
+	TransitiveEdges []TraceEdge     `json:"transitiveEdges,omitempty"`
+	Class           string          `json:"class"`
+	Layout          string          `json:"layout"`
+	Layers          []string        `json:"layers,omitempty"`
+}
+
+// TraceDocument is a document node in the trace graph.
+type TraceDocument struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+}
+
+// TraceEdge is a directed edge in the trace graph.
+type TraceEdge struct {
+	Source   string `json:"source"`
+	Target  string `json:"target"`
+	EdgeName string `json:"edgeName"`
+}
+
 type Report struct {
 	Title       string           `json:"title"`
 	GeneratedAt time.Time        `json:"generatedAt"`
 	Results     []DocumentResult `json:"results"`
 	Summary     Summary          `json:"summary"`
 	TraceErrors []string         `json:"traceErrors,omitempty"`
+	TraceGraph  *TraceGraphData  `json:"traceGraph,omitempty"`
 }

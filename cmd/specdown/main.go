@@ -45,6 +45,8 @@ func main() {
 		err = alloyCmd(os.Args[2:])
 	case "install":
 		err = installSkillsCmd(os.Args[2:])
+	case "trace-samples":
+		err = traceSamplesCmd(os.Args[2:])
 	case "version", "--version", "-version":
 		fmt.Println(version)
 	default:
@@ -660,6 +662,29 @@ func printWarnings(report core.Report) {
 			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 		}
 	}
+}
+
+func traceSamplesCmd(args []string) error {
+	fs := flag.NewFlagSet("trace-samples", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	outDir := fs.String("out", "trace-samples", "Output directory for the sample gallery")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: specdown trace-samples [-out DIR]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Generate an HTML gallery showing all trace layout types with sample data.")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if err := htmlreport.WriteTraceSampleGallery(*outDir); err != nil {
+		return err
+	}
+	fmt.Printf("trace-samples: %s\n", *outDir)
+	return nil
 }
 
 func printDryRun(report core.Report) {

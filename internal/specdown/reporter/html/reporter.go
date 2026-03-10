@@ -48,6 +48,8 @@ type globalTocEntry struct {
 // Write generates a multi-page HTML site in outDir.
 // outDir is the output directory. Each document result becomes a separate HTML page.
 // Shared CSS and JS are written as style.css and script.js.
+//
+//nolint:gocognit // orchestrator function
 func Write(report core.Report, outDir string) error {
 	// Remove any existing non-directory at outDir so MkdirAll succeeds.
 	if info, err := os.Stat(outDir); err == nil && !info.IsDir() {
@@ -76,6 +78,21 @@ func Write(report core.Report, outDir string) error {
 
 	docs := collectDocTOCs(report.Results, entryDir)
 
+	// If trace graph exists, add a trace page entry to docs.
+	hasTrace := report.TraceGraph != nil && len(report.TraceGraph.Edges) > 0
+	if hasTrace {
+		traceStatus := ""
+		if len(report.TraceErrors) > 0 {
+			traceStatus = "failed"
+		}
+		docs = append(docs, docTOC{
+			title:    "Trace Graph",
+			htmlPath: "trace.html",
+			status:   traceStatus,
+			headings: nil,
+		})
+	}
+
 	for i, result := range report.Results {
 		meta := buildDocMeta(result, report.GeneratedAt)
 		if i == 0 {
@@ -84,7 +101,15 @@ func Write(report core.Report, outDir string) error {
 		assetRoot := computeAssetRoot(path.Dir(docs[i].htmlPath))
 		globalTOC := buildGlobalTOC(docs, i, assetRoot)
 
-		if err := writePage(outDir, entryDir, result, meta, globalTOC); err != nil {
+		if err := writePage(outDir, entryDir, result, meta, globalTOC, report.TraceGraph); err != nil {
+			return err
+		}
+	}
+
+	if hasTrace {
+		traceIdx := len(docs) - 1
+		globalTOC := buildGlobalTOC(docs, traceIdx, ".")
+		if err := writeTracePage(outDir, report, globalTOC); err != nil {
 			return err
 		}
 	}
@@ -148,7 +173,7 @@ func buildGlobalTOC(docs []docTOC, currentIdx int, assetRoot string) []globalToc
 	return toc
 }
 
-func writePage(outDir, entryDir string, result core.DocumentResult, meta string, globalTOC []globalTocEntry) error {
+func writePage(outDir, entryDir string, result core.DocumentResult, meta string, globalTOC []globalTocEntry, traceGraph *core.TraceGraphData) error {
 	htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
 	fullPath := filepath.Join(outDir, filepath.FromSlash(htmlPath))
 
@@ -158,6 +183,11 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 	}
 	body = rewriteMarkdownLinks(body)
 	body = rewriteTraceLinks(body)
+
+	// Append per-page trace sidebar if trace data exists.
+	if traceGraph != nil {
+		body += renderPageTraceLinks(result.Document.RelativeTo, traceGraph, entryDir)
+	}
 
 	title := result.Document.Title
 	if title == "" {
@@ -276,6 +306,484 @@ func rewriteTraceLinks(html string) string {
 			template.HTMLEscapeString(edgeName) +
 			`</span></a>`
 	})
+}
+
+// renderPageTraceLinks builds an HTML section showing incoming/outgoing trace edges for a document.
+func renderPageTraceLinks(docPath string, tg *core.TraceGraphData, entryDir string) string {
+	type link struct {
+		edge string
+		doc  string
+		href string
+	}
+
+	var incoming, outgoing []link
+	for _, e := range tg.Edges {
+		if e.Target == docPath {
+			incoming = append(incoming, link{edge: e.EdgeName, doc: e.Source, href: docToHTMLPath(e.Source, entryDir)})
+		}
+		if e.Source == docPath {
+			outgoing = append(outgoing, link{edge: e.EdgeName, doc: e.Target, href: docToHTMLPath(e.Target, entryDir)})
+		}
+	}
+	if len(incoming) == 0 && len(outgoing) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(`<div class="trace-sidebar">`)
+	b.WriteString(`<p class="trace-sidebar-title">Trace Links</p>`)
+
+	writeLinks := func(label string, links []link) {
+		if len(links) == 0 {
+			return
+		}
+		b.WriteString(`<p class="trace-sidebar-label">`)
+		b.WriteString(template.HTMLEscapeString(label))
+		b.WriteString(`</p><ul class="trace-sidebar-list">`)
+		for _, l := range links {
+			b.WriteString(`<li><a href="`)
+			b.WriteString(template.HTMLEscapeString(l.href))
+			b.WriteString(`">`)
+			b.WriteString(template.HTMLEscapeString(titleFromPath(l.doc)))
+			b.WriteString(`</a> <span class="trace-sidebar-edge">`)
+			b.WriteString(template.HTMLEscapeString(l.edge))
+			b.WriteString(`</span></li>`)
+		}
+		b.WriteString(`</ul>`)
+	}
+
+	writeLinks("Traced by", incoming)
+	writeLinks("Traces to", outgoing)
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+// writeTracePage generates the trace.html visualization page.
+func writeTracePage(outDir string, report core.Report, globalTOC []globalTocEntry) error {
+	tg := report.TraceGraph
+	var b strings.Builder
+
+	b.WriteString(`<h1>Trace Graph</h1>`)
+	b.WriteString(`<p class="trace-meta">`)
+	fmt.Fprintf(&b, `Class: <strong>%s</strong> · Layout: <strong>%s</strong>`,
+		template.HTMLEscapeString(tg.Class),
+		template.HTMLEscapeString(tg.Layout))
+	fmt.Fprintf(&b, ` · %d documents · %d edges`, len(tg.Documents), len(tg.Edges))
+	if len(tg.Layers) > 0 {
+		b.WriteString(` · Layers: `)
+		b.WriteString(template.HTMLEscapeString(strings.Join(tg.Layers, " → ")))
+	}
+	b.WriteString(`</p>`)
+
+	// SVG graph visualization
+	b.WriteString(renderTraceSVG(tg))
+
+	// Coverage matrix
+	b.WriteString(renderTraceMatrix(tg))
+
+	// Trace errors
+	if len(report.TraceErrors) > 0 {
+		b.WriteString(`<h2>Trace Errors</h2>`)
+		b.WriteString(`<ul class="trace-error-list">`)
+		for _, e := range report.TraceErrors {
+			b.WriteString(`<li class="trace-error">`)
+			b.WriteString(template.HTMLEscapeString(e))
+			b.WriteString(`</li>`)
+		}
+		b.WriteString(`</ul>`)
+	}
+
+	view := pageView{
+		Title:     "Trace Graph",
+		Meta:      template.HTML(buildTracePageMeta(report)),
+		AssetRoot: ".",
+		GlobalTOC: globalTOC,
+		Body:      template.HTML(b.String()), //nolint:gosec // internally generated
+	}
+
+	return writeHTMLFile(filepath.Join(outDir, "trace.html"), view)
+}
+
+func buildTracePageMeta(report core.Report) string {
+	var b strings.Builder
+	b.WriteString(`<p class="content-meta">`)
+	b.WriteString(template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)))
+	fmt.Fprintf(&b, `<span class="pill pass">docs %d</span>`, len(report.TraceGraph.Documents))
+	fmt.Fprintf(&b, `<span class="pill pass">edges %d</span>`, len(report.TraceGraph.Edges))
+	if len(report.TraceErrors) > 0 {
+		fmt.Fprintf(&b, `<span class="pill fail">errors %d</span>`, len(report.TraceErrors))
+	}
+	b.WriteString(`</p>`)
+	return b.String()
+}
+
+// renderTraceSVG generates an inline SVG visualization of the trace graph.
+// Layout strategy is selected based on the graph classification.
+//
+//nolint:gocognit // SVG rendering requires coordinate math
+func renderTraceSVG(tg *core.TraceGraphData) string {
+	if len(tg.Documents) == 0 {
+		return ""
+	}
+
+	// Assign positions based on layout type.
+	nodeIdx := make(map[string]int, len(tg.Documents))
+	for i, d := range tg.Documents {
+		nodeIdx[d.Path] = i
+	}
+
+	var nodes []nodePos
+	switch tg.Layout {
+	case "grid":
+		nodes = layoutGrid(tg)
+	case "radial":
+		nodes = layoutRadial(tg)
+	case "linear":
+		nodes = layoutLinear(tg)
+	default:
+		nodes = layoutLayered(tg, nodeIdx)
+	}
+
+	// Compute SVG dimensions.
+	var maxX, maxY float64
+	for _, n := range nodes {
+		if n.x > maxX {
+			maxX = n.x
+		}
+		if n.y > maxY {
+			maxY = n.y
+		}
+	}
+
+	const nodeW, nodeH = 140.0, 36.0
+	const pad = 40.0
+	svgW := maxX + nodeW + pad*2
+	svgH := maxY + nodeH + pad*2
+
+	var b strings.Builder
+	fmt.Fprintf(&b, `<svg class="trace-svg" viewBox="0 0 %.0f %.0f" xmlns="http://www.w3.org/2000/svg">`, svgW, svgH)
+	b.WriteString(`<defs><marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><polygon points="0 0, 10 3.5, 0 7" fill="var(--muted)"/></marker></defs>`)
+
+	// Draw edges.
+	for _, e := range tg.Edges {
+		si, ok1 := nodeIdx[e.Source]
+		ti, ok2 := nodeIdx[e.Target]
+		if !ok1 || !ok2 {
+			continue
+		}
+		src := nodes[si]
+		tgt := nodes[ti]
+		x1 := pad + src.x + nodeW/2
+		y1 := pad + src.y + nodeH
+		x2 := pad + tgt.x + nodeW/2
+		y2 := pad + tgt.y
+
+		// Shorten line to avoid overlapping arrowhead with node.
+		if y2 > y1 {
+			y2 -= 2
+		} else if y2 < y1 {
+			y2 += 2
+		}
+
+		midY := (y1 + y2) / 2
+		fmt.Fprintf(&b, `<path d="M%.1f,%.1f C%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="none" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#arrow)"/>`,
+			x1, y1, x1, midY, x2, midY, x2, y2)
+
+		// Edge label at midpoint.
+		labelX := (x1 + x2) / 2
+		labelY := midY - 4
+		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" class="trace-edge-label">%s</text>`,
+			labelX, labelY, template.HTMLEscapeString(e.EdgeName))
+	}
+
+	// Draw nodes.
+	for i, n := range nodes {
+		_ = i
+		nx := pad + n.x
+		ny := pad + n.y
+		hue := typeHue(n.docType)
+		fmt.Fprintf(&b, `<g class="trace-node">`)
+		fmt.Fprintf(&b, `<rect x="%.1f" y="%.1f" width="%.0f" height="%.0f" rx="4" fill="hsl(%d 55%% 92%%)" stroke="hsl(%d 40%% 72%%)" stroke-width="1"/>`,
+			nx, ny, nodeW, nodeH, hue, hue)
+		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" class="trace-node-label">%s</text>`,
+			nx+nodeW/2, ny+nodeH/2+4, template.HTMLEscapeString(n.label))
+		if n.docType != "" {
+			fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" class="trace-node-type">%s</text>`,
+				nx+nodeW/2, ny-4, template.HTMLEscapeString(n.docType))
+		}
+		fmt.Fprintf(&b, `</g>`)
+	}
+
+	b.WriteString(`</svg>`)
+	return b.String()
+}
+
+type nodePos struct {
+	x, y    float64
+	label   string
+	docType string
+	path    string
+}
+
+// layoutGrid arranges nodes in columns by type (for layered DAGs).
+func layoutGrid(tg *core.TraceGraphData) []nodePos {
+	const colW, rowH = 180.0, 70.0
+
+	// Group docs by type, ordered by layers.
+	layerOrder := make(map[string]int)
+	for i, l := range tg.Layers {
+		layerOrder[l] = i
+	}
+
+	type bucket struct {
+		docs []int
+	}
+	buckets := make(map[string]*bucket)
+	for _, l := range tg.Layers {
+		buckets[l] = &bucket{}
+	}
+
+	nodes := make([]nodePos, len(tg.Documents))
+	for i, d := range tg.Documents {
+		t := d.Type
+		if t == "" {
+			t = "_untyped"
+		}
+		if _, ok := buckets[t]; !ok {
+			buckets[t] = &bucket{}
+			layerOrder[t] = len(tg.Layers)
+		}
+		buckets[t].docs = append(buckets[t].docs, i)
+		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
+	}
+
+	for typeName, bk := range buckets {
+		col := layerOrder[typeName]
+		for row, idx := range bk.docs {
+			nodes[idx].x = float64(col) * colW
+			nodes[idx].y = float64(row) * rowH
+		}
+	}
+	return nodes
+}
+
+// layoutRadial arranges nodes in a circle with the root at center.
+func layoutRadial(tg *core.TraceGraphData) []nodePos {
+	nodes := make([]nodePos, len(tg.Documents))
+	for i, d := range tg.Documents {
+		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
+	}
+
+	// Find root (node with no incoming edges).
+	hasIncoming := make(map[string]bool)
+	for _, e := range tg.Edges {
+		hasIncoming[e.Target] = true
+	}
+	rootIdx := 0
+	for i, d := range tg.Documents {
+		if !hasIncoming[d.Path] {
+			rootIdx = i
+			break
+		}
+	}
+
+	const radius = 160.0
+	const cx, cy = 200.0, 200.0
+	nodes[rootIdx].x = cx - 70
+	nodes[rootIdx].y = cy - 18
+
+	others := 0
+	for i := range nodes {
+		if i == rootIdx {
+			continue
+		}
+		angle := 2 * 3.14159265 * float64(others) / float64(len(nodes)-1)
+		nodes[i].x = cx + radius*cos(angle) - 70
+		nodes[i].y = cy + radius*sin(angle) - 18
+		others++
+	}
+	return nodes
+}
+
+// layoutLinear arranges nodes in a single vertical chain.
+func layoutLinear(tg *core.TraceGraphData) []nodePos {
+	nodes := make([]nodePos, len(tg.Documents))
+	for i, d := range tg.Documents {
+		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
+	}
+
+	// Topological sort to find the chain order.
+	order := topoSort(tg)
+	const rowH = 70.0
+	for rank, idx := range order {
+		nodes[idx].x = 0
+		nodes[idx].y = float64(rank) * rowH
+	}
+	return nodes
+}
+
+// layoutLayered is the default for dendrogram/sugiyama — uses topological ranks.
+//
+//nolint:gocognit // rank propagation requires nested iteration
+func layoutLayered(tg *core.TraceGraphData, nodeIdx map[string]int) []nodePos {
+	nodes := make([]nodePos, len(tg.Documents))
+	for i, d := range tg.Documents {
+		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
+	}
+
+	order := topoSort(tg)
+
+	// Assign ranks based on longest path from roots.
+	ranks := make([]int, len(tg.Documents))
+	for _, idx := range order {
+		for _, e := range tg.Edges {
+			si, ok1 := nodeIdx[e.Source]
+			ti, ok2 := nodeIdx[e.Target]
+			if ok1 && ok2 && si == idx {
+				if ranks[ti] < ranks[si]+1 {
+					ranks[ti] = ranks[si] + 1
+				}
+			}
+		}
+	}
+
+	// Group by rank and assign positions.
+	rankBuckets := make(map[int][]int)
+	for i, r := range ranks {
+		rankBuckets[r] = append(rankBuckets[r], i)
+	}
+
+	const colW, rowH = 170.0, 70.0
+	for rank, indices := range rankBuckets {
+		for col, idx := range indices {
+			nodes[idx].x = float64(col) * colW
+			nodes[idx].y = float64(rank) * rowH
+		}
+	}
+	return nodes
+}
+
+// topoSort returns document indices in topological order.
+//
+//nolint:gocognit // Kahn's algorithm with cycle fallback
+func topoSort(tg *core.TraceGraphData) []int {
+	nodeIdx := make(map[string]int, len(tg.Documents))
+	for i, d := range tg.Documents {
+		nodeIdx[d.Path] = i
+	}
+
+	inDeg := make([]int, len(tg.Documents))
+	adj := make([][]int, len(tg.Documents))
+	for _, e := range tg.Edges {
+		si, ok1 := nodeIdx[e.Source]
+		ti, ok2 := nodeIdx[e.Target]
+		if ok1 && ok2 {
+			adj[si] = append(adj[si], ti)
+			inDeg[ti]++
+		}
+	}
+
+	var queue []int
+	for i, d := range inDeg {
+		if d == 0 {
+			queue = append(queue, i)
+		}
+	}
+
+	var order []int
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		order = append(order, cur)
+		for _, next := range adj[cur] {
+			inDeg[next]--
+			if inDeg[next] == 0 {
+				queue = append(queue, next)
+			}
+		}
+	}
+
+	// Add any remaining nodes (cycles).
+	visited := make(map[int]bool, len(order))
+	for _, idx := range order {
+		visited[idx] = true
+	}
+	for i := range tg.Documents {
+		if !visited[i] {
+			order = append(order, i)
+		}
+	}
+	return order
+}
+
+// cos and sin for radial layout (avoiding math import for this small usage).
+func cos(x float64) float64 {
+	// Taylor series approximation, normalized to [-pi, pi].
+	for x > 3.14159265 {
+		x -= 2 * 3.14159265
+	}
+	for x < -3.14159265 {
+		x += 2 * 3.14159265
+	}
+	x2 := x * x
+	return 1 - x2/2 + x2*x2/24 - x2*x2*x2/720
+}
+
+func sin(x float64) float64 {
+	return cos(x - 3.14159265/2)
+}
+
+// renderTraceMatrix builds an HTML adjacency matrix table.
+func renderTraceMatrix(tg *core.TraceGraphData) string {
+	if len(tg.Documents) == 0 {
+		return ""
+	}
+
+	// Collect all edge types per (source, target) pair.
+	type cellKey struct{ src, tgt string }
+	cells := make(map[cellKey][]string)
+	for _, e := range tg.Edges {
+		k := cellKey{e.Source, e.Target}
+		cells[k] = append(cells[k], e.EdgeName)
+	}
+
+	var b strings.Builder
+	b.WriteString(`<h2>Coverage Matrix</h2>`)
+	b.WriteString(`<div class="trace-matrix-wrap"><table class="trace-matrix">`)
+
+	// Header row.
+	b.WriteString(`<thead><tr><th></th>`)
+	for _, d := range tg.Documents {
+		b.WriteString(`<th class="trace-matrix-colhead">`)
+		b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
+		b.WriteString(`</th>`)
+	}
+	b.WriteString(`</tr></thead><tbody>`)
+
+	// Data rows.
+	for _, src := range tg.Documents {
+		b.WriteString(`<tr><th>`)
+		b.WriteString(template.HTMLEscapeString(titleFromPath(src.Path)))
+		b.WriteString(`</th>`)
+		for _, tgt := range tg.Documents {
+			k := cellKey{src.Path, tgt.Path}
+			edges := cells[k]
+			switch {
+			case len(edges) > 0:
+				b.WriteString(`<td class="trace-matrix-filled">`)
+				b.WriteString(template.HTMLEscapeString(strings.Join(edges, ", ")))
+				b.WriteString(`</td>`)
+			case src.Path == tgt.Path:
+				b.WriteString(`<td class="trace-matrix-diag"></td>`)
+			default:
+				b.WriteString(`<td></td>`)
+			}
+		}
+		b.WriteString(`</tr>`)
+	}
+
+	b.WriteString(`</tbody></table></div>`)
+	return b.String()
 }
 
 // typeHue returns a stable hue (0–359) for a type string.
@@ -2158,6 +2666,152 @@ code, pre, kbd, samp {
 .site-footer a {
   color: var(--muted);
   text-decoration: underline;
+}
+
+/* ── Trace page ── */
+.trace-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.trace-svg {
+  width: 100%;
+  max-height: 600px;
+  margin: 1rem 0;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0.3rem;
+}
+
+.trace-node-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  fill: var(--ink);
+}
+
+.trace-node-type {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  text-anchor: middle;
+  fill: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.trace-edge-label {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  text-anchor: middle;
+  fill: var(--muted);
+  font-style: italic;
+}
+
+/* ── Trace matrix ── */
+.trace-matrix-wrap {
+  overflow-x: auto;
+  margin: 1rem 0 2rem;
+}
+
+.trace-matrix {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.trace-matrix th,
+.trace-matrix td {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--rule);
+  text-align: center;
+}
+
+.trace-matrix thead th {
+  background: var(--code-bg);
+  font-weight: normal;
+  font-size: 0.75rem;
+}
+
+.trace-matrix tbody th {
+  text-align: right;
+  background: var(--code-bg);
+  font-weight: normal;
+}
+
+.trace-matrix-colhead {
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  max-width: 2rem;
+}
+
+.trace-matrix-filled {
+  background: hsl(210 50% 93%);
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.trace-matrix-diag {
+  background: var(--code-bg);
+}
+
+/* ── Trace errors ── */
+.trace-error-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0;
+}
+
+.trace-error {
+  padding: 0.5rem 0.75rem;
+  margin: 0.35rem 0;
+  background: var(--fail-bg);
+  border-left: 3px solid var(--fail-mark);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+/* ── Per-page trace sidebar ── */
+.trace-sidebar {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.trace-sidebar-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.75rem;
+}
+
+.trace-sidebar-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0.25rem;
+  font-style: italic;
+}
+
+.trace-sidebar-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.trace-sidebar-list li {
+  font-size: 0.88rem;
+  margin: 0.2rem 0;
+}
+
+.trace-sidebar-edge {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 `
 

@@ -53,7 +53,7 @@ func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error
 
 	// Run trace validation when trace is configured
 	if cfg.Trace != nil {
-		_, traceErrs := trace.Validate(baseDir, cfg.Trace)
+		graph, traceErrs := trace.Validate(baseDir, cfg.Trace)
 		report.TraceErrors = make([]string, 0, len(traceErrs))
 		for _, e := range traceErrs {
 			report.TraceErrors = append(report.TraceErrors, e.Error())
@@ -61,6 +61,7 @@ func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error
 		if len(traceErrs) > 0 {
 			report.Summary.TraceErrorCount = len(traceErrs)
 		}
+		report.TraceGraph = buildTraceGraphData(graph)
 	}
 
 	return report, nil
@@ -1045,6 +1046,30 @@ func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 	return result
 }
 
+
+func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
+	docs := make([]core.TraceDocument, len(g.Documents))
+	for i, d := range g.Documents {
+		docs[i] = core.TraceDocument{Path: d.Path, Type: d.Type}
+	}
+	edges := make([]core.TraceEdge, len(g.DirectEdges))
+	for i, e := range g.DirectEdges {
+		edges[i] = core.TraceEdge{Source: e.Source, Target: e.Target, EdgeName: e.EdgeName}
+	}
+	transitive := make([]core.TraceEdge, len(g.TransitiveEdges))
+	for i, e := range g.TransitiveEdges {
+		transitive[i] = core.TraceEdge{Source: e.Source, Target: e.Target, EdgeName: e.EdgeName}
+	}
+	c := trace.Classify(g)
+	return &core.TraceGraphData{
+		Documents:       docs,
+		Edges:           edges,
+		TransitiveEdges: transitive,
+		Class:           string(c.Class),
+		Layout:          string(c.Layout),
+		Layers:          c.Layers,
+	}
+}
 
 func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 	if result.Status == core.StatusPassed {

@@ -8,3 +8,4 @@ mise.toml
 .board-state.json
 .playwright-cli/
 .claude/skills/specdown/
+trace-samples/

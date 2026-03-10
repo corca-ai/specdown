@@ -41,6 +41,9 @@ jobs:
           export PATH="$(pwd)/bin:$PATH"
           bin/specdown run -config specs/specdown.json
 
+      - name: Generate trace sample gallery
+        run: bin/specdown trace-samples -out specs/report/trace-samples
+
       - name: Prepare Pages artifact
         if: github.ref == 'refs/heads/main'
         run: |
