@@ -415,11 +415,11 @@ func TestWriteRendersAlloyGlossDisclosure(t *testing.T) {
 
 	html := writeAndReadReport(t, report)
 	assertContains(t, html, `details class="exec-detail alloy-gloss-detail"`, "alloy gloss disclosure")
-	assertContains(t, html, `Explain alloy:model(board)`, "alloy gloss label")
+	assertContains(t, html, `Summary of this Alloy model (board)`, "alloy gloss label")
 	assertContains(t, html, `Module name is board.`, "module gloss")
 	assertContains(t, html, `Board is a signature.`, "signature gloss")
 	assertContains(t, html, `Each instance has exactly one board in Board.`, "field gloss")
-	assertContains(t, html, `Check cardShape is explored with scope 5. Result: passed.`, "check gloss with exact result")
+	assertContains(t, html, `Check cardShape is explored with a scope of 5, so Alloy searches examples up to size 5. Result: passed.`, "check gloss with exact result")
 }
 
 func TestWriteDoesNotClaimInlineCheckResultWhenExplicitRefOverridesIt(t *testing.T) {
@@ -477,12 +477,12 @@ func TestWriteDoesNotClaimInlineCheckResultWhenExplicitRefOverridesIt(t *testing
 	}
 
 	html := writeAndReadReport(t, report)
-	assertContains(t, html, `Check noOrphan is explored with scope 3.`, "inline check gloss without exact result")
-	assertNotContains(t, html, `Check noOrphan is explored with scope 3. Result: passed.`, "no false pass claim for overridden inline check")
+	assertContains(t, html, `Check noOrphan is explored with a scope of 3, so Alloy searches examples up to size 3.`, "inline check gloss without exact result")
+	assertNotContains(t, html, `Check noOrphan is explored with a scope of 3, so Alloy searches examples up to size 3. Result: passed.`, "no false pass claim for overridden inline check")
 	assertNotContains(t, html, `class="exec-block alloy-model passed"`, "overridden inline check should not paint block as passed")
 	assertContains(t, html, `alloy:ref(rm#noOrphan, scope=5)`, "visible alloy ref note")
 	assertContains(t, html, `References Alloy check noOrphan at scope 5. Result: passed.`, "human-readable alloy ref summary")
-	assertContains(t, html, `See model explanation`, "alloy ref link to model block")
+	assertContains(t, html, `See Alloy model summary`, "alloy ref link to model block")
 }
 
 func TestWriteMarksModelFailedWhenExplicitRefAddsFailure(t *testing.T) {
@@ -555,7 +555,7 @@ func TestWriteMarksModelFailedWhenExplicitRefAddsFailure(t *testing.T) {
 
 	html := writeAndReadReport(t, report)
 	assertContains(t, html, `class="exec-block alloy-model failed"`, "mixed exact/ref statuses should surface as failed")
-	assertContains(t, html, `Check noOrphan is explored with scope 3. Result: passed.`, "local exact result remains visible")
+	assertContains(t, html, `Check noOrphan is explored with a scope of 3, so Alloy searches examples up to size 3. Result: passed.`, "local exact result remains visible")
 	assertContains(t, html, `noOrphan (scope 5)`, "fallback failure keeps its own scope visible")
 }
 
@@ -608,6 +608,80 @@ func TestWriteRendersAlloyCounterexampleGlossAndOpensDisclosure(t *testing.T) {
 	assertContains(t, html, `Node$0 points to Node$1 through next.`, "counterexample relation gloss")
 	assertContains(t, html, `Card$0 belongs to Board$0.`, "counterexample board gloss")
 	assertContains(t, html, `counterexample for`, "raw failure message remains visible")
+}
+
+func TestWriteReadsCounterexampleWitnessFromArtifact(t *testing.T) {
+	artifactPath := filepath.Join(t.TempDir(), "counterexample.json")
+	body := `{
+  "solution": [
+    {
+      "instances": [
+        {
+          "skolems": {
+            "$allDisconnected_n": {
+              "data": [["Node$0"]]
+            }
+          },
+          "values": {
+            "Node$2": {
+              "next": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}`
+	if err := os.WriteFile(artifactPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary: core.Summary{
+			SpecsTotal:        1,
+			SpecsFailed:       1,
+			AlloyChecksTotal:  1,
+			AlloyChecksFailed: 1,
+		},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusFailed,
+				Document: core.Document{
+					Title:      "Artifact Counterexample",
+					RelativeTo: "specs/artifact-counterexample.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Artifact Counterexample", Raw: "# Artifact Counterexample\n", HeadingPath: []string{"Artifact Counterexample"}},
+						core.AlloyModelNode{
+							Model:       "cx",
+							HeadingPath: []string{"Artifact Counterexample"},
+							Source:      "module cx\n\nsig Node {\n  next: lone Node\n}\n\nassert allDisconnected {\n  all n: Node | no n.next\n}\n\ncheck allDisconnected for 3",
+							Raw:         "```alloy:model(cx)\nmodule cx\n\nsig Node {\n  next: lone Node\n}\n\nassert allDisconnected {\n  all n: Node | no n.next\n}\n\ncheck allDisconnected for 3\n```\n",
+						},
+					},
+				},
+				AlloyChecks: []core.AlloyCheckResult{
+					{
+						ID: core.SpecID{
+							File:        "specs/artifact-counterexample.spec.md",
+							HeadingPath: []string{"Artifact Counterexample"},
+							Ordinal:     1,
+						},
+						Model:              "cx",
+						Assertion:          "allDisconnected",
+						Scope:              "3",
+						Status:             core.StatusFailed,
+						Message:            `counterexample for "allDisconnected"`,
+						CounterexamplePath: artifactPath,
+					},
+				},
+			},
+		},
+	}
+
+	html := writeAndReadReport(t, report)
+	assertContains(t, html, `The solver found witness bindings that make the assertion fail.`, "artifact-backed witness intro")
+	assertContains(t, html, `Witness n = Node$0.`, "artifact-backed witness gloss")
 }
 
 func TestWriteTreatsDryRunAlloyAsNotExecuted(t *testing.T) {
@@ -702,13 +776,13 @@ func TestWriteDoesNotInventCounterexampleGlossForInfraFailure(t *testing.T) {
 }
 
 func TestGlossScopeExplainsButClauses(t *testing.T) {
-	if got := glossScope("3 but 6 Int"); got != "default scope 3, and Int is widened to 6 bits" {
+	if got := glossScope("3 but 6 Int"); got != "a default scope of 3, so Alloy first searches examples up to size 3, and Int uses 6-bit integers" {
 		t.Fatalf("unexpected Int but-clause gloss %q", got)
 	}
-	if got := glossScope("3 but 8 steps"); got != "default scope 3, and the step bound is set to 8" {
+	if got := glossScope("3 but 8 steps"); got != "a default scope of 3, so Alloy first searches examples up to size 3, and the step bound is set to 8 steps" {
 		t.Fatalf("unexpected steps but-clause gloss %q", got)
 	}
-	if got := glossScope("3 but exactly 2 Foo"); got != "default scope 3, and Foo is fixed to exactly 2 atoms" {
+	if got := glossScope("3 but exactly 2 Foo"); got != "a default scope of 3, so Alloy first searches examples up to size 3, and Foo is fixed to exactly 2 atoms" {
 		t.Fatalf("unexpected exact but-clause gloss %q", got)
 	}
 }

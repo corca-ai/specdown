@@ -37,7 +37,7 @@ under the owning block.
 - Cross-fragment global explanation synthesis
 - LLM-backed or network-backed explanation generation
 - New CLI flags or config surface for v1
-- Direct parsing of the counterexample artifact file in the reporter
+- Full structural interpretation of every counterexample artifact shape
 
 ## UX
 
@@ -46,7 +46,7 @@ Below the code, the report adds a native disclosure section that reuses
 the report's existing disclosure idiom instead of introducing a separate
 button component.
 
-- Summary label: `Explain alloy:model(<model>)`
+- Summary label: `Summary of this Alloy model (<model>)`
 - Body:
   - `Model` items for structural declarations in the block
   - `Rules` items for `fact` and `assert` bodies in the block
@@ -104,9 +104,10 @@ Unknown expressions fall back to a safe gloss:
 
 ### Check Rules
 
-- `check name for 5` -> `Check name is explored with scope 5.`
+- `check name for 5` ->
+  `Check name is explored with a scope of 5, so Alloy searches examples up to size 5.`
 - `check name for 3 but 6 Int` ->
-  `Check name is explored with default scope 3, and Int is widened to 6 bits.`
+  `Check name is explored with a default scope of 3, so Alloy first searches examples up to size 3, and Int uses 6-bit integers.`
 
 Scope wording:
 
@@ -116,8 +117,8 @@ Scope wording:
   proof.
 - `but` means Alloy starts from the default scope and then overrides a
   named signature or solver setting such as `Int` or `steps`.
-- `but 6 Int` should be glossed as `Int is widened to 6 bits` because that
-  is the meaning highlighted in `selfspecs/alloy.spec.md`.
+- `but 6 Int` should be glossed as `Int uses 6-bit integers` because that
+  is the user-facing meaning highlighted in `selfspecs/alloy.spec.md`.
 
 If a matching executed result exists for the same model, assertion, and
 scope:
@@ -131,8 +132,9 @@ explicit `alloy:ref(...)` suppresses the implicit inline check result.
 
 ## Counterexample Rules
 
-The reporter relies on `AlloyCheckResult.Message` and does not parse the
-counterexample artifact file directly in v1.
+The reporter prefers `AlloyCheckResult.Message`, then falls back to the
+counterexample artifact when the message does not contain concrete relation
+lines.
 
 For v1:
 
@@ -141,12 +143,19 @@ For v1:
    - `CounterexamplePath` is set, or
    - `Message` starts with `counterexample for `
 2. Parse simple relation summaries from the existing message body.
-3. Render short bullet lines:
+3. If the message does not include relation lines, read the first instance
+   from `CounterexamplePath` and extract either:
+   - relation tuples from `values`, or
+   - witness bindings from `skolems`
+4. Render short bullet lines:
    - `Card$0.board = Board$0` -> `Card$0 belongs to Board$0.`
    - `Node$0.next = Node$1` -> `Node$0 points to Node$1 through next.`
-4. If a relation line cannot be classified, render:
+   - prepend a short bridge such as
+     `The solver found witness bindings that make the assertion fail.`
+   - `$allDisconnected_n = Node$0` -> `Witness n = Node$0.`
+5. If a relation line cannot be classified, render:
    - `Observed relation: Card$0.board = Board$0`
-5. If the failure is not a solver counterexample, render no counterexample
+6. If the failure is not a solver counterexample, render no counterexample
    gloss and keep the raw failure message as the primary diagnostic.
 
 The raw failure message remains visible outside the disclosure, as today.
@@ -187,7 +196,7 @@ For v1, render a compact report block at the reference location:
 - label: `alloy:ref(model#assertion, scope=...)`
 - status: pass, fail, or not executed
 - link: when an owning model block exists, link to that block anchor with
-  text such as `See model explanation`
+  text such as `See Alloy model summary`
 
 This keeps cross-section failures discoverable without duplicating the full
 explanation body.
@@ -221,6 +230,7 @@ explanation body.
   - check commands
   - scope and `but` phrasing
   - counterexample relation lines from `AlloyCheckResult.Message`
+  - counterexample artifact fallback for witness bindings
 - Fail soft on unsupported syntax:
   - preserve original expression text
   - never suppress the raw Alloy source
@@ -257,7 +267,7 @@ explanation body.
 
 ## Success Criteria
 
-- A reader can expand an `Explain alloy:model(...)` section under each Alloy block.
+- A reader can expand a `Summary of this Alloy model (...)` section under each Alloy block.
 - The original Alloy code remains visible without interaction.
 - Common sample models in `selfspecs/alloy.spec.md` and `specs/pocket-card.spec.md`
   produce deterministic glosses.

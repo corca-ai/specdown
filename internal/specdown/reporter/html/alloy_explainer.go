@@ -1,8 +1,10 @@
 package html
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -33,6 +35,23 @@ type alloyRenderContext struct {
 type alloyGlossSection struct {
 	Title string
 	Items []string
+}
+
+type counterexampleArtifact struct {
+	Solution []counterexampleSolution `json:"solution"`
+}
+
+type counterexampleSolution struct {
+	Instances []json.RawMessage `json:"instances"`
+}
+
+type counterexampleInstance struct {
+	Skolems map[string]counterexampleSkolem  `json:"skolems"`
+	Values  map[string]map[string][][]string `json:"values"`
+}
+
+type counterexampleSkolem struct {
+	Data [][]string `json:"data"`
 }
 
 var (
@@ -282,7 +301,7 @@ func renderAlloyGlossDisclosure(out *strings.Builder, block alloyModelRender) {
 	out.WriteString(`>`)
 	out.WriteString(`<summary class="exec-source alloy-gloss-summary">`)
 	out.WriteString(`<span class="exec-summary-text">`)
-	out.WriteString(template.HTMLEscapeString("Explain alloy:model(" + block.Node.Model + ")"))
+	out.WriteString(template.HTMLEscapeString("Summary of this Alloy model (" + block.Node.Model + ")"))
 	out.WriteString(`</span>`)
 	out.WriteString(`<span class="exec-expand-marker"></span>`)
 	out.WriteString(`</summary>`)
@@ -545,14 +564,14 @@ func glossScope(scope string) string {
 	scope = normalizeAlloySpace(scope)
 	base, override, ok := strings.Cut(scope, " but ")
 	if !ok {
-		return "scope " + scope
+		return "a scope of " + scope + ", so Alloy searches examples up to size " + scope
 	}
 	overrideParts := strings.Split(override, ",")
 	glosses := make([]string, 0, len(overrideParts))
 	for _, part := range overrideParts {
 		glosses = append(glosses, glossOverrideClause(part))
 	}
-	return "default scope " + base + ", and " + strings.Join(glosses, ", and ")
+	return "a default scope of " + base + ", so Alloy first searches examples up to size " + base + ", and " + strings.Join(glosses, ", and ")
 }
 
 func glossOverrideClause(raw string) string {
@@ -563,9 +582,9 @@ func glossOverrideClause(raw string) string {
 	if match := alloyOverridePattern.FindStringSubmatch(override); len(match) == 3 {
 		switch match[2] {
 		case "Int":
-			return "Int is widened to " + match[1] + " bits"
+			return "Int uses " + match[1] + "-bit integers"
 		case "steps":
-			return "the step bound is set to " + match[1]
+			return "the step bound is set to " + match[1] + " steps"
 		default:
 			return match[2] + " is limited to " + match[1] + " atoms"
 		}
@@ -636,12 +655,23 @@ func glossCounterexamples(results []core.AlloyCheckResult) []string {
 		if !isSolverCounterexample(result) {
 			continue
 		}
-		lines := extractCounterexampleRelationLines(result.Message)
-		for _, line := range lines {
-			items = append(items, glossCounterexampleRelation(result.Assertion, line))
+		for _, item := range glossCounterexampleResult(result) {
+			items = append(items, item)
 		}
 	}
 	return items
+}
+
+func glossCounterexampleResult(result core.AlloyCheckResult) []string {
+	lines := extractCounterexampleRelationLines(result.Message)
+	items := make([]string, 0, len(lines))
+	for _, line := range lines {
+		items = append(items, glossCounterexampleRelation(result.Assertion, line))
+	}
+	if len(items) > 0 {
+		return items
+	}
+	return glossCounterexampleArtifactFile(result.CounterexamplePath, result.Assertion)
 }
 
 func isSolverCounterexample(result core.AlloyCheckResult) bool {
@@ -687,6 +717,111 @@ func glossCounterexampleRelation(assertion, line string) string {
 	}
 }
 
+func glossCounterexampleArtifactFile(path string, assertion string) []string {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var artifact counterexampleArtifact
+	if err := json.Unmarshal(body, &artifact); err != nil {
+		return nil
+	}
+	if len(artifact.Solution) == 0 || len(artifact.Solution[0].Instances) == 0 {
+		return []string{"The solver found a counterexample instance."}
+	}
+
+	var instance counterexampleInstance
+	if err := json.Unmarshal(artifact.Solution[0].Instances[0], &instance); err != nil {
+		return []string{"The solver found a counterexample instance."}
+	}
+
+	if relationItems := glossCounterexampleValues(assertion, instance.Values); len(relationItems) > 0 {
+		return relationItems
+	}
+	if witnessItems := glossCounterexampleWitnesses(assertion, instance.Skolems); len(witnessItems) > 0 {
+		return witnessItems
+	}
+	return []string{"The solver found a counterexample instance."}
+}
+
+func glossCounterexampleValues(assertion string, values map[string]map[string][][]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	atoms := make([]string, 0, len(values))
+	for atom := range values {
+		atoms = append(atoms, atom)
+	}
+	sort.Strings(atoms)
+
+	lines := make([]string, 0)
+	for _, atom := range atoms {
+		relations := values[atom]
+		if len(relations) == 0 {
+			continue
+		}
+		names := make([]string, 0, len(relations))
+		for name := range relations {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			for _, tuple := range relations[name] {
+				if len(tuple) == 0 {
+					continue
+				}
+				lines = append(lines, atom+"."+name+" = "+strings.Join(tuple, ", "))
+			}
+		}
+	}
+
+	items := make([]string, 0, len(lines))
+	for _, line := range lines {
+		items = append(items, glossCounterexampleRelation(assertion, line))
+	}
+	return items
+}
+
+func glossCounterexampleWitnesses(assertion string, skolems map[string]counterexampleSkolem) []string {
+	if len(skolems) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(skolems))
+	for name := range skolems {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	items := make([]string, 0, len(names)+1)
+	items = append(items, "The solver found witness bindings that make the assertion fail.")
+	for _, name := range names {
+		skolem := skolems[name]
+		for _, tuple := range skolem.Data {
+			if len(tuple) == 0 {
+				continue
+			}
+			items = append(items, fmt.Sprintf("Witness %s = %s.", glossSkolemName(assertion, name), strings.Join(tuple, ", ")))
+		}
+	}
+	return items
+}
+
+func glossSkolemName(assertion string, raw string) string {
+	name := strings.TrimPrefix(strings.TrimSpace(raw), "$")
+	prefix := assertion + "_"
+	if strings.HasPrefix(name, prefix) {
+		return strings.TrimPrefix(name, prefix)
+	}
+	return name
+}
+
 func renderAlloyRef(node core.AlloyRefNode, ctx alloyRenderContext) (string, error) {
 	if node.ID == nil {
 		return "", nil
@@ -724,7 +859,7 @@ func renderAlloyRef(node core.AlloyRefNode, ctx alloyRenderContext) (string, err
 		out.WriteString(`<div class="alloy-ref-link-row">`)
 		out.WriteString(`<a class="alloy-ref-link" href="#`)
 		out.WriteString(template.HTMLEscapeString(anchor))
-		out.WriteString(`">See model explanation</a>`)
+		out.WriteString(`">See Alloy model summary</a>`)
 		out.WriteString(`</div>`)
 	}
 	out.WriteString(`</div>`)
