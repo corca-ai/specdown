@@ -188,9 +188,9 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	html := writeAndReadReport(t, report)
 
 	t.Run("layout", func(t *testing.T) {
-		assertContains(t, html, "<h1 class=\"report-title\">Pocket Board</h1>", "h1 report title")
+		assertContains(t, html, "<h1>Pocket Board</h1>", "h1 from markdown")
 		assertContains(t, html, "id=\"section-specs-pocket-board-spec-md-pocket-board\"", "section anchor for heading")
-		assertContains(t, html, "<h2>Pocket Board</h2>", "markdown heading in html")
+		assertNotContains(t, html, "report-title", "no artificial report-title h1")
 		assertContains(t, html, "aria-label=\"Table of contents\"", "toc sidebar")
 		assertContains(t, html, "viewport-fit=cover", "safe-area viewport mode")
 		assertContains(t, html, "style.css", "linked stylesheet")
@@ -455,15 +455,15 @@ func TestCollectHeadingStatusesPropagatesFailureToParent(t *testing.T) {
 	statuses := collectHeadingStatuses(result)
 
 	// Child heading should be failed
-	if statuses[headingPathKey([]string{"Root", "Parent", "Child"})] != core.StatusFailed {
+	if statuses[headingPathKey([]string{"Root", "Parent", "Child"})] != "failed" {
 		t.Fatal("child heading should be failed")
 	}
 	// Parent should also be failed (propagated)
-	if statuses[headingPathKey([]string{"Root", "Parent"})] != core.StatusFailed {
+	if statuses[headingPathKey([]string{"Root", "Parent"})] != "failed" {
 		t.Fatal("parent heading should be failed via propagation")
 	}
 	// Root should also be failed
-	if statuses[headingPathKey([]string{"Root"})] != core.StatusFailed {
+	if statuses[headingPathKey([]string{"Root"})] != "failed" {
 		t.Fatal("root heading should be failed via propagation")
 	}
 }
@@ -476,7 +476,7 @@ func TestCollectHeadingStatusesPassedDoesNotOverwriteFailed(t *testing.T) {
 		},
 	}
 	statuses := collectHeadingStatuses(result)
-	if statuses[headingPathKey([]string{"A"})] != core.StatusFailed {
+	if statuses[headingPathKey([]string{"A"})] != "failed" {
 		t.Fatal("parent should stay failed even after a passed sibling")
 	}
 }

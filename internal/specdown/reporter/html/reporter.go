@@ -20,11 +20,12 @@ import (
 )
 
 type pageView struct {
-	Title      string
-	Meta       template.HTML
-	AssetRoot  string
-	Headings   []tocItemView
-	Body       template.HTML
+	Title     string
+	Meta      template.HTML
+	AssetRoot string
+	GlobalTOC []globalTocEntry
+	Headings  []tocItemView
+	Body      template.HTML
 }
 
 type tocItemView struct {
@@ -32,6 +33,15 @@ type tocItemView struct {
 	Anchor   string
 	Level    int
 	Status   string
+	Children []tocItemView
+}
+
+type globalTocEntry struct {
+	Title    string
+	Snippet  string
+	Href     string
+	Status   string
+	Current  bool
 	Children []tocItemView
 }
 
@@ -58,12 +68,17 @@ func Write(report core.Report, outDir string) error {
 	}
 	entryDir := path.Dir(path.Clean(entryPath))
 
+	docs := collectDocTOCs(report.Results, entryDir)
+
 	for i, result := range report.Results {
 		meta := buildDocMeta(result, report.GeneratedAt)
 		if i == 0 {
 			meta = buildMeta(report)
 		}
-		if err := writePage(outDir, entryDir, result, meta); err != nil {
+		assetRoot := computeAssetRoot(path.Dir(docs[i].htmlPath))
+		globalTOC := buildGlobalTOC(docs, i, assetRoot)
+
+		if err := writePage(outDir, entryDir, result, meta, globalTOC); err != nil {
 			return err
 		}
 	}
@@ -71,7 +86,63 @@ func Write(report core.Report, outDir string) error {
 	return nil
 }
 
-func writePage(outDir, entryDir string, result core.DocumentResult, meta string) error {
+type docTOC struct {
+	title    string
+	htmlPath string
+	status   string
+	snippet  string
+	headings []tocItemView
+}
+
+func collectDocTOCs(results []core.DocumentResult, entryDir string) []docTOC {
+	docs := make([]docTOC, len(results))
+	for i, result := range results {
+		htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
+		title := result.Document.Title
+		if title == "" {
+			title = titleFromPath(result.Document.RelativeTo)
+		}
+		headings := collectHeadings(result)
+		snippet := ""
+		if len(headings) == 0 {
+			snippet = extractSnippet(result.Document)
+		}
+		docs[i] = docTOC{
+			title:    title,
+			htmlPath: htmlPath,
+			status:   docStatusClass(result),
+			snippet:  snippet,
+			headings: headings,
+		}
+	}
+	return docs
+}
+
+func buildGlobalTOC(docs []docTOC, currentIdx int, assetRoot string) []globalTocEntry {
+	toc := make([]globalTocEntry, len(docs))
+	for j, d := range docs {
+		isCurrent := j == currentIdx
+		href := ""
+		if !isCurrent {
+			href = assetRoot + "/" + d.htmlPath
+		}
+		var children []tocItemView
+		if isCurrent {
+			children = d.headings
+		}
+		toc[j] = globalTocEntry{
+			Title:    d.title,
+			Snippet:  d.snippet,
+			Href:     href,
+			Status:   d.status,
+			Current:  isCurrent,
+			Children: children,
+		}
+	}
+	return toc
+}
+
+func writePage(outDir, entryDir string, result core.DocumentResult, meta string, globalTOC []globalTocEntry) error {
 	htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
 	fullPath := filepath.Join(outDir, filepath.FromSlash(htmlPath))
 
@@ -86,11 +157,21 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string)
 		title = "Specification"
 	}
 
+	// Find current page headings from globalTOC.
+	var headings []tocItemView
+	for _, entry := range globalTOC {
+		if entry.Current {
+			headings = entry.Children
+			break
+		}
+	}
+
 	view := pageView{
 		Title:     title,
 		Meta:      template.HTML(meta), //nolint:gosec // meta is internally generated
 		AssetRoot: computeAssetRoot(path.Dir(htmlPath)),
-		Headings:  collectHeadings(result),
+		GlobalTOC: globalTOC,
+		Headings:  headings,
 		Body:      template.HTML(body), //nolint:gosec // body is internally generated
 	}
 
@@ -224,7 +305,7 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 			Text:   heading.Text,
 			Anchor: core.HeadingAnchor(result.Document.RelativeTo, heading.HeadingPath),
 			Level:  heading.Level,
-			Status: tocStatusClass(statuses[headingPathKey(heading.HeadingPath)]),
+			Status: statuses[headingPathKey(heading.HeadingPath)],
 		}
 		if heading.Level == 2 {
 			roots = append(roots, item)
@@ -235,38 +316,125 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 	return roots
 }
 
-func tocStatusClass(status core.Status) string {
-	if status == core.StatusFailed {
-		return string(status)
+// docStatusClass returns "failed", "expected-fail", or "" for a document.
+func docStatusClass(result core.DocumentResult) string {
+	hasXFail := false
+	for _, c := range result.Cases {
+		if c.Status == core.StatusFailed && !c.ExpectFail {
+			return "failed"
+		}
+		if c.ExpectFail {
+			hasXFail = true
+		}
+	}
+	for _, c := range result.AlloyChecks {
+		if c.Status == core.StatusFailed {
+			return "failed"
+		}
+	}
+	if hasXFail {
+		return "expected-fail"
 	}
 	return ""
 }
 
-func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
-	statuses := make(map[string]core.Status)
-	mark := func(path []string, status core.Status) {
-		// Mark exact path and all ancestor paths
+// titleFromPath derives a title from a file path when no H1 is present.
+func titleFromPath(docPath string) string {
+	base := path.Base(docPath)
+	base = strings.TrimSuffix(base, ".spec.md")
+	base = strings.TrimSuffix(base, ".md")
+	words := strings.Split(base, "-")
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+var mdLinkPattern = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+var mdEmphasisPattern = regexp.MustCompile(`\*\*?([^*]+)\*\*?`)
+var mdCodePattern = regexp.MustCompile("`([^`]+)`")
+
+// extractSnippet returns the first sentence of the first prose node, for
+// documents that have no headings.
+func extractSnippet(doc core.Document) string {
+	for _, node := range doc.Nodes {
+		prose, ok := node.(core.ProseNode)
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(prose.Raw)
+		if text == "" {
+			continue
+		}
+		return truncateSnippet(stripMarkdownInline(text))
+	}
+	return ""
+}
+
+func stripMarkdownInline(text string) string {
+	// Take first paragraph.
+	if idx := strings.Index(text, "\n\n"); idx > 0 {
+		text = text[:idx]
+	}
+	text = mdLinkPattern.ReplaceAllString(text, "$1")
+	text = mdEmphasisPattern.ReplaceAllString(text, "$1")
+	text = mdCodePattern.ReplaceAllString(text, "$1")
+	return strings.TrimSpace(text)
+}
+
+func truncateSnippet(text string) string {
+	if text == "" {
+		return ""
+	}
+	// Take first sentence.
+	if idx := strings.Index(text, ". "); idx > 0 && idx < 80 {
+		text = text[:idx+1]
+	}
+	const maxLen = 60
+	if len(text) <= maxLen {
+		return text
+	}
+	if idx := strings.LastIndex(text[:maxLen], " "); idx > 20 {
+		return text[:idx] + "\u2026"
+	}
+	return text[:maxLen] + "\u2026"
+}
+
+// collectHeadingStatuses returns a CSS class per heading path.
+// Priority: "failed" > "expected-fail" > "" (passed/empty).
+func collectHeadingStatuses(result core.DocumentResult) map[string]string {
+	statuses := make(map[string]string)
+	mark := func(path []string, status string) {
 		for i := 1; i <= len(path); i++ {
 			key := headingPathKey(path[:i])
 			current := statuses[key]
-			if current == core.StatusFailed {
+			switch {
+			case current == "failed":
 				continue
-			}
-			if status == core.StatusFailed || current == "" {
+			case status == "failed":
+				statuses[key] = status
+			case current == "expected-fail":
+				continue
+			case status == "expected-fail":
 				statuses[key] = status
 			}
 		}
 	}
 
 	for _, item := range result.Cases {
-		status := item.Status
-		if item.ExpectFail && status == core.StatusFailed {
-			status = core.StatusPassed
+		switch {
+		case item.Status == core.StatusFailed && !item.ExpectFail:
+			mark(item.ID.HeadingPath, "failed")
+		case item.ExpectFail:
+			mark(item.ID.HeadingPath, "expected-fail")
 		}
-		mark(item.ID.HeadingPath, status)
 	}
 	for _, item := range result.AlloyChecks {
-		mark(item.ID.HeadingPath, item.Status)
+		if item.Status == core.StatusFailed {
+			mark(item.ID.HeadingPath, "failed")
+		}
 	}
 	return statuses
 }
@@ -508,21 +676,7 @@ func renderBindings(out *strings.Builder, bindings []core.Binding) {
 }
 
 func renderHeading(node core.HeadingNode) (string, error) {
-	html, err := markdownToHTML(node.Markdown())
-	if err != nil {
-		return "", err
-	}
-	rendered := node.Level + 1
-	if rendered > 6 {
-		rendered = 6
-	}
-	openTag := fmt.Sprintf("<h%d>", node.Level)
-	closeTag := fmt.Sprintf("</h%d>", node.Level)
-	replacement := fmt.Sprintf("<h%d>", rendered)
-	closeReplacement := fmt.Sprintf("</h%d>", rendered)
-	result := strings.Replace(html, openTag, replacement, 1)
-	result = strings.Replace(result, closeTag, closeReplacement, 1)
-	return result, nil
+	return markdownToHTML(node.Markdown())
 }
 
 type renderedRow struct {
@@ -1213,9 +1367,15 @@ var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
       <aside class="toc" aria-label="Table of contents">
         <div class="toc-inner">
           <p class="toc-title">Contents</p>
-          <section class="toc-spec expanded">
+          {{ range .GlobalTOC }}
+          <section class="toc-spec{{ if .Current }} current{{ end }}">
+            {{ if .Current }}<span class="toc-spec-title {{ .Status }}">{{ .Title }}</span>
+            {{ else }}<a class="toc-spec-title {{ .Status }}" href="{{ .Href }}">{{ .Title }}</a>
+            {{ end }}
+            {{ if .Snippet }}<p class="toc-snippet">{{ .Snippet }}</p>{{ end }}
+            {{ if and .Current .Children }}
             <ul class="toc-list">
-              {{ range .Headings }}
+              {{ range .Children }}
               <li class="toc-item" data-anchor="{{ .Anchor }}">
                 <a class="toc-link toc-level-{{ .Level }} {{ .Status }}" href="#{{ .Anchor }}">{{ .Text }}</a>
                 {{ if .Children }}
@@ -1230,13 +1390,14 @@ var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
               </li>
               {{ end }}
             </ul>
+            {{ end }}
           </section>
+          {{ end }}
         </div>
       </aside>
 
       <div class="content">
         <div class="content-header">
-          <h1 class="report-title">{{ .Title }}</h1>
           {{ .Meta }}
         </div>
         <div class="content-body">
@@ -1310,14 +1471,14 @@ main {
   display: grid;
   grid-template-columns: 16rem minmax(0, 54rem);
   column-gap: 2.5rem;
-  align-items: baseline;
+  align-items: start;
 }
 
 /* ── Table of contents ── */
 .toc {
   position: sticky;
-  top: calc(1.5rem + var(--safe-top));
-  max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+  top: calc(2.75rem + var(--safe-top));
+  max-height: calc(100dvh - 2.75rem - var(--safe-top) - var(--safe-bottom));
   overflow-y: auto;
   font-size: 0.82rem;
   line-height: 1.45;
@@ -1368,8 +1529,23 @@ main {
 .toc-link:hover { color: var(--ink); }
 .toc-link.active { color: var(--ink); font-weight: 600; }
 
+.toc-spec.current > .toc-spec-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.toc-snippet {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-style: italic;
+  margin: 0.1rem 0 0;
+  line-height: 1.35;
+}
+
 .toc-spec-title.failed::before,
-.toc-link.failed::before {
+.toc-spec-title.expected-fail::before,
+.toc-link.failed::before,
+.toc-link.expected-fail::before {
   content: "";
   position: absolute;
   left: -0.85rem;
@@ -1379,6 +1555,10 @@ main {
   height: 0.38rem;
   border-radius: 50%;
   background: var(--fail-mark);
+}
+.toc-spec-title.expected-fail::before,
+.toc-link.expected-fail::before {
+  background: var(--xfail-mark);
 }
 
 .toc-level-4 { padding-left: 0.7rem; }
@@ -1396,16 +1576,8 @@ main {
 /* ── Content area ── */
 .content { min-width: 0; }
 
-.report-title {
-  font-family: serif;
-  font-size: 2.8rem;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-  margin-bottom: 0.4rem;
-}
-
 .content-meta {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.65;
@@ -1423,6 +1595,15 @@ main {
   line-height: 1.9;
 }
 .spec-body > :first-child { margin-top: 0; }
+
+.spec-body h1 {
+  font-family: serif;
+  font-size: 2.8rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.4rem;
+  text-wrap: balance;
+}
 
 .spec-body :is(h2, h3, h4, h5, h6) {
   font-family: serif;
@@ -1458,9 +1639,9 @@ main {
 .spec-body h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; }
 .spec-body :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
 
-.spec-body .s2 { scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
-.spec-body .s3 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
-.spec-body .s4, .spec-body .s5, .spec-body .s6 { scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
+.spec-body .s2 { scroll-margin-top: 0; }
+.spec-body .s3 { scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
+.spec-body .s4, .spec-body .s5, .spec-body .s6 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
 
 .status {
   font-weight: 600;
