@@ -91,12 +91,11 @@ type Summary struct {
 	TraceErrorCount      int `json:"traceErrorCount,omitempty"`
 }
 
-// TraceGraphData holds the trace graph and its classification for report rendering.
+// TraceGraphData holds the trace graph for report rendering.
 type TraceGraphData struct {
 	Documents       []TraceDocument `json:"documents"`
 	Edges           []TraceEdge     `json:"edges"`
 	TransitiveEdges []TraceEdge     `json:"transitiveEdges,omitempty"`
-	Class           string          `json:"class"`
 }
 
 // TraceDocument is a document node in the trace graph.

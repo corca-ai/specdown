@@ -141,20 +141,13 @@ found
 | `<outDir>/style.css` | Shared stylesheet |
 | `<outDir>/script.js` | Shared JavaScript |
 | `<outDir>/<page>.html` | Per-document HTML pages |
-| `<outDir>/trace.html` | Trace graph visualization (when [depends::trace](trace.spec.md) is configured) |
 | `<outDir>/report.json` | Machine-readable results |
 | `.artifacts/specdown/models/*.als` | Combined Alloy models |
 | `.artifacts/specdown/counterexamples/*` | Counterexample artifacts (on Alloy check failure) |
 
-When trace is configured, the report includes a **Trace Graph** page showing
-document relationships as nested HTML lists. The graph is classified
-(linear-chain, flat-star, tree, forest, layered-dag, diamond-dag, or general)
-and each class uses the most readable HTML layout: ordered lists for chains,
-nested lists for trees, CSS grid columns for layered DAGs, and rank-grouped
-lists with parent annotations for diamond DAGs.
-Each spec page also gains a "Trace Links" sidebar listing incoming and outgoing edges.
-Use `specdown trace-samples` to generate a [visual gallery](trace-samples/index.html)
-of all layout types with sample data.
+When trace is configured, each spec page gains a sticky **Traceability** panel
+on the right side showing the document's parents (incoming edges), the current
+document highlighted, and its children (outgoing edges) with relationship labels.
 
 ## Failure Diagnostics
 

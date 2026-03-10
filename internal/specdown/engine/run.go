@@ -1060,12 +1060,10 @@ func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 	for i, e := range g.TransitiveEdges {
 		transitive[i] = core.TraceEdge{Source: e.Source, Target: e.Target, EdgeName: e.EdgeName}
 	}
-	c := trace.Classify(g)
 	return &core.TraceGraphData{
 		Documents:       docs,
 		Edges:           edges,
 		TransitiveEdges: transitive,
-		Class:           string(c.Class),
 	}
 }
 

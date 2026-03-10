@@ -79,21 +79,6 @@ func Write(report core.Report, outDir string) error {
 
 	docs := collectDocTOCs(report.Results, entryDir)
 
-	// If trace graph exists, add a trace page entry to docs.
-	hasTrace := report.TraceGraph != nil && len(report.TraceGraph.Edges) > 0
-	if hasTrace {
-		traceStatus := ""
-		if len(report.TraceErrors) > 0 {
-			traceStatus = "failed"
-		}
-		docs = append(docs, docTOC{
-			title:    "Trace Graph",
-			htmlPath: "trace.html",
-			status:   traceStatus,
-			headings: nil,
-		})
-	}
-
 	for i, result := range report.Results {
 		meta := buildDocMeta(result, report.GeneratedAt)
 		if i == 0 {
@@ -103,14 +88,6 @@ func Write(report core.Report, outDir string) error {
 		globalTOC := buildGlobalTOC(docs, i, assetRoot)
 
 		if err := writePage(outDir, entryDir, result, meta, globalTOC, report.TraceGraph); err != nil {
-			return err
-		}
-	}
-
-	if hasTrace {
-		traceIdx := len(docs) - 1
-		globalTOC := buildGlobalTOC(docs, traceIdx, ".")
-		if err := writeTracePage(outDir, report, globalTOC); err != nil {
 			return err
 		}
 	}
@@ -371,19 +348,27 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 		b.WriteString(`</div>`)
 	}
 
-	// Current document.
+	// Current document — only indent if it has parents.
 	curTitle := docTitle
 	if curTitle == "" {
 		curTitle = titleFromPath(docPath)
 	}
-	b.WriteString(`<div class="trace-ctx-current">`)
+	curClass := "trace-ctx-current"
+	if len(incoming) == 0 {
+		curClass = "trace-ctx-current trace-ctx-root"
+	}
+	fmt.Fprintf(&b, `<div class="%s">`, curClass)
 	writeTag(typeOf[docPath])
 	b.WriteString(template.HTMLEscapeString(curTitle))
 	b.WriteString(`</div>`)
 
 	// Children: arrow then linked child.
+	childClass := "trace-ctx-child"
+	if len(incoming) == 0 {
+		childClass = "trace-ctx-child trace-ctx-child-root"
+	}
 	for _, l := range outgoing {
-		b.WriteString(`<div class="trace-ctx-child">`)
+		fmt.Fprintf(&b, `<div class="%s">`, childClass)
 		fmt.Fprintf(&b, `<span class="trace-ctx-arrow">%s</span>`,
 			template.HTMLEscapeString(l.edge))
 		b.WriteString(`<a href="`)
@@ -396,223 +381,6 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 	}
 
 	return b.String()
-}
-
-// writeTracePage generates the trace.html page.
-func writeTracePage(outDir string, report core.Report, globalTOC []globalTocEntry) error {
-	tg := report.TraceGraph
-	var b strings.Builder
-
-	b.WriteString(`<h1>Trace</h1>`)
-
-	// Errors first — the actionable part.
-	if len(report.TraceErrors) > 0 {
-		b.WriteString(`<h2>Errors</h2>`)
-		b.WriteString(`<ul class="trace-error-list">`)
-		for _, e := range report.TraceErrors {
-			b.WriteString(`<li class="trace-error">`)
-			b.WriteString(template.HTMLEscapeString(e))
-			b.WriteString(`</li>`)
-		}
-		b.WriteString(`</ul>`)
-	}
-
-	// Tree/forest visualization — only when the graph is actually a tree.
-	b.WriteString(renderTraceGraph(tg))
-
-	meta := `<p class="content-meta">` +
-		template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)) + `</p>`
-
-	view := pageView{
-		Title:     "Trace",
-		Meta:      template.HTML(meta), //nolint:gosec // internally generated
-		AssetRoot: ".",
-		GlobalTOC: globalTOC,
-		Body:      template.HTML(b.String()), //nolint:gosec // internally generated
-	}
-
-	return writeHTMLFile(filepath.Join(outDir, "trace.html"), view)
-}
-
-// spanningForest holds the BFS spanning tree decomposition of a trace graph.
-type spanningForest struct {
-	roots        []string
-	treeChildren map[string][]core.TraceEdge // tree edges per parent
-	extraParents map[string][]core.TraceEdge // non-tree incoming edges per target
-	backEdges    map[string][]core.TraceEdge // back-edges (cycles) per source
-	docByPath    map[string]core.TraceDocument
-}
-
-// buildSpanningForest extracts a BFS spanning forest from the trace graph,
-// classifying each edge as tree, extra-parent, or back-edge.
-//
-//nolint:gocognit // BFS with edge classification is inherently branchy
-func buildSpanningForest(tg *core.TraceGraphData) spanningForest {
-	outgoing := make(map[string][]core.TraceEdge)
-	for _, e := range tg.Edges {
-		outgoing[e.Source] = append(outgoing[e.Source], e)
-	}
-
-	docByPath := make(map[string]core.TraceDocument, len(tg.Documents))
-	for _, d := range tg.Documents {
-		docByPath[d.Path] = d
-	}
-
-	// Find roots: nodes with no incoming edges.
-	hasIncoming := make(map[string]bool)
-	for _, e := range tg.Edges {
-		hasIncoming[e.Target] = true
-	}
-	var roots []string
-	for _, d := range tg.Documents {
-		if !hasIncoming[d.Path] {
-			roots = append(roots, d.Path)
-		}
-	}
-	if len(roots) == 0 && len(tg.Documents) > 0 {
-		roots = append(roots, tg.Documents[0].Path)
-	}
-
-	// BFS to assign tree parents.
-	treeParent := make(map[string]string)
-	visited := make(map[string]bool)
-	bfsFrom := func(start string) {
-		queue := []string{start}
-		visited[start] = true
-		for len(queue) > 0 {
-			cur := queue[0]
-			queue = queue[1:]
-			for _, e := range outgoing[cur] {
-				if !visited[e.Target] {
-					visited[e.Target] = true
-					treeParent[e.Target] = cur
-					queue = append(queue, e.Target)
-				}
-			}
-		}
-	}
-	for _, r := range roots {
-		if !visited[r] {
-			bfsFrom(r)
-		}
-	}
-	// Pick up unvisited nodes (in cycles unreachable from roots).
-	for _, d := range tg.Documents {
-		if !visited[d.Path] {
-			roots = append(roots, d.Path)
-			bfsFrom(d.Path)
-		}
-	}
-
-	// Classify edges.
-	treeChildren := make(map[string][]core.TraceEdge)
-	extraParents := make(map[string][]core.TraceEdge)
-	backEdges := make(map[string][]core.TraceEdge)
-	for _, e := range tg.Edges {
-		if treeParent[e.Target] == e.Source {
-			treeChildren[e.Source] = append(treeChildren[e.Source], e)
-			continue
-		}
-		if isAncestor(treeParent, e.Source, e.Target) || e.Target == e.Source {
-			backEdges[e.Source] = append(backEdges[e.Source], e)
-		} else {
-			extraParents[e.Target] = append(extraParents[e.Target], e)
-		}
-	}
-
-	return spanningForest{
-		roots:        roots,
-		treeChildren: treeChildren,
-		extraParents: extraParents,
-		backEdges:    backEdges,
-		docByPath:    docByPath,
-	}
-}
-
-// isAncestor checks whether target is an ancestor of source in the spanning tree.
-func isAncestor(treeParent map[string]string, source, target string) bool {
-	cur := source
-	for {
-		p, ok := treeParent[cur]
-		if !ok {
-			return false
-		}
-		if p == target {
-			return true
-		}
-		cur = p
-	}
-}
-
-// renderTraceGraph renders the trace graph as a spanning forest with inline
-// annotations for non-tree edges (extra parents, back-edges/cycles).
-func renderTraceGraph(tg *core.TraceGraphData) string {
-	if len(tg.Documents) == 0 {
-		return ""
-	}
-
-	sf := buildSpanningForest(tg)
-
-	var b strings.Builder
-	b.WriteString(`<div class="trace-forest">`)
-
-	var writeNode func(path string)
-	writeNode = func(path string) {
-		d := sf.docByPath[path]
-		b.WriteString(`<li class="trace-node">`)
-		if d.Type != "" {
-			fmt.Fprintf(&b, `<span class="trace-tag" style="--type-hue:%d">%s</span> `,
-				typeHue(d.Type), template.HTMLEscapeString(d.Type))
-		}
-		b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
-		writeExtraParents(&b, sf.extraParents[path])
-		writeBackEdges(&b, sf.backEdges[path])
-		if children := sf.treeChildren[path]; len(children) > 0 {
-			b.WriteString(`<ul>`)
-			for _, e := range children {
-				writeNode(e.Target)
-			}
-			b.WriteString(`</ul>`)
-		}
-		b.WriteString(`</li>`)
-	}
-
-	for _, r := range sf.roots {
-		b.WriteString(`<ul class="trace-tree">`)
-		writeNode(r)
-		b.WriteString(`</ul>`)
-	}
-
-	b.WriteString(`</div>`)
-	return b.String()
-}
-
-func writeExtraParents(b *strings.Builder, extras []core.TraceEdge) {
-	if len(extras) == 0 {
-		return
-	}
-	var parts []string
-	for _, e := range extras {
-		ann := titleFromPath(e.Source)
-		if e.EdgeName != "" {
-			ann += " (" + e.EdgeName + ")"
-		}
-		parts = append(parts, ann)
-	}
-	fmt.Fprintf(b, ` <span class="trace-also">← also: %s</span>`,
-		template.HTMLEscapeString(strings.Join(parts, ", ")))
-}
-
-func writeBackEdges(b *strings.Builder, backs []core.TraceEdge) {
-	if len(backs) == 0 {
-		return
-	}
-	var parts []string
-	for _, e := range backs {
-		parts = append(parts, titleFromPath(e.Target))
-	}
-	fmt.Fprintf(b, ` <span class="trace-cycle">↻ %s</span>`,
-		template.HTMLEscapeString(strings.Join(parts, ", ")))
 }
 
 // typeHue returns a stable hue (0–359) for a type string.
@@ -2046,7 +1814,7 @@ main {
 
 .spec-body > :first-child > :first-child { margin-top: 0; }
 
-.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):not(.trace-forest ul):not(.trace-tree) { margin: 1.25rem 0 0; }
+.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0; }
 .spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
 .spec-body pre { margin: 1rem 0; }
 .spec-body li { margin: 0.25rem 0; }
@@ -2529,30 +2297,7 @@ code, pre, kbd, samp {
   margin: 0.5rem 0 1.5rem;
 }
 
-/* ── Trace graph ── */
-.trace-forest { margin: 1rem 0; }
-
-.trace-tree {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-/* Gap between root trees (Gestalt proximity: separate roots > siblings) */
-.trace-tree + .trace-tree { margin-top: 0.6rem; }
-
-.trace-tree ul {
-  list-style: none;
-  padding-left: 0.85rem;
-  margin: 0 0 0 0.3rem;
-  border-left: 1px solid var(--rule);
-}
-
-.trace-node {
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
+/* ── Trace tag (type badge) ── */
 .trace-tag {
   display: inline-block;
   font-family: var(--font-mono);
@@ -2568,34 +2313,6 @@ code, pre, kbd, samp {
   background: hsl(var(--type-hue) 55% 92%);
   color: hsl(var(--type-hue) 50% 35%);
   border: 1px solid hsl(var(--type-hue) 40% 82%);
-}
-
-.trace-also {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-style: italic;
-}
-
-.trace-cycle {
-  color: var(--fail-mark);
-  font-size: 0.78rem;
-}
-
-/* ── Trace errors ── */
-.trace-error-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.75rem 0;
-}
-
-.trace-error {
-  padding: 0.5rem 0.75rem;
-  margin: 0.35rem 0;
-  background: var(--fail-bg);
-  border-left: 3px solid var(--fail-mark);
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  line-height: 1.45;
 }
 
 /* ── Per-page trace context (right panel) ── */
@@ -2634,6 +2351,7 @@ code, pre, kbd, samp {
 .trace-ctx-arrow {
   display: block;
   font-size: 0.75rem;
+  font-style: italic;
   color: var(--muted);
   padding: 0.1rem 0 0.1rem 0.5rem;
 }
@@ -2650,9 +2368,15 @@ code, pre, kbd, samp {
   font-weight: 600;
   margin-left: 0.75rem;
 }
+.trace-ctx-current.trace-ctx-root {
+  margin-left: 0;
+}
 
 .trace-ctx-child {
   margin-left: 1.5rem;
+}
+.trace-ctx-child.trace-ctx-child-root {
+  margin-left: 0.75rem;
 }
 
 .trace-ctx-child a {
