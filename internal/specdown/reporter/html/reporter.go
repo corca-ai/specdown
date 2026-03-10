@@ -302,22 +302,29 @@ func renderDocument(result core.DocumentResult) (string, error) {
 	for _, item := range result.Cases {
 		caseResults[item.ID.Key()] = item
 	}
-	alloyResults := make(map[string]core.AlloyCheckResult, len(result.AlloyChecks))
-	for _, item := range result.AlloyChecks {
-		alloyResults[item.ID.Key()] = item
-	}
+	alloyCtx := buildAlloyRenderContext(result)
 
 	var out strings.Builder
 	var sectionStack []int
 	var accBindings []core.Binding
+	alloyBlockIndex := 0
 	for _, node := range result.Document.Nodes {
 		sectionStack = closeSections(&out, sectionStack, node, result.Document.RelativeTo)
 		var rendered string
 		var err error
-		if prose, ok := node.(core.ProseNode); ok {
-			rendered, err = renderProseNode(prose, caseResults, accBindings)
-		} else {
-			rendered, err = renderNode(node, caseResults, alloyResults)
+		switch current := node.(type) {
+		case core.ProseNode:
+			rendered, err = renderProseNode(current, caseResults, accBindings)
+		case core.AlloyModelNode:
+			if alloyBlockIndex >= len(alloyCtx.Blocks) {
+				return "", fmt.Errorf("missing alloy model render block for %q", current.Model)
+			}
+			rendered = renderAlloyModel(alloyCtx.Blocks[alloyBlockIndex])
+			alloyBlockIndex++
+		case core.AlloyRefNode:
+			rendered, err = renderAlloyRef(current, alloyCtx)
+		default:
+			rendered, err = renderNode(node, caseResults)
 		}
 		if err != nil {
 			return "", err
@@ -348,7 +355,7 @@ func closeSections(out *strings.Builder, sectionStack []int, node core.Node, doc
 	return append(sectionStack, heading.Level)
 }
 
-func renderNode(node core.Node, caseResults map[string]core.CaseResult, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+func renderNode(node core.Node, caseResults map[string]core.CaseResult) (string, error) {
 	switch current := node.(type) {
 	case core.HeadingNode:
 		return renderHeading(current)
@@ -356,10 +363,6 @@ func renderNode(node core.Node, caseResults map[string]core.CaseResult, alloyRes
 		return markdownToHTML(current.Markdown())
 	case core.CodeBlockNode:
 		return renderCodeBlock(current, caseResults)
-	case core.AlloyModelNode:
-		return renderAlloyModel(current, alloyResults), nil
-	case core.AlloyRefNode:
-		return renderAlloyRef(current, alloyResults)
 	case core.TableNode:
 		return renderTable(current, caseResults)
 	case core.HookNode:
@@ -647,52 +650,6 @@ func renderFailureDiff(out *strings.Builder, message, expected, actual string) {
 	out.WriteString(`</dl>`)
 }
 
-func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) string {
-	// Find checks targeting this model
-	var failedResult *core.AlloyCheckResult
-	hasCheck := false
-	for _, r := range alloyResults {
-		if r.Model != node.Model {
-			continue
-		}
-		hasCheck = true
-		if r.Status == core.StatusFailed {
-			rCopy := r
-			failedResult = &rCopy
-			break
-		}
-	}
-
-	statusClass := ""
-	if hasCheck {
-		statusClass = " passed"
-		if failedResult != nil {
-			statusClass = " failed"
-		}
-	}
-
-	var out strings.Builder
-	out.WriteString(`<section class="exec-block alloy-model` + statusClass + `">`)
-	out.WriteString(`<div class="exec-source">`)
-	out.WriteString(`<pre><code>`)
-	out.WriteString(template.HTMLEscapeString(node.Source))
-	out.WriteString(`</code></pre>`)
-	if failedResult != nil {
-		msg := failedResult.Message
-		if msg != "" {
-			out.WriteString(`<div class="cell-actual">`)
-			out.WriteString(template.HTMLEscapeString(msg))
-			out.WriteString(`</div>`)
-		}
-	}
-	out.WriteString(`</div>`)
-	out.WriteString(`<p class="exec-block-footer">`)
-	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
-	out.WriteString(`</p>`)
-	out.WriteString(`</section>`)
-	return out.String()
-}
-
 func renderHookBlock(node core.HookNode) string {
 	label := string(node.Hook)
 	if node.Each {
@@ -769,11 +726,6 @@ func renderCheckCall(node core.CheckCallNode, caseResults map[string]core.CaseRe
 	out.WriteString(`<p class="exec-block-footer">check</p>`)
 	out.WriteString(`</section>`)
 	return out.String()
-}
-
-func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
-	// Alloy failures are now shown inline in the model block.
-	return "", nil
 }
 
 // nodeSpecIDs returns the SpecIDs from executable nodes.
