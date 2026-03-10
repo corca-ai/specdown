@@ -1629,7 +1629,7 @@ body {
 
 /* ── Page layout ── */
 main {
-  max-width: 78rem;
+  max-width: 120rem;
   margin-inline: auto;
   padding:
     calc(2.75rem + var(--safe-top))
@@ -1640,7 +1640,7 @@ main {
 
 .layout {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 54rem) auto;
+  grid-template-columns: 20rem minmax(0, 54rem) 20rem;
   column-gap: 2.5rem;
   align-items: start;
 }
@@ -1659,6 +1659,7 @@ main {
 
 .toc-title {
   margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 600;
@@ -2271,6 +2272,13 @@ code, pre, kbd, samp {
   .content-body { order: 5; }
 }
 
+@media (min-width: 961px) {
+  .toc-title,
+  .trace-ctx-title {
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
 .site-footer {
   max-width: 52rem;
   margin: 3rem auto 0;
@@ -2321,8 +2329,7 @@ code, pre, kbd, samp {
   top: calc(2.75rem + var(--safe-top));
   max-height: calc(100dvh - 2.75rem - var(--safe-top) - var(--safe-bottom));
   overflow-y: auto;
-  min-width: 14rem;
-  max-width: 18rem;
+  min-width: 0;
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -2336,6 +2343,7 @@ code, pre, kbd, samp {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
 }
 
 .trace-ctx-parent {
@@ -2373,10 +2381,10 @@ code, pre, kbd, samp {
 }
 
 .trace-ctx-child {
-  margin-left: 1.5rem;
+  margin-left: 2rem;
 }
 .trace-ctx-child.trace-ctx-child-root {
-  margin-left: 0.75rem;
+  margin-left: 1.25rem;
 }
 
 .trace-ctx-child a {
