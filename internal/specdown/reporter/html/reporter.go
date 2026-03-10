@@ -2473,10 +2473,14 @@ code, pre, kbd, samp {
   margin: 0;
 }
 
+/* Gap between root trees (Gestalt proximity: separate roots > siblings) */
+.trace-tree + .trace-tree { margin-top: 0.6rem; }
+
 .trace-tree ul {
   list-style: none;
-  padding-left: 1.25rem;
-  margin: 0;
+  padding-left: 0.85rem;
+  margin: 0 0 0 0.3rem;
+  border-left: 1px solid var(--rule);
 }
 
 .trace-node {
@@ -2484,6 +2488,10 @@ code, pre, kbd, samp {
   line-height: 1.5;
   padding: 1px 0;
 }
+
+/* Gestalt proximity: gap before sibling nodes that have children */
+.trace-node:has(> ul) + .trace-node { padding-top: 0.25rem; }
+.trace-node + .trace-node:has(> ul) { padding-top: 0.25rem; }
 
 .trace-tag {
   display: inline-block;
