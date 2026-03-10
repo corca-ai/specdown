@@ -1806,6 +1806,9 @@ var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
         <div class="trace-ctx-inner">{{ .TraceContext }}</div>
       </aside>
       {{ end }}
+      <div class="mobile-title" aria-hidden="true">
+        <h1>{{ .Title }}</h1>
+      </div>
     </div>
   </main>
   <footer class="site-footer">
@@ -2464,6 +2467,8 @@ code, pre, kbd, samp {
 }
 
 /* ── Mobile layout ── */
+.mobile-title { display: none; }
+
 @media (max-width: 960px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
@@ -2472,25 +2477,30 @@ code, pre, kbd, samp {
 
   .content { display: contents; }
 
+  .mobile-title {
+    display: block;
+    order: 1;
+  }
+  .mobile-title h1 { margin: 0; }
+
   .toc {
     position: static;
     order: 2;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
   }
 
   .toc-inner { padding-left: 0; padding-bottom: 1rem; }
-  .content-header { order: 1; }
-  .content-body { order: 3; }
 
   .trace-context {
     position: static;
-    order: 4;
+    order: 3;
     max-width: none;
     min-width: 0;
-    margin-top: 2rem;
-    border-top: 1px solid var(--rule);
-    padding-top: 1rem;
+    margin-bottom: 1.5rem;
   }
+
+  .content-header { order: 4; }
+  .content-body { order: 5; }
 }
 
 .site-footer {
