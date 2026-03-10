@@ -1,9 +1,9 @@
 {
-  "entry": "specs/index.spec.md",
+  "entry": "index.spec.md",
   "adapters": [
     {
       "name": "shell-fixtures",
-      "command": ["./bin/specdown-adapter-shell", "-checks-dir", "./specs/fixtures"],
+      "command": ["../bin/specdown-adapter-shell", "-checks-dir", "./fixtures"],
       "blocks": [],
       "checks": ["block-kind", "cell-escape", "echo-value"]
     }
@@ -11,11 +11,11 @@
   "reporters": [
     {
       "builtin": "html",
-      "outFile": "specs/report"
+      "outFile": "report"
     },
     {
       "builtin": "json",
-      "outFile": "specs/report.json"
+      "outFile": "report.json"
     }
   ],
   "models": {

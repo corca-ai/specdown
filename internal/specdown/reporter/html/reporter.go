@@ -151,6 +151,7 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 		return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 	}
 	body = rewriteMarkdownLinks(body)
+	body = rewriteTraceLinks(body)
 
 	title := result.Document.Title
 	if title == "" {
@@ -246,6 +247,28 @@ func rewriteMarkdownLinks(html string) string {
 			linkPath = strings.TrimSuffix(linkPath, ".md") + ".html"
 		}
 		return `href="` + linkPath + fragment + `"`
+	})
+}
+
+// rewriteTraceLinks transforms trace links (edge::Display text) into ruby-annotated spans.
+// Input:  <a href="...">edgeName::Display Text</a>
+// Output: <a href="..." class="trace-link">Display Text<span class="annotation">edgeName</span></a>
+var traceLinkPattern = regexp.MustCompile(`(<a\s+href="[^"]*")>(([a-z][a-z0-9_]*)::([^<]+))</a>`)
+
+func rewriteTraceLinks(html string) string {
+	return traceLinkPattern.ReplaceAllStringFunc(html, func(match string) string {
+		parts := traceLinkPattern.FindStringSubmatch(match)
+		if len(parts) < 5 {
+			return match
+		}
+		anchor := parts[1]    // <a href="..."
+		edgeName := parts[3]  // e.g. "depends"
+		display := parts[4]   // e.g. "Spec Syntax"
+		return anchor + ` class="trace-link">` +
+			template.HTMLEscapeString(display) +
+			`<span class="annotation">` +
+			template.HTMLEscapeString(edgeName) +
+			`</span></a>`
 	})
 }
 
@@ -1964,6 +1987,25 @@ main {
   position: relative;
   padding-top: 0.02em;
   padding-bottom: 0.02em;
+}
+
+/* ── Trace links ── */
+
+.trace-link {
+  position: relative;
+  padding-top: 0.02em;
+}
+
+.trace-link > .annotation {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% - 0.35em);
+  font-size: 0.8em;
+  line-height: 1;
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* ── Cell styles ── */

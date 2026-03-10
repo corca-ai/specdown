@@ -10,16 +10,16 @@ Run executable specifications and fix failures.
 
 ## Project Context
 
-- Config: !`cat specdown.json 2>/dev/null || echo "no specdown.json found"`
-- Specs: !`specdown run -dry-run 2>&1 | head -50`
+- Config: !`cat specs/specdown.json 2>/dev/null || echo "no specs/specdown.json found"`
+- Specs: !`specdown run -config specs/specdown.json -dry-run 2>&1 | head -50`
 
 ## Instructions
 
-1. Run specs with `specdown run`. If $ARGUMENTS is provided, pass it as `-filter "$ARGUMENTS"`.
+1. Run specs with `specdown run -config specs/specdown.json`. If $ARGUMENTS is provided, pass it as `-filter "$ARGUMENTS"`.
 2. If all specs pass, report the result and stop.
 3. If specs fail, read the failing spec file to understand the intent.
 4. Fix the implementation to make the spec pass. Do NOT modify the spec unless the spec itself is wrong.
-5. Re-run `specdown run` to confirm the fix.
+5. Re-run `specdown run -config specs/specdown.json` to confirm the fix.
 
 ## Writing and Editing Specs
 

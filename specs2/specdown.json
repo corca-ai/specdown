@@ -1,0 +1,24 @@
+{
+  "entry": "index.spec.md",
+  "adapters": [
+    {
+      "name": "shell-fixtures",
+      "command": ["../bin/specdown-adapter-shell", "-checks-dir", "./fixtures"],
+      "blocks": [],
+      "checks": ["block-kind", "cell-escape", "echo-value"]
+    }
+  ],
+  "reporters": [
+    { "builtin": "html", "outFile": "report" },
+    { "builtin": "json", "outFile": "report.json" }
+  ],
+  "models": { "builtin": "alloy" },
+  "trace": {
+    "types": ["spec", "guide"],
+    "ignore": [".tmp-test/**"],
+    "edges": {
+      "depends":  { "from": "spec",  "to": "spec",  "acyclic": true, "transitive": true },
+      "explains": { "from": "guide", "to": "spec",  "count": "1..* → 0..*" }
+    }
+  }
+}

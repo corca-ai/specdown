@@ -1,8 +1,12 @@
+---
+type: spec
+---
+
 # Trace Graph
 
 Documents are nodes. Named, typed links between documents are edges.
-Edge names, types, and properties are configured in `specdown.json`.
-Everything else is derived.
+Edge names, types, and properties are [depends::configured](config.spec.md)
+in `specdown.json`. Everything else is derived.
 
 ## Authoring Surface
 
