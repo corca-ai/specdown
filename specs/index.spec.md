@@ -10,6 +10,7 @@
 - [Alloy Models](alloy.spec.md)
 - [HTML Report](report.spec.md)
 - [Best Practices](best-practices.spec.md)
+- [Trace Graph](trace.spec.md)
 
 ## Internals
 

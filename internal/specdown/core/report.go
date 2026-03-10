@@ -88,6 +88,7 @@ type Summary struct {
 	AlloyChecksTotal     int `json:"alloyChecksTotal"`
 	AlloyChecksPassed    int `json:"alloyChecksPassed"`
 	AlloyChecksFailed    int `json:"alloyChecksFailed"`
+	TraceErrorCount      int `json:"traceErrorCount,omitempty"`
 }
 
 type Report struct {
@@ -95,4 +96,5 @@ type Report struct {
 	GeneratedAt time.Time        `json:"generatedAt"`
 	Results     []DocumentResult `json:"results"`
 	Summary     Summary          `json:"summary"`
+	TraceErrors []string         `json:"traceErrors,omitempty"`
 }

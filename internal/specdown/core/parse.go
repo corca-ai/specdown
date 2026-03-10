@@ -41,10 +41,13 @@ func parseFrontmatter(markdown string) (Frontmatter, string) {
 		}
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
-		if key == "timeout" {
+		switch key {
+		case "timeout":
 			if n, err := strconv.Atoi(value); err == nil {
 				fm.Timeout = n
 			}
+		case "type":
+			fm.Type = value
 		}
 	}
 	return fm, rest

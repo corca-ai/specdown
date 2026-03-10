@@ -15,6 +15,7 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
+	"github.com/corca-ai/specdown/internal/specdown/trace"
 )
 
 // adapterEntry holds an adapter config for registry lookups.
@@ -45,7 +46,24 @@ func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error
 		return core.Report{}, err
 	}
 	host := adapterhost.Host{BaseDir: baseDir}
-	return runWithDocs(title, docs, cfg, host, alloy.Runner{BaseDir: baseDir}, opts)
+	report, err := runWithDocs(title, docs, cfg, host, alloy.Runner{BaseDir: baseDir}, opts)
+	if err != nil {
+		return core.Report{}, err
+	}
+
+	// Run trace validation when trace is configured
+	if cfg.Trace != nil {
+		_, traceErrs := trace.Validate(baseDir, cfg.Trace)
+		report.TraceErrors = make([]string, 0, len(traceErrs))
+		for _, e := range traceErrs {
+			report.TraceErrors = append(report.TraceErrors, e.Error())
+		}
+		if len(traceErrs) > 0 {
+			report.Summary.TraceErrorCount = len(traceErrs)
+		}
+	}
+
+	return report, nil
 }
 
 func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {

@@ -182,7 +182,8 @@ func (CheckCallNode) isNode()            {}
 func (n CheckCallNode) Markdown() string { return n.Raw }
 
 type Frontmatter struct {
-	Timeout int `json:"timeout,omitempty"` // milliseconds, 0 = no limit
+	Timeout int    `json:"timeout,omitempty"` // milliseconds, 0 = no limit
+	Type    string `json:"type,omitempty"`    // trace node type (e.g. "goal", "feature", "test")
 }
 
 type Document struct {

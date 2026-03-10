@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/engine"
 	htmlreport "github.com/corca-ai/specdown/internal/specdown/reporter/html"
 	jsonreport "github.com/corca-ai/specdown/internal/specdown/reporter/json"
+	"github.com/corca-ai/specdown/internal/specdown/trace"
 )
 
 var version = "dev"
@@ -37,6 +39,8 @@ func main() {
 		err = initCmd(os.Args[2:])
 	case "run":
 		err = run(os.Args[2:])
+	case "trace":
+		err = traceCmd(os.Args[2:])
 	case "alloy":
 		err = alloyCmd(os.Args[2:])
 	case "install":
@@ -84,6 +88,7 @@ func hasHelpFlag(args []string) bool {
 	return false
 }
 
+//nolint:gocognit // CLI entry point with flag parsing
 func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -127,6 +132,7 @@ func run(args []string) error {
 	}
 
 	printWarnings(report)
+	printTraceErrors(report)
 
 	if *dryRun {
 		printDryRun(report)
@@ -142,7 +148,7 @@ func run(args []string) error {
 		return err
 	}
 
-	if report.Summary.SpecsFailed > 0 {
+	if report.Summary.SpecsFailed > 0 || report.Summary.TraceErrorCount > 0 {
 		printFailures(report)
 		xfailSuffix := ""
 		if report.Summary.CasesExpectedFail > 0 {
@@ -164,6 +170,196 @@ func run(args []string) error {
 		fmt.Printf("report: %s\n", reportPath)
 	}
 	return nil
+}
+
+func traceCmd(args []string) error {
+	fs := flag.NewFlagSet("trace", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: specdown trace [flags]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Validate trace graph and output results.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+	}
+
+	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
+	format := fs.String("format", "json", "Output format: json, dot, matrix")
+	strict := fs.Bool("strict", false, "Suppress output when validation errors exist")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+
+	cfg, configDir, err := config.LoadOrDefault(*configPath)
+	if err != nil {
+		return err
+	}
+
+	if cfg.Trace == nil {
+		return fmt.Errorf("no trace configuration found in config")
+	}
+
+	graph, traceErrs := trace.Validate(configDir, cfg.Trace)
+
+	if len(traceErrs) > 0 {
+		for _, e := range traceErrs {
+			fmt.Fprintln(os.Stderr, e.Error())
+		}
+		if *strict {
+			return fmt.Errorf("trace validation failed with %d error(s)", len(traceErrs))
+		}
+	}
+
+	if *strict && len(traceErrs) > 0 {
+		return fmt.Errorf("trace validation failed")
+	}
+
+	switch *format {
+	case "json":
+		return traceOutputJSON(graph)
+	case "dot":
+		return traceOutputDOT(graph, cfg.Trace)
+	case "matrix":
+		return traceOutputMatrix(graph, cfg.Trace)
+	default:
+		return fmt.Errorf("unknown trace format %q (expected json, dot, or matrix)", *format)
+	}
+}
+
+func traceOutputJSON(graph trace.Graph) error {
+	type jsonEdge struct {
+		Source   string `json:"source"`
+		Target   string `json:"target"`
+		EdgeName string `json:"edge"`
+	}
+	type jsonDoc struct {
+		Path string `json:"path"`
+		Type string `json:"type,omitempty"`
+	}
+	type jsonOutput struct {
+		Documents       []jsonDoc  `json:"documents"`
+		DirectEdges     []jsonEdge `json:"directEdges"`
+		TransitiveEdges []jsonEdge `json:"transitiveEdges,omitempty"`
+	}
+
+	out := jsonOutput{}
+	for _, d := range graph.Documents {
+		if d.Type != "" {
+			out.Documents = append(out.Documents, jsonDoc{Path: d.Path, Type: d.Type})
+		}
+	}
+	for _, e := range graph.DirectEdges {
+		out.DirectEdges = append(out.DirectEdges, jsonEdge{Source: e.Source, Target: e.Target, EdgeName: e.EdgeName})
+	}
+	for _, e := range graph.TransitiveEdges {
+		out.TransitiveEdges = append(out.TransitiveEdges, jsonEdge{Source: e.Source, Target: e.Target, EdgeName: e.EdgeName})
+	}
+
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+func traceOutputDOT(graph trace.Graph, cfg *config.TraceConfig) error {
+	fmt.Println("digraph trace {")
+	fmt.Println("  rankdir=LR;")
+
+	// Group documents by type
+	typeGroups := make(map[string][]string)
+	for _, d := range graph.Documents {
+		if d.Type != "" {
+			typeGroups[d.Type] = append(typeGroups[d.Type], d.Path)
+		}
+	}
+	for _, t := range cfg.Types {
+		paths := typeGroups[t]
+		if len(paths) == 0 {
+			continue
+		}
+		fmt.Printf("  subgraph cluster_%s {\n", t)
+		fmt.Printf("    label=%q;\n", t)
+		for _, p := range paths {
+			fmt.Printf("    %q;\n", p)
+		}
+		fmt.Println("  }")
+	}
+
+	for _, e := range graph.DirectEdges {
+		fmt.Printf("  %q -> %q [label=%q];\n", e.Source, e.Target, e.EdgeName)
+	}
+	for _, e := range graph.TransitiveEdges {
+		fmt.Printf("  %q -> %q [label=%q, style=dashed];\n", e.Source, e.Target, e.EdgeName)
+	}
+
+	fmt.Println("}")
+	return nil
+}
+
+func traceOutputMatrix(graph trace.Graph, _ *config.TraceConfig) error {
+	var docs []string
+	for _, d := range graph.Documents {
+		if d.Type != "" {
+			docs = append(docs, d.Path)
+		}
+	}
+	if len(docs) == 0 {
+		fmt.Println("(no typed documents)")
+		return nil
+	}
+
+	edgeLookup := buildEdgeLookup(graph)
+
+	maxLen := 0
+	for _, d := range docs {
+		if len(d) > maxLen {
+			maxLen = len(d)
+		}
+	}
+	col := maxLen + 2
+
+	fmt.Printf("%-*s", col, "")
+	for _, d := range docs {
+		fmt.Printf(" %-*s", col, d)
+	}
+	fmt.Println()
+
+	for _, src := range docs {
+		fmt.Printf("%-*s", col, src)
+		for _, tgt := range docs {
+			fmt.Printf(" %-*s", col, edgeLookup(src, tgt))
+		}
+		fmt.Println()
+	}
+	return nil
+}
+
+func buildEdgeLookup(graph trace.Graph) func(src, tgt string) string {
+	directSet := make(map[string]string)
+	transitiveSet := make(map[string]string)
+	for _, e := range graph.DirectEdges {
+		directSet[e.Source+"|"+e.Target] = e.EdgeName
+	}
+	for _, e := range graph.TransitiveEdges {
+		transitiveSet[e.Source+"|"+e.Target] = e.EdgeName
+	}
+	return func(src, tgt string) string {
+		key := src + "|" + tgt
+		if edge, ok := directSet[key]; ok {
+			return edge
+		}
+		if edge, ok := transitiveSet[key]; ok {
+			return "(" + edge + ")"
+		}
+		return "."
+	}
 }
 
 func alloyCmd(args []string) error {
@@ -224,6 +420,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  init            Scaffold a new project (creates specdown.json and example specs)")
 	fmt.Fprintln(os.Stderr, "  run             Execute specs and generate HTML/JSON reports")
+	fmt.Fprintln(os.Stderr, "  trace           Validate trace graph and output results")
 	fmt.Fprintln(os.Stderr, "  install skills  Install Claude Code skills for this project")
 	fmt.Fprintln(os.Stderr, "  alloy dump      Export embedded Alloy models as .als files")
 	fmt.Fprintln(os.Stderr, "  version         Print the specdown version")
@@ -444,6 +641,12 @@ func printBindings(report core.Report) {
 			}
 			fmt.Fprintf(os.Stderr, "  BIND  %s  [%s]  %s\n", path, kind, strings.Join(pairs, ", "))
 		}
+	}
+}
+
+func printTraceErrors(report core.Report) {
+	for _, e := range report.TraceErrors {
+		fmt.Fprintf(os.Stderr, "trace: %s\n", e)
 	}
 }
 
