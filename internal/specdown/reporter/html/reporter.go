@@ -375,8 +375,8 @@ func writeTracePage(outDir string, report core.Report, globalTOC []globalTocEntr
 	}
 	b.WriteString(`</p>`)
 
-	// SVG graph visualization
-	b.WriteString(renderTraceSVG(tg))
+	// Graph visualization
+	b.WriteString(renderTraceGraph(tg))
 
 	// Coverage matrix
 	b.WriteString(renderTraceMatrix(tg))
@@ -417,284 +417,278 @@ func buildTracePageMeta(report core.Report) string {
 	return b.String()
 }
 
-// renderTraceSVG generates an inline SVG visualization of the trace graph.
-// Layout strategy is selected based on the graph classification.
-//
-//nolint:gocognit // SVG rendering requires coordinate math
-func renderTraceSVG(tg *core.TraceGraphData) string {
+// renderTraceGraph generates an HTML representation of the trace graph.
+// Trees use nested lists, DAGs use rank-grouped lists with parent
+// annotations, cyclic graphs get matrix-only (no graph view).
+func renderTraceGraph(tg *core.TraceGraphData) string {
 	if len(tg.Documents) == 0 {
 		return ""
 	}
-
-	// Assign positions based on layout type.
-	nodeIdx := make(map[string]int, len(tg.Documents))
-	for i, d := range tg.Documents {
-		nodeIdx[d.Path] = i
-	}
-
-	var nodes []nodePos
 	switch tg.Layout {
-	case "grid":
-		nodes = layoutGrid(tg)
-	case "radial":
-		nodes = layoutRadial(tg)
 	case "linear":
-		nodes = layoutLinear(tg)
+		return renderLinearChain(tg)
+	case "radial":
+		return renderFlatStar(tg)
+	case "dendrogram":
+		return renderTreeOrForest(tg)
+	case "grid":
+		return renderLayeredGrid(tg)
+	case "sugiyama":
+		return renderRankedList(tg)
 	default:
-		nodes = layoutLayered(tg, nodeIdx)
+		return ""
 	}
+}
 
-	// Compute SVG dimensions.
-	var maxX, maxY float64
-	for _, n := range nodes {
-		if n.x > maxX {
-			maxX = n.x
-		}
-		if n.y > maxY {
-			maxY = n.y
-		}
-	}
-
-	const nodeW, nodeH = 140.0, 36.0
-	const pad = 40.0
-	svgW := maxX + nodeW + pad*2
-	svgH := maxY + nodeH + pad*2
-
+// renderLinearChain renders as an ordered list with edge arrows.
+func renderLinearChain(tg *core.TraceGraphData) string {
+	order := traceTopoOrder(tg)
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg class="trace-svg" viewBox="0 0 %.0f %.0f" xmlns="http://www.w3.org/2000/svg">`, svgW, svgH)
-	b.WriteString(`<defs><marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse"><polygon points="0 0, 10 3.5, 0 7" fill="var(--muted)"/></marker></defs>`)
-
-	// Draw edges.
-	for _, e := range tg.Edges {
-		si, ok1 := nodeIdx[e.Source]
-		ti, ok2 := nodeIdx[e.Target]
-		if !ok1 || !ok2 {
-			continue
+	b.WriteString(`<ol class="trace-chain">`)
+	for i, d := range order {
+		writeTraceNode(&b, d, nil)
+		if i < len(order)-1 {
+			name := findEdgeName(tg, d.Path, order[i+1].Path)
+			fmt.Fprintf(&b, `<li class="trace-chain-arrow" aria-hidden="true">↓ <span class="trace-edge-name">%s</span></li>`,
+				template.HTMLEscapeString(name))
 		}
-		src := nodes[si]
-		tgt := nodes[ti]
-		x1 := pad + src.x + nodeW/2
-		y1 := pad + src.y + nodeH
-		x2 := pad + tgt.x + nodeW/2
-		y2 := pad + tgt.y
-
-		// Shorten line to avoid overlapping arrowhead with node.
-		if y2 > y1 {
-			y2 -= 2
-		} else if y2 < y1 {
-			y2 += 2
-		}
-
-		midY := (y1 + y2) / 2
-		fmt.Fprintf(&b, `<path d="M%.1f,%.1f C%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="none" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#arrow)"/>`,
-			x1, y1, x1, midY, x2, midY, x2, y2)
-
-		// Edge label at midpoint.
-		labelX := (x1 + x2) / 2
-		labelY := midY - 4
-		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" class="trace-edge-label">%s</text>`,
-			labelX, labelY, template.HTMLEscapeString(e.EdgeName))
 	}
-
-	// Draw nodes.
-	for i, n := range nodes {
-		_ = i
-		nx := pad + n.x
-		ny := pad + n.y
-		hue := typeHue(n.docType)
-		fmt.Fprintf(&b, `<g class="trace-node">`)
-		fmt.Fprintf(&b, `<rect x="%.1f" y="%.1f" width="%.0f" height="%.0f" rx="4" fill="hsl(%d 55%% 92%%)" stroke="hsl(%d 40%% 72%%)" stroke-width="1"/>`,
-			nx, ny, nodeW, nodeH, hue, hue)
-		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" class="trace-node-label">%s</text>`,
-			nx+nodeW/2, ny+nodeH/2+4, template.HTMLEscapeString(n.label))
-		if n.docType != "" {
-			fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" class="trace-node-type">%s</text>`,
-				nx+nodeW/2, ny-4, template.HTMLEscapeString(n.docType))
-		}
-		fmt.Fprintf(&b, `</g>`)
-	}
-
-	b.WriteString(`</svg>`)
+	b.WriteString(`</ol>`)
 	return b.String()
 }
 
-type nodePos struct {
-	x, y    float64
-	label   string
-	docType string
-	path    string
+// renderFlatStar renders as root heading + flat child list.
+func renderFlatStar(tg *core.TraceGraphData) string {
+	incoming := buildIncomingMap(tg)
+	var root core.TraceDocument
+	var children []core.TraceDocument
+	for _, d := range tg.Documents {
+		if len(incoming[d.Path]) == 0 && hasOutgoing(tg, d.Path) {
+			root = d
+		} else {
+			children = append(children, d)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(`<div class="trace-star">`)
+	writeTraceNodeBlock(&b, root)
+	b.WriteString(`<ul class="trace-graph-list">`)
+	for _, c := range children {
+		name := findEdgeName(tg, root.Path, c.Path)
+		writeTraceNode(&b, c, []string{name})
+	}
+	b.WriteString(`</ul></div>`)
+	return b.String()
 }
 
-// layoutGrid arranges nodes in columns by type (for layered DAGs).
-func layoutGrid(tg *core.TraceGraphData) []nodePos {
-	const colW, rowH = 180.0, 70.0
+// renderTreeOrForest renders as nested <ul>/<li> trees.
+func renderTreeOrForest(tg *core.TraceGraphData) string {
+	incoming := buildIncomingMap(tg)
+	outgoing := buildOutgoingMap(tg)
+	docByPath := traceDocMap(tg)
 
-	// Group docs by type, ordered by layers.
-	layerOrder := make(map[string]int)
-	for i, l := range tg.Layers {
-		layerOrder[l] = i
+	var roots []core.TraceDocument
+	for _, d := range tg.Documents {
+		if len(incoming[d.Path]) == 0 {
+			roots = append(roots, d)
+		}
 	}
 
-	type bucket struct {
-		docs []int
+	var b strings.Builder
+	b.WriteString(`<div class="trace-tree">`)
+	for _, root := range roots {
+		b.WriteString(`<ul class="trace-graph-list">`)
+		writeTreeNode(&b, root, outgoing, docByPath)
+		b.WriteString(`</ul>`)
 	}
-	buckets := make(map[string]*bucket)
-	for _, l := range tg.Layers {
-		buckets[l] = &bucket{}
-	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
 
-	nodes := make([]nodePos, len(tg.Documents))
-	for i, d := range tg.Documents {
+func writeTreeNode(b *strings.Builder, doc core.TraceDocument, outgoing map[string][]core.TraceEdge, docByPath map[string]core.TraceDocument) {
+	hue := typeHue(doc.Type)
+	fmt.Fprintf(b, `<li class="trace-graph-item" style="--type-hue:%d">`, hue)
+	writeTraceNodeInner(b, doc, nil)
+	if children := outgoing[doc.Path]; len(children) > 0 {
+		b.WriteString(`<ul class="trace-graph-list">`)
+		for _, edge := range children {
+			if child, ok := docByPath[edge.Target]; ok {
+				writeTreeNode(b, child, outgoing, docByPath)
+			}
+		}
+		b.WriteString(`</ul>`)
+	}
+	b.WriteString(`</li>`)
+}
+
+// renderLayeredGrid renders as columns per type layer with items stacked.
+func renderLayeredGrid(tg *core.TraceGraphData) string {
+	incoming := buildIncomingMap(tg)
+
+	// Group documents by layer.
+	layerDocs := make(map[string][]core.TraceDocument)
+	for _, d := range tg.Documents {
 		t := d.Type
 		if t == "" {
 			t = "_untyped"
 		}
-		if _, ok := buckets[t]; !ok {
-			buckets[t] = &bucket{}
-			layerOrder[t] = len(tg.Layers)
-		}
-		buckets[t].docs = append(buckets[t].docs, i)
-		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
+		layerDocs[t] = append(layerDocs[t], d)
 	}
 
-	for typeName, bk := range buckets {
-		col := layerOrder[typeName]
-		for row, idx := range bk.docs {
-			nodes[idx].x = float64(col) * colW
-			nodes[idx].y = float64(row) * rowH
+	var b strings.Builder
+	fmt.Fprintf(&b, `<div class="trace-grid" style="--cols:%d">`, len(tg.Layers))
+	for _, layer := range tg.Layers {
+		b.WriteString(`<div class="trace-grid-col">`)
+		fmt.Fprintf(&b, `<p class="trace-grid-header">%s</p>`, template.HTMLEscapeString(layer))
+		b.WriteString(`<ul class="trace-graph-list">`)
+		for _, d := range layerDocs[layer] {
+			parents := incomingNames(incoming, d.Path)
+			writeTraceNode(&b, d, parents)
 		}
+		b.WriteString(`</ul></div>`)
 	}
-	return nodes
+	b.WriteString(`</div>`)
+	return b.String()
 }
 
-// layoutRadial arranges nodes in a circle with the root at center.
-func layoutRadial(tg *core.TraceGraphData) []nodePos {
-	nodes := make([]nodePos, len(tg.Documents))
-	for i, d := range tg.Documents {
-		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
-	}
+// renderRankedList renders DAGs as rank-grouped lists with parent annotations.
+func renderRankedList(tg *core.TraceGraphData) string {
+	incoming := buildIncomingMap(tg)
+	ranks := traceRanks(tg)
 
-	// Find root (node with no incoming edges).
-	hasIncoming := make(map[string]bool)
-	for _, e := range tg.Edges {
-		hasIncoming[e.Target] = true
-	}
-	rootIdx := 0
-	for i, d := range tg.Documents {
-		if !hasIncoming[d.Path] {
-			rootIdx = i
-			break
+	// Group by rank.
+	maxRank := 0
+	rankDocs := make(map[int][]core.TraceDocument)
+	for _, d := range tg.Documents {
+		r := ranks[d.Path]
+		rankDocs[r] = append(rankDocs[r], d)
+		if r > maxRank {
+			maxRank = r
 		}
 	}
 
-	const radius = 160.0
-	const cx, cy = 200.0, 200.0
-	nodes[rootIdx].x = cx - 70
-	nodes[rootIdx].y = cy - 18
-
-	others := 0
-	for i := range nodes {
-		if i == rootIdx {
+	var b strings.Builder
+	b.WriteString(`<div class="trace-ranked">`)
+	for r := 0; r <= maxRank; r++ {
+		docs := rankDocs[r]
+		if len(docs) == 0 {
 			continue
 		}
-		angle := 2 * 3.14159265 * float64(others) / float64(len(nodes)-1)
-		nodes[i].x = cx + radius*cos(angle) - 70
-		nodes[i].y = cy + radius*sin(angle) - 18
-		others++
+		b.WriteString(`<ul class="trace-graph-list">`)
+		for _, d := range docs {
+			parents := incomingAnnotations(incoming, d.Path)
+			writeTraceNode(&b, d, parents)
+		}
+		b.WriteString(`</ul>`)
 	}
-	return nodes
+	b.WriteString(`</div>`)
+	return b.String()
 }
 
-// layoutLinear arranges nodes in a single vertical chain.
-func layoutLinear(tg *core.TraceGraphData) []nodePos {
-	nodes := make([]nodePos, len(tg.Documents))
-	for i, d := range tg.Documents {
-		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
-	}
+// ── trace graph helpers ──
 
-	// Topological sort to find the chain order.
-	order := topoSort(tg)
-	const rowH = 70.0
-	for rank, idx := range order {
-		nodes[idx].x = 0
-		nodes[idx].y = float64(rank) * rowH
+func buildIncomingMap(tg *core.TraceGraphData) map[string][]core.TraceEdge {
+	m := make(map[string][]core.TraceEdge)
+	for _, e := range tg.Edges {
+		m[e.Target] = append(m[e.Target], e)
 	}
-	return nodes
+	return m
 }
 
-// layoutLayered is the default for dendrogram/sugiyama — uses topological ranks.
-//
-//nolint:gocognit // rank propagation requires nested iteration
-func layoutLayered(tg *core.TraceGraphData, nodeIdx map[string]int) []nodePos {
-	nodes := make([]nodePos, len(tg.Documents))
-	for i, d := range tg.Documents {
-		nodes[i] = nodePos{label: titleFromPath(d.Path), docType: d.Type, path: d.Path}
+func buildOutgoingMap(tg *core.TraceGraphData) map[string][]core.TraceEdge {
+	m := make(map[string][]core.TraceEdge)
+	for _, e := range tg.Edges {
+		m[e.Source] = append(m[e.Source], e)
 	}
+	return m
+}
 
-	order := topoSort(tg)
+func traceDocMap(tg *core.TraceGraphData) map[string]core.TraceDocument {
+	m := make(map[string]core.TraceDocument, len(tg.Documents))
+	for _, d := range tg.Documents {
+		m[d.Path] = d
+	}
+	return m
+}
 
-	// Assign ranks based on longest path from roots.
-	ranks := make([]int, len(tg.Documents))
-	for _, idx := range order {
-		for _, e := range tg.Edges {
-			si, ok1 := nodeIdx[e.Source]
-			ti, ok2 := nodeIdx[e.Target]
-			if ok1 && ok2 && si == idx {
-				if ranks[ti] < ranks[si]+1 {
-					ranks[ti] = ranks[si] + 1
-				}
-			}
+func hasOutgoing(tg *core.TraceGraphData, path string) bool {
+	for _, e := range tg.Edges {
+		if e.Source == path {
+			return true
 		}
 	}
-
-	// Group by rank and assign positions.
-	rankBuckets := make(map[int][]int)
-	for i, r := range ranks {
-		rankBuckets[r] = append(rankBuckets[r], i)
-	}
-
-	const colW, rowH = 170.0, 70.0
-	for rank, indices := range rankBuckets {
-		for col, idx := range indices {
-			nodes[idx].x = float64(col) * colW
-			nodes[idx].y = float64(rank) * rowH
-		}
-	}
-	return nodes
+	return false
 }
 
-// topoSort returns document indices in topological order.
+func findEdgeName(tg *core.TraceGraphData, src, tgt string) string {
+	for _, e := range tg.Edges {
+		if e.Source == src && e.Target == tgt {
+			return e.EdgeName
+		}
+	}
+	return ""
+}
+
+func incomingNames(incoming map[string][]core.TraceEdge, path string) []string {
+	edges := incoming[path]
+	if len(edges) == 0 {
+		return nil
+	}
+	var names []string
+	for _, e := range edges {
+		names = append(names, e.EdgeName+" "+titleFromPath(e.Source))
+	}
+	return names
+}
+
+func incomingAnnotations(incoming map[string][]core.TraceEdge, path string) []string {
+	edges := incoming[path]
+	if len(edges) == 0 {
+		return nil
+	}
+	var parts []string
+	for _, e := range edges {
+		parts = append(parts, titleFromPath(e.Source)+" ("+e.EdgeName+")")
+	}
+	return parts
+}
+
+// traceTopoOrder returns documents in topological order.
 //
 //nolint:gocognit // Kahn's algorithm with cycle fallback
-func topoSort(tg *core.TraceGraphData) []int {
-	nodeIdx := make(map[string]int, len(tg.Documents))
+func traceTopoOrder(tg *core.TraceGraphData) []core.TraceDocument {
+	idx := make(map[string]int, len(tg.Documents))
 	for i, d := range tg.Documents {
-		nodeIdx[d.Path] = i
+		idx[d.Path] = i
 	}
 
-	inDeg := make([]int, len(tg.Documents))
-	adj := make([][]int, len(tg.Documents))
+	inDeg := make(map[string]int)
+	adj := make(map[string][]string)
 	for _, e := range tg.Edges {
-		si, ok1 := nodeIdx[e.Source]
-		ti, ok2 := nodeIdx[e.Target]
-		if ok1 && ok2 {
-			adj[si] = append(adj[si], ti)
-			inDeg[ti]++
+		adj[e.Source] = append(adj[e.Source], e.Target)
+		inDeg[e.Target]++
+	}
+
+	var queue []string
+	for _, d := range tg.Documents {
+		if inDeg[d.Path] == 0 {
+			queue = append(queue, d.Path)
 		}
 	}
 
-	var queue []int
-	for i, d := range inDeg {
-		if d == 0 {
-			queue = append(queue, i)
-		}
-	}
-
-	var order []int
+	var order []core.TraceDocument
+	visited := make(map[string]bool)
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
-		order = append(order, cur)
+		if visited[cur] {
+			continue
+		}
+		visited[cur] = true
+		if i, ok := idx[cur]; ok {
+			order = append(order, tg.Documents[i])
+		}
 		for _, next := range adj[cur] {
 			inDeg[next]--
 			if inDeg[next] == 0 {
@@ -702,35 +696,66 @@ func topoSort(tg *core.TraceGraphData) []int {
 			}
 		}
 	}
-
-	// Add any remaining nodes (cycles).
-	visited := make(map[int]bool, len(order))
-	for _, idx := range order {
-		visited[idx] = true
-	}
-	for i := range tg.Documents {
-		if !visited[i] {
-			order = append(order, i)
+	// Append any remaining (cycles).
+	for _, d := range tg.Documents {
+		if !visited[d.Path] {
+			order = append(order, d)
 		}
 	}
 	return order
 }
 
-// cos and sin for radial layout (avoiding math import for this small usage).
-func cos(x float64) float64 {
-	// Taylor series approximation, normalized to [-pi, pi].
-	for x > 3.14159265 {
-		x -= 2 * 3.14159265
+// traceRanks computes the longest-path rank for each document.
+func traceRanks(tg *core.TraceGraphData) map[string]int {
+	order := traceTopoOrder(tg)
+	ranks := make(map[string]int, len(tg.Documents))
+	for _, d := range order {
+		for _, e := range tg.Edges {
+			if e.Source == d.Path {
+				if r := ranks[d.Path] + 1; r > ranks[e.Target] {
+					ranks[e.Target] = r
+				}
+			}
+		}
 	}
-	for x < -3.14159265 {
-		x += 2 * 3.14159265
-	}
-	x2 := x * x
-	return 1 - x2/2 + x2*x2/24 - x2*x2*x2/720
+	return ranks
 }
 
-func sin(x float64) float64 {
-	return cos(x - 3.14159265/2)
+// writeTraceNode writes a single <li> node with type badge and optional parent annotations.
+func writeTraceNode(b *strings.Builder, d core.TraceDocument, parents []string) {
+	hue := typeHue(d.Type)
+	fmt.Fprintf(b, `<li class="trace-graph-item" style="--type-hue:%d">`, hue)
+	writeTraceNodeInner(b, d, parents)
+	b.WriteString(`</li>`)
+}
+
+func writeTraceNodeInner(b *strings.Builder, d core.TraceDocument, parents []string) {
+	b.WriteString(`<span class="trace-doc-name">`)
+	b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
+	b.WriteString(`</span>`)
+	writeTypeBadge(b, d.Type)
+	if len(parents) > 0 {
+		b.WriteString(` <span class="trace-parents">← `)
+		b.WriteString(template.HTMLEscapeString(strings.Join(parents, ", ")))
+		b.WriteString(`</span>`)
+	}
+}
+
+func writeTraceNodeBlock(b *strings.Builder, d core.TraceDocument) {
+	hue := typeHue(d.Type)
+	fmt.Fprintf(b, `<div class="trace-graph-item trace-graph-root" style="--type-hue:%d">`, hue)
+	b.WriteString(`<span class="trace-doc-name">`)
+	b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
+	b.WriteString(`</span>`)
+	writeTypeBadge(b, d.Type)
+	b.WriteString(`</div>`)
+}
+
+func writeTypeBadge(b *strings.Builder, docType string) {
+	if docType == "" {
+		return
+	}
+	fmt.Fprintf(b, ` <span class="trace-type-badge">%s</span>`, template.HTMLEscapeString(docType))
 }
 
 // renderTraceMatrix builds an HTML adjacency matrix table.
@@ -2675,38 +2700,104 @@ code, pre, kbd, samp {
   margin: 0.5rem 0 1.5rem;
 }
 
-.trace-svg {
-  width: 100%;
-  max-height: 600px;
-  margin: 1rem 0;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 0.3rem;
+/* ── Trace graph (HTML) ── */
+.trace-graph-list {
+  list-style: none;
+  padding-left: 1.5rem;
+  margin: 0.25rem 0;
 }
 
-.trace-node-label {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  text-anchor: middle;
-  dominant-baseline: middle;
-  fill: var(--ink);
+.trace-graph-item {
+  padding: 0.3rem 0.55rem;
+  margin: 0.25rem 0;
+  border-left: 3px solid hsl(var(--type-hue, 0) 40% 72%);
+  background: hsl(var(--type-hue, 0) 55% 96%);
+  border-radius: 0 0.2rem 0.2rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
-.trace-node-type {
-  font-size: 9px;
+.trace-graph-root {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.trace-doc-name {
+  font-weight: 600;
+}
+
+.trace-type-badge {
   font-family: var(--font-mono);
-  text-anchor: middle;
-  fill: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  padding: 0.08em 0.4em;
+  border-radius: 0.15rem;
+  background: hsl(var(--type-hue, 0) 40% 88%);
+  color: hsl(var(--type-hue, 0) 45% 40%);
+  vertical-align: middle;
 }
 
-.trace-edge-label {
-  font-size: 9px;
-  font-family: var(--font-mono);
-  text-anchor: middle;
-  fill: var(--muted);
+.trace-parents {
+  color: var(--muted);
+  font-size: 0.82rem;
   font-style: italic;
+}
+
+.trace-chain {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  max-width: 24rem;
+}
+
+.trace-chain-arrow {
+  color: var(--muted);
+  padding: 0.15rem 0 0.15rem 0.55rem;
+  font-size: 0.82rem;
+}
+
+.trace-edge-name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.trace-star { margin: 1rem 0; }
+.trace-star > .trace-graph-list { padding-left: 2rem; }
+
+.trace-tree { margin: 1rem 0; }
+.trace-tree > .trace-graph-list { padding-left: 0; }
+
+.trace-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), 1fr);
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.trace-grid-col > .trace-graph-list { padding-left: 0; }
+
+.trace-grid-header {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 0.5rem;
+}
+
+.trace-ranked { margin: 1rem 0; }
+.trace-ranked > .trace-graph-list { padding-left: 0; }
+.trace-ranked > .trace-graph-list + .trace-graph-list {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--rule);
 }
 
 /* ── Trace matrix ── */

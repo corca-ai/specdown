@@ -94,7 +94,7 @@ func WriteTraceSampleGallery(outDir string) error {
 			fmt.Fprintf(&body, ` · Layers: %s`, strings.Join(tg.Layers, " → "))
 		}
 		body.WriteString(`</p>`)
-		body.WriteString(renderTraceSVG(&tg))
+		body.WriteString(renderTraceGraph(&tg))
 		body.WriteString(renderTraceMatrix(&tg))
 
 		// Add sample trace errors for visual testing.
