@@ -36,9 +36,9 @@ type alloyGlossSection struct {
 }
 
 var (
-	alloyCheckPatternLocal = regexp.MustCompile(`(?m)^\s*check\s+([A-Za-z_][A-Za-z0-9_]*)\s+for\s+(.+?)\s*$`)
-	alloySigHeaderPattern  = regexp.MustCompile(`^\s*(abstract\s+)?(?:(one|lone|some)\s+)?sig\s+([^{}]+?)\s*(?:extends\s+([^{}]+?))?\s*\{`)
-	alloyBlockHeaderPattern = regexp.MustCompile(`^\s*(fact|assert)(?:\s+([A-Za-z_][A-Za-z0-9_]*))?\s*\{`)
+	alloyCheckPatternLocal  = regexp.MustCompile(`(?m)^\s*check\s+([A-Za-z_][A-Za-z0-9_]*)\s+for\s+(.+?)\s*$`)
+	alloySigHeaderPattern   = regexp.MustCompile(`^\s*(abstract\s+)?(?:(one|lone|some)\s+)?sig\s+([^{}]+?)\s*(?:extends\s+([^{}]+?))?\s*(?:\{.*)?$`)
+	alloyBlockHeaderPattern = regexp.MustCompile(`^\s*(fact|assert)(?:\s+([A-Za-z_][A-Za-z0-9_]*))?\s*(?:\{.*)?$`)
 	alloyQuantifiedPattern  = regexp.MustCompile(`^(all|some|one|no)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\|\s*(.+)$`)
 	alloyOverridePattern    = regexp.MustCompile(`^(\d+)\s+([A-Za-z_][A-Za-z0-9_]*)$`)
 	alloyRelationPattern    = regexp.MustCompile(`^\s*([A-Za-z0-9_$]+)\.([A-Za-z0-9_]+)\s*=\s*(.+?)\s*$`)
@@ -175,17 +175,41 @@ func ownedResultSortKey(block alloyModelRender, result core.AlloyCheckResult, re
 	return len(block.LocalChecks) + resultOrder[result.ID.Key()]
 }
 
-func alloyBlockStatus(results []core.AlloyCheckResult) string {
-	hasPassed := false
-	for _, result := range results {
+func alloyBlockStatus(block alloyModelRender) string {
+	hasExactPassed := false
+	hasFallbackPassed := false
+	hasExact := false
+	for _, result := range block.OwnedResults {
+		if !blockHasExactCheck(block, result.Assertion, result.Scope) {
+			switch result.Status {
+			case core.StatusFailed:
+				if len(block.LocalChecks) > 0 {
+					return string(core.StatusFailed)
+				}
+				return string(core.StatusFailed)
+			case core.StatusPassed:
+				hasFallbackPassed = true
+			}
+			continue
+		}
+		hasExact = true
 		switch result.Status {
 		case core.StatusFailed:
 			return string(core.StatusFailed)
 		case core.StatusPassed:
-			hasPassed = true
+			hasExactPassed = true
 		}
 	}
-	if hasPassed {
+	if hasExact {
+		if hasExactPassed {
+			return string(core.StatusPassed)
+		}
+		return ""
+	}
+	if len(block.LocalChecks) > 0 {
+		return ""
+	}
+	if hasFallbackPassed {
 		return string(core.StatusPassed)
 	}
 	return ""
@@ -201,7 +225,7 @@ func hasFailedOwnedResult(results []core.AlloyCheckResult) bool {
 }
 
 func renderAlloyModel(block alloyModelRender) string {
-	statusClass := alloyBlockStatus(block.OwnedResults)
+	statusClass := alloyBlockStatus(block)
 
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block alloy-model`)
@@ -234,6 +258,9 @@ func renderAlloyFailureMessages(out *strings.Builder, results []core.AlloyCheckR
 		out.WriteString(`<dl class="failure-diff compact alloy-failure-diff">`)
 		out.WriteString(`<dt>check</dt><dd>`)
 		out.WriteString(template.HTMLEscapeString(result.Assertion))
+		if result.Scope != "" {
+			out.WriteString(template.HTMLEscapeString(" (scope " + result.Scope + ")"))
+		}
 		out.WriteString(`</dd>`)
 		out.WriteString(`<dt>error</dt><dd>`)
 		out.WriteString(template.HTMLEscapeString(result.Message))
@@ -361,7 +388,7 @@ func collectBraceBlock(lines []string, start int) (string, int) {
 }
 
 func glossSigBlock(blockText string) []string {
-	header := alloySigHeaderPattern.FindStringSubmatch(strings.TrimSpace(blockText))
+	header := alloySigHeaderPattern.FindStringSubmatch(leadingAlloyHeader(blockText))
 	if len(header) == 0 {
 		return nil
 	}
@@ -467,7 +494,7 @@ func isAlloyMultiplicity(token string) bool {
 }
 
 func glossRuleBlock(blockText string) (string, string) {
-	header := alloyBlockHeaderPattern.FindStringSubmatch(strings.TrimSpace(blockText))
+	header := alloyBlockHeaderPattern.FindStringSubmatch(leadingAlloyHeader(blockText))
 	if len(header) == 0 {
 		return "", ""
 	}
@@ -481,11 +508,14 @@ func glossRuleBlock(blockText string) (string, string) {
 	if bodyText == "" {
 		bodyText = "Constraint: " + body
 	}
-	label := strings.Title(kind)
+	label := "Fact"
+	if kind == "assert" {
+		label = "Assertion"
+	}
 	if name != "" {
 		label += " " + name
 	}
-	return "Rules", ensurePeriod(label+": "+bodyText)
+	return "Rules", ensurePeriod(label + ": " + bodyText)
 }
 
 func glossCheckLine(line string, exactResults map[string]core.AlloyCheckResult) string {
@@ -517,14 +547,30 @@ func glossScope(scope string) string {
 	if !ok {
 		return "scope " + scope
 	}
-	override = normalizeAlloySpace(override)
-	if match := alloyOverridePattern.FindStringSubmatch(override); len(match) == 3 {
-		if match[2] == "Int" {
-			return "default scope " + base + ", and Int is widened to " + match[1] + " bits"
-		}
-		return "default scope " + base + ", and " + match[2] + " uses the override " + match[1]
+	overrideParts := strings.Split(override, ",")
+	glosses := make([]string, 0, len(overrideParts))
+	for _, part := range overrideParts {
+		glosses = append(glosses, glossOverrideClause(part))
 	}
-	return "default scope " + base + ", and override " + override
+	return "default scope " + base + ", and " + strings.Join(glosses, ", and ")
+}
+
+func glossOverrideClause(raw string) string {
+	override := normalizeAlloySpace(raw)
+	if match := regexp.MustCompile(`^exactly\s+(\d+)\s+([A-Za-z_][A-Za-z0-9_]*)$`).FindStringSubmatch(override); len(match) == 3 {
+		return match[2] + " is fixed to exactly " + match[1] + " atoms"
+	}
+	if match := alloyOverridePattern.FindStringSubmatch(override); len(match) == 3 {
+		switch match[2] {
+		case "Int":
+			return "Int is widened to " + match[1] + " bits"
+		case "steps":
+			return "the step bound is set to " + match[1]
+		default:
+			return match[2] + " is limited to " + match[1] + " atoms"
+		}
+	}
+	return "override " + override
 }
 
 func glossAlloyCondition(body string) string {
@@ -648,45 +694,53 @@ func renderAlloyRef(node core.AlloyRefNode, ctx alloyRenderContext) (string, err
 
 	label := "alloy:ref(" + node.Model + "#" + node.Assertion + ", scope=" + node.Scope + ")"
 	result, ok := ctx.ResultsByKey[node.ID.Key()]
-	status := ""
-	if ok {
-		status = string(result.Status)
-	}
-	if status == "" {
-		status = "pending"
+	statusClass := ""
+	if ok && result.Status != "" {
+		statusClass = string(result.Status)
 	}
 
 	var out strings.Builder
-	out.WriteString(`<section class="alloy-ref-note `)
-	out.WriteString(template.HTMLEscapeString(status))
+	out.WriteString(`<section class="exec-block alloy-ref`)
+	if statusClass != "" {
+		out.WriteString(` `)
+		out.WriteString(template.HTMLEscapeString(statusClass))
+	}
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
 	out.WriteString(`">`)
-	out.WriteString(`<p class="exec-note">`)
+	out.WriteString(`<div class="exec-source">`)
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(label))
 	out.WriteString(`</code>`)
-	out.WriteString(` <span class="status`)
-	if status == string(core.StatusPassed) || status == string(core.StatusFailed) {
-		out.WriteString(` `)
-		out.WriteString(template.HTMLEscapeString(status))
-	}
-	out.WriteString(`">`)
-	out.WriteString(template.HTMLEscapeString(alloyRefStatusText(result.Status)))
-	out.WriteString(`</span>`)
-	if anchor := ctx.OwnerAnchorByResult[node.ID.Key()]; anchor != "" {
-		out.WriteString(` <a class="alloy-ref-link" href="#`)
-		out.WriteString(template.HTMLEscapeString(anchor))
-		out.WriteString(`">See model explanation</a>`)
-	}
-	out.WriteString(`</p>`)
-	if ok && result.Status == core.StatusFailed && ctx.OwnerAnchorByResult[node.ID.Key()] == "" && result.Message != "" {
+	out.WriteString(`<div class="alloy-ref-summary">`)
+	out.WriteString(template.HTMLEscapeString("References Alloy check " + node.Assertion + " at scope " + node.Scope + ". Result: " + alloyRefStatusText(result.Status) + "."))
+	out.WriteString(`</div>`)
+	if ok && result.Status == core.StatusFailed && result.Message != "" {
 		out.WriteString(`<div class="cell-actual">`)
-		out.WriteString(template.HTMLEscapeString(result.Message))
+		out.WriteString(template.HTMLEscapeString(firstAlloyFailureLine(result.Message)))
 		out.WriteString(`</div>`)
 	}
+	if anchor := ctx.OwnerAnchorByResult[node.ID.Key()]; anchor != "" {
+		out.WriteString(`<div class="alloy-ref-link-row">`)
+		out.WriteString(`<a class="alloy-ref-link" href="#`)
+		out.WriteString(template.HTMLEscapeString(anchor))
+		out.WriteString(`">See model explanation</a>`)
+		out.WriteString(`</div>`)
+	}
+	out.WriteString(`</div>`)
+	out.WriteString(`<p class="exec-block-footer">alloy reference</p>`)
 	out.WriteString(`</section>`)
 	return out.String(), nil
+}
+
+func firstAlloyFailureLine(message string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(message, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return strings.TrimSpace(message)
 }
 
 func alloyRefStatusText(status core.Status) string {
@@ -714,11 +768,29 @@ func splitAlloyNames(input string) []string {
 
 func extractBraceBody(blockText string) string {
 	start := strings.Index(blockText, "{")
-	end := strings.LastIndex(blockText, "}")
-	if start < 0 || end < 0 || end <= start {
+	if start < 0 {
 		return ""
 	}
-	return blockText[start+1 : end]
+	depth := 0
+	for index := start; index < len(blockText); index++ {
+		switch blockText[index] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return blockText[start+1 : index]
+			}
+		}
+	}
+	return ""
+}
+
+func leadingAlloyHeader(blockText string) string {
+	if start := strings.Index(blockText, "{"); start >= 0 {
+		return normalizeAlloySpace(blockText[:start])
+	}
+	return normalizeAlloySpace(blockText)
 }
 
 func stripAlloyComment(line string) string {

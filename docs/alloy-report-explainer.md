@@ -106,7 +106,7 @@ Unknown expressions fall back to a safe gloss:
 
 - `check name for 5` -> `Check name is explored with scope 5.`
 - `check name for 3 but 6 Int` ->
-  `Check name is explored with default scope 3, and Int uses the override 6.`
+  `Check name is explored with default scope 3, and Int is widened to 6 bits.`
 
 Scope wording:
 
@@ -114,7 +114,8 @@ Scope wording:
   top-level signature unless overridden.
 - Larger scope means Alloy searches a wider finite space, not an infinite
   proof.
-- `but` means a type-specific override of the default scope.
+- `but` means Alloy starts from the default scope and then overrides a
+  named signature or solver setting such as `Int` or `steps`.
 - `but 6 Int` should be glossed as `Int is widened to 6 bits` because that
   is the meaning highlighted in `selfspecs/alloy.spec.md`.
 
@@ -181,7 +182,7 @@ but they do not render a counterexample gloss for another block's check.
 
 `alloy:ref(...)` should not stay invisible in the report body.
 
-For v1, render a compact inline note at the reference location:
+For v1, render a compact report block at the reference location:
 
 - label: `alloy:ref(model#assertion, scope=...)`
 - status: pass, fail, or not executed

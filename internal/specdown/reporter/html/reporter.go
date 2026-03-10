@@ -1755,6 +1755,24 @@ main {
   white-space: pre-wrap;
 }
 
+.alloy-ref-summary {
+  margin-top: 0.4rem;
+  color: var(--muted);
+  white-space: normal;
+}
+
+.alloy-ref-link-row {
+  margin-top: 0.4rem;
+}
+
+.alloy-ref-link {
+  display: inline-block;
+}
+
+.alloy-failure-diff + .alloy-failure-diff {
+  margin-top: 0.45rem;
+}
+
 .failure-diff {
   margin: 0.75rem 0 0;
   padding: 0.65rem 0.8rem;
@@ -1777,6 +1795,7 @@ main {
   font-family: var(--font-mono);
   line-height: 1.45;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 /* ── Links & code ── */

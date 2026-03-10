@@ -50,7 +50,7 @@ func buildMainTestReport() core.Report {
 							},
 						},
 						core.TableNode{
-							Check: "board-exists",
+							Check:   "board-exists",
 							Columns: []string{"board", "exists"},
 							Rows: []core.TableRowNode{
 								{
@@ -137,8 +137,8 @@ func buildMainTestReport() core.Report {
 						RowNumber:     2,
 						Status:        core.StatusFailed,
 						Message:       "board existence check failed",
-					Expected:      "board-1-archive exists",
-					Actual:        "not found",
+						Expected:      "board-1-archive exists",
+						Actual:        "not found",
 					},
 				},
 			},
@@ -391,8 +391,8 @@ func TestWriteRendersAlloyGlossDisclosure(t *testing.T) {
 						core.AlloyModelNode{
 							Model:       "board",
 							HeadingPath: []string{"Pocket Board"},
-							Source: "module board\n\nsig Board {}\n\nsig Card {\n  board: one Board\n}\n\nassert cardShape {\n  all c: Card | one c.board\n}\n\ncheck cardShape for 5",
-							Raw:    "```alloy:model(board)\nmodule board\n\nsig Board {}\n\nsig Card {\n  board: one Board\n}\n\nassert cardShape {\n  all c: Card | one c.board\n}\n\ncheck cardShape for 5\n```\n",
+							Source:      "module board\n\nsig Board {}\n\nsig Card {\n  board: one Board\n}\n\nassert cardShape {\n  all c: Card | one c.board\n}\n\ncheck cardShape for 5",
+							Raw:         "```alloy:model(board)\nmodule board\n\nsig Board {}\n\nsig Card {\n  board: one Board\n}\n\nassert cardShape {\n  all c: Card | one c.board\n}\n\ncheck cardShape for 5\n```\n",
 						},
 					},
 				},
@@ -442,8 +442,8 @@ func TestWriteDoesNotClaimInlineCheckResultWhenExplicitRefOverridesIt(t *testing
 						core.AlloyModelNode{
 							Model:       "rm",
 							HeadingPath: []string{"Ref Test"},
-							Source: "module rm\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3",
-							Raw:    "```alloy:model(rm)\nmodule rm\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3\n```\n",
+							Source:      "module rm\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3",
+							Raw:         "```alloy:model(rm)\nmodule rm\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3\n```\n",
 						},
 						core.AlloyRefNode{
 							Model:       "rm",
@@ -479,8 +479,84 @@ func TestWriteDoesNotClaimInlineCheckResultWhenExplicitRefOverridesIt(t *testing
 	html := writeAndReadReport(t, report)
 	assertContains(t, html, `Check noOrphan is explored with scope 3.`, "inline check gloss without exact result")
 	assertNotContains(t, html, `Check noOrphan is explored with scope 3. Result: passed.`, "no false pass claim for overridden inline check")
+	assertNotContains(t, html, `class="exec-block alloy-model passed"`, "overridden inline check should not paint block as passed")
 	assertContains(t, html, `alloy:ref(rm#noOrphan, scope=5)`, "visible alloy ref note")
+	assertContains(t, html, `References Alloy check noOrphan at scope 5. Result: passed.`, "human-readable alloy ref summary")
 	assertContains(t, html, `See model explanation`, "alloy ref link to model block")
+}
+
+func TestWriteMarksModelFailedWhenExplicitRefAddsFailure(t *testing.T) {
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary: core.Summary{
+			SpecsTotal:        1,
+			SpecsPassed:       0,
+			SpecsFailed:       1,
+			AlloyChecksTotal:  2,
+			AlloyChecksPassed: 1,
+			AlloyChecksFailed: 1,
+		},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusFailed,
+				Document: core.Document{
+					Title:      "Mixed Ref Status",
+					RelativeTo: "specs/mixed-ref-status.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Mixed Ref Status", Raw: "# Mixed Ref Status\n", HeadingPath: []string{"Mixed Ref Status"}},
+						core.AlloyModelNode{
+							Model:       "rm",
+							HeadingPath: []string{"Mixed Ref Status"},
+							Source:      "module rm\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3",
+							Raw:         "```alloy:model(rm)\nmodule rm\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3\n```\n",
+						},
+						core.AlloyRefNode{
+							Model:       "rm",
+							Assertion:   "noOrphan",
+							Scope:       "5",
+							HeadingPath: []string{"Mixed Ref Status"},
+							Raw:         "> alloy:ref(rm#noOrphan, scope=5)\n",
+							ID: &core.SpecID{
+								File:        "specs/mixed-ref-status.spec.md",
+								HeadingPath: []string{"Mixed Ref Status"},
+								Ordinal:     2,
+							},
+						},
+					},
+				},
+				AlloyChecks: []core.AlloyCheckResult{
+					{
+						ID: core.SpecID{
+							File:        "specs/mixed-ref-status.spec.md",
+							HeadingPath: []string{"Mixed Ref Status"},
+							Ordinal:     1,
+						},
+						Model:     "rm",
+						Assertion: "noOrphan",
+						Scope:     "3",
+						Status:    core.StatusPassed,
+					},
+					{
+						ID: core.SpecID{
+							File:        "specs/mixed-ref-status.spec.md",
+							HeadingPath: []string{"Mixed Ref Status"},
+							Ordinal:     2,
+						},
+						Model:     "rm",
+						Assertion: "noOrphan",
+						Scope:     "5",
+						Status:    core.StatusFailed,
+						Message:   "counterexample for \"noOrphan\"\nA$0 = {A$0}",
+					},
+				},
+			},
+		},
+	}
+
+	html := writeAndReadReport(t, report)
+	assertContains(t, html, `class="exec-block alloy-model failed"`, "mixed exact/ref statuses should surface as failed")
+	assertContains(t, html, `Check noOrphan is explored with scope 3. Result: passed.`, "local exact result remains visible")
+	assertContains(t, html, `noOrphan (scope 5)`, "fallback failure keeps its own scope visible")
 }
 
 func TestWriteRendersAlloyCounterexampleGlossAndOpensDisclosure(t *testing.T) {
@@ -503,8 +579,8 @@ func TestWriteRendersAlloyCounterexampleGlossAndOpensDisclosure(t *testing.T) {
 						core.AlloyModelNode{
 							Model:       "cx",
 							HeadingPath: []string{"Counterexample Test"},
-							Source: "module cx\n\nsig Node {\n  next: lone Node\n}\n\nassert allDisconnected {\n  all n: Node | no n.next\n}\n\ncheck allDisconnected for 3",
-							Raw:    "```alloy:model(cx)\nmodule cx\n\nsig Node {\n  next: lone Node\n}\n\nassert allDisconnected {\n  all n: Node | no n.next\n}\n\ncheck allDisconnected for 3\n```\n",
+							Source:      "module cx\n\nsig Node {\n  next: lone Node\n}\n\nassert allDisconnected {\n  all n: Node | no n.next\n}\n\ncheck allDisconnected for 3",
+							Raw:         "```alloy:model(cx)\nmodule cx\n\nsig Node {\n  next: lone Node\n}\n\nassert allDisconnected {\n  all n: Node | no n.next\n}\n\ncheck allDisconnected for 3\n```\n",
 						},
 					},
 				},
@@ -551,8 +627,8 @@ func TestWriteTreatsDryRunAlloyAsNotExecuted(t *testing.T) {
 						core.AlloyModelNode{
 							Model:       "dry",
 							HeadingPath: []string{"Dry Run"},
-							Source: "module dry\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3",
-							Raw:    "```alloy:model(dry)\nmodule dry\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3\n```\n",
+							Source:      "module dry\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3",
+							Raw:         "```alloy:model(dry)\nmodule dry\n\nsig A {}\n\nassert noOrphan {\n  all a: A | a in A\n}\n\ncheck noOrphan for 3\n```\n",
 						},
 					},
 				},
@@ -597,8 +673,8 @@ func TestWriteDoesNotInventCounterexampleGlossForInfraFailure(t *testing.T) {
 						core.AlloyModelNode{
 							Model:       "infra",
 							HeadingPath: []string{"Infra Failure"},
-							Source: "module infra\n\nsig A {}\n\nassert stable {\n  all a: A | a in A\n}\n\ncheck stable for 3",
-							Raw:    "```alloy:model(infra)\nmodule infra\n\nsig A {}\n\nassert stable {\n  all a: A | a in A\n}\n\ncheck stable for 3\n```\n",
+							Source:      "module infra\n\nsig A {}\n\nassert stable {\n  all a: A | a in A\n}\n\ncheck stable for 3",
+							Raw:         "```alloy:model(infra)\nmodule infra\n\nsig A {}\n\nassert stable {\n  all a: A | a in A\n}\n\ncheck stable for 3\n```\n",
 						},
 					},
 				},
@@ -625,6 +701,44 @@ func TestWriteDoesNotInventCounterexampleGlossForInfraFailure(t *testing.T) {
 	assertNotContains(t, html, `>Counterexample<`, "no invented counterexample section")
 }
 
+func TestGlossScopeExplainsButClauses(t *testing.T) {
+	if got := glossScope("3 but 6 Int"); got != "default scope 3, and Int is widened to 6 bits" {
+		t.Fatalf("unexpected Int but-clause gloss %q", got)
+	}
+	if got := glossScope("3 but 8 steps"); got != "default scope 3, and the step bound is set to 8" {
+		t.Fatalf("unexpected steps but-clause gloss %q", got)
+	}
+	if got := glossScope("3 but exactly 2 Foo"); got != "default scope 3, and Foo is fixed to exactly 2 atoms" {
+		t.Fatalf("unexpected exact but-clause gloss %q", got)
+	}
+}
+
+func TestGlossAlloySourceHandlesMultilineHeadersAndSigFacts(t *testing.T) {
+	block := alloyModelRender{
+		Node: core.AlloyModelNode{
+			Model:  "graph",
+			Source: "sig Node\n{\n  next: lone Node\n}\n{\n  no this in next.^next\n}\n\nassert ok\n{\n  all n: Node | no n.next\n}",
+		},
+	}
+
+	modelItems, ruleItems, _ := glossAlloySource(block)
+	joinedModel := strings.Join(modelItems, "\n")
+	joinedRules := strings.Join(ruleItems, "\n")
+
+	if !strings.Contains(joinedModel, "Node is a signature.") {
+		t.Fatalf("expected multiline sig header gloss, got %q", joinedModel)
+	}
+	if !strings.Contains(joinedModel, "Each instance has at most one next in Node.") {
+		t.Fatalf("expected multiline field gloss, got %q", joinedModel)
+	}
+	if strings.Contains(joinedModel, "} {") {
+		t.Fatalf("expected sig fact to fail soft instead of leaking braces, got %q", joinedModel)
+	}
+	if !strings.Contains(joinedRules, "Assertion ok: For every n in Node, n.next has no value.") {
+		t.Fatalf("expected multiline assert gloss, got %q", joinedRules)
+	}
+}
+
 func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "report")
 
@@ -640,7 +754,7 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Editor", Raw: "# Editor\n", HeadingPath: []string{"Editor"}},
 						core.TableNode{
-							Check: "editor-op",
+							Check:   "editor-op",
 							Columns: []string{"initial", "expected"},
 							Rows: []core.TableRowNode{
 								{
