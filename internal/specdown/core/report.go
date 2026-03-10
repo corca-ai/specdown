@@ -78,15 +78,16 @@ type DocumentResult struct {
 }
 
 type Summary struct {
-	SpecsTotal        int `json:"specsTotal"`
-	SpecsPassed       int `json:"specsPassed"`
-	SpecsFailed       int `json:"specsFailed"`
-	CasesTotal        int `json:"casesTotal"`
-	CasesPassed       int `json:"casesPassed"`
-	CasesFailed       int `json:"casesFailed"`
-	AlloyChecksTotal  int `json:"alloyChecksTotal"`
-	AlloyChecksPassed int `json:"alloyChecksPassed"`
-	AlloyChecksFailed int `json:"alloyChecksFailed"`
+	SpecsTotal           int `json:"specsTotal"`
+	SpecsPassed          int `json:"specsPassed"`
+	SpecsFailed          int `json:"specsFailed"`
+	CasesTotal           int `json:"casesTotal"`
+	CasesPassed          int `json:"casesPassed"`
+	CasesFailed          int `json:"casesFailed"`
+	CasesExpectedFail    int `json:"casesExpectedFail"`
+	AlloyChecksTotal     int `json:"alloyChecksTotal"`
+	AlloyChecksPassed    int `json:"alloyChecksPassed"`
+	AlloyChecksFailed    int `json:"alloyChecksFailed"`
 }
 
 type Report struct {

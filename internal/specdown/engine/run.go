@@ -1037,9 +1037,12 @@ func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 
 	summary.CasesTotal += len(result.Cases)
 	for _, item := range result.Cases {
-		if item.Status == core.StatusPassed {
+		switch {
+		case item.Status == core.StatusPassed:
 			summary.CasesPassed++
-		} else {
+		case item.ExpectFail:
+			summary.CasesExpectedFail++
+		default:
 			summary.CasesFailed++
 		}
 	}

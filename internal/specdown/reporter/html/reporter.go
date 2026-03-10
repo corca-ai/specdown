@@ -114,7 +114,7 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 
 func specStatusClass(result core.DocumentResult) string {
 	for _, item := range result.Cases {
-		if item.Status == core.StatusFailed {
+		if item.Status == core.StatusFailed && !item.ExpectFail {
 			return "failed"
 		}
 	}
@@ -150,7 +150,11 @@ func collectHeadingStatuses(result core.DocumentResult) map[string]core.Status {
 	}
 
 	for _, item := range result.Cases {
-		mark(item.ID.HeadingPath, item.Status)
+		status := item.Status
+		if item.ExpectFail && status == core.StatusFailed {
+			status = core.StatusPassed
+		}
+		mark(item.ID.HeadingPath, status)
 	}
 	for _, item := range result.AlloyChecks {
 		mark(item.ID.HeadingPath, item.Status)
@@ -165,6 +169,7 @@ func headingPathKey(path []string) string {
 func buildMeta(report core.Report) string {
 	passed := report.Summary.CasesPassed + report.Summary.AlloyChecksPassed
 	failed := report.Summary.CasesFailed + report.Summary.AlloyChecksFailed
+	xfail := report.Summary.CasesExpectedFail
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
 	b.WriteString(template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)))
@@ -174,6 +179,11 @@ func buildMeta(report core.Report) string {
 	b.WriteString(`<span class="pill fail">fail `)
 	fmt.Fprintf(&b, "%d", failed)
 	b.WriteString(`</span>`)
+	if xfail > 0 {
+		b.WriteString(`<span class="pill xfail">xfail `)
+		fmt.Fprintf(&b, "%d", xfail)
+		b.WriteString(`</span>`)
+	}
 	b.WriteString(`</p>`)
 	return b.String()
 }
@@ -264,7 +274,11 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 
 	var out strings.Builder
 	out.WriteString(`<section class="exec-block `)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	if result.ExpectFail {
+		out.WriteString("expected-fail")
+	} else {
+		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	}
 	if node.Summary != "" {
 		out.WriteString(` has-summary`)
 	}
@@ -276,7 +290,7 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		// Collapsible block: summary line shown, code is hidden by default.
 		// Failed blocks auto-expand so failures are never hidden.
 		out.WriteString(`<details class="exec-detail"`)
-		if result.Status == core.StatusFailed {
+		if result.Status == core.StatusFailed && !result.ExpectFail {
 			out.WriteString(` open`)
 		}
 		out.WriteString(`>`)
@@ -402,18 +416,32 @@ func renderHeading(node core.HeadingNode) (string, error) {
 	return result, nil
 }
 
+type renderedRow struct {
+	node   core.TableRowNode
+	result core.CaseResult
+}
+
+func tableStatusClass(rows []renderedRow) string {
+	status := ""
+	for _, item := range rows {
+		switch {
+		case item.result.Status == core.StatusFailed && !item.result.ExpectFail:
+			return string(core.StatusFailed)
+		case item.result.ExpectFail && status == "":
+			status = "expected-fail"
+		case status == "":
+			status = string(core.StatusPassed)
+		}
+	}
+	return status
+}
+
 func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (string, error) {
 	if node.Check == "" {
 		return markdownToHTML(node.Markdown())
 	}
 
-	type renderedRow struct {
-		node   core.TableRowNode
-		result core.CaseResult
-	}
-
 	rows := make([]renderedRow, 0, len(node.Rows))
-	tableStatus := ""
 	for _, row := range node.Rows {
 		if row.ID == nil {
 			continue
@@ -423,12 +451,8 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 			return markdownToHTML(node.Markdown())
 		}
 		rows = append(rows, renderedRow{node: row, result: result})
-		if result.Status == core.StatusFailed {
-			tableStatus = string(core.StatusFailed)
-		} else if tableStatus == "" {
-			tableStatus = string(core.StatusPassed)
-		}
 	}
+	tableStatus := tableStatusClass(rows)
 
 	var out strings.Builder
 	out.WriteString(`<section class="exec-table-block`)
@@ -459,7 +483,11 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 
 func renderTableRow(out *strings.Builder, row core.TableRowNode, result core.CaseResult) {
 	out.WriteString(`<tr class="`)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	if result.ExpectFail {
+		out.WriteString("expected-fail")
+	} else {
+		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+	}
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
 	out.WriteString(`">`)
@@ -763,13 +791,21 @@ func filterInlinesByKind(inlines []core.InlineElement, kind core.InlineKind) []c
 
 func renderInlineExpectSpan(cr core.CaseResult) string {
 	var out strings.Builder
-	switch cr.Status {
-	case core.StatusPassed:
+	switch {
+	case cr.Status == core.StatusPassed:
 		out.WriteString(`<span class="inline-expect passed" title="`)
 		out.WriteString(template.HTMLEscapeString("expected " + cr.Expected))
 		out.WriteString(`">`)
 		out.WriteString(template.HTMLEscapeString(cr.Actual))
 		out.WriteString(`</span>`)
+	case cr.ExpectFail:
+		out.WriteString(`<span class="inline-expect expected-fail" title="`)
+		out.WriteString(template.HTMLEscapeString("expected failure: " + cr.Message))
+		out.WriteString(`">`)
+		out.WriteString(template.HTMLEscapeString(cr.Actual))
+		out.WriteString(`<span class="annotation">`)
+		out.WriteString(template.HTMLEscapeString(cr.Expected))
+		out.WriteString(`</span></span>`)
 	default:
 		out.WriteString(`<span class="inline-expect failed" title="`)
 		out.WriteString(template.HTMLEscapeString(cr.Message))
@@ -1073,11 +1109,14 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       --pass-mark: #10b34a;
       --fail-ink: #a1261a;
       --fail-mark: #d63b2d;
+      --xfail-ink: #c4776e;
+      --xfail-mark: #e0978f;
       --accent: #2f64b3;
       --code-bg: #efefea;
       --note-bg: #f5f5f1;
       --pass-bg: #e8f0e6;
       --fail-bg: #f0e4e2;
+      --xfail-bg: #f5eeec;
       --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
 
       --safe-top: env(safe-area-inset-top, 0px);
@@ -1220,6 +1259,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       &::before { content: "· "; color: var(--muted); }
       &.pass { color: var(--pass-ink); }
       &.fail { color: var(--fail-ink); }
+      &.xfail { color: var(--xfail-ink); }
     }
 
     /* ── Spec articles ── */
@@ -1284,6 +1324,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       font-size: 0.95rem;
       &.passed { color: var(--pass-ink); }
       &.failed { color: var(--fail-ink); }
+      &.expected-fail { color: var(--xfail-ink); }
     }
 
     /* ── Executable blocks ── */
@@ -1320,6 +1361,11 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     .exec-block.failed > .exec-source:not(.resolved) {
       border-left-color: var(--fail-mark);
       background: var(--fail-bg);
+    }
+
+    .exec-block.expected-fail > .exec-source:not(.resolved) {
+      border-left-color: var(--xfail-mark);
+      background: var(--xfail-bg);
     }
 
     /* ── Collapsible blocks with summary lines ── */
@@ -1480,6 +1526,8 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       & tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
       & tbody tr.failed td { background: var(--fail-bg); }
       & tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
+      & tbody tr.expected-fail td { background: var(--xfail-bg); }
+      & tbody tr.expected-fail td:first-child { border-left-color: var(--xfail-mark); }
     }
 
     /* ── Prose code blocks & tables ── */
@@ -1541,6 +1589,15 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       padding-bottom: 0.02em;
     }
 
+    .inline-expect.expected-fail {
+      background: var(--xfail-bg);
+      color: var(--xfail-ink);
+      position: relative;
+      padding-top: 0.02em;
+      padding-bottom: 0.02em;
+    }
+
+    .inline-expect.expected-fail > .annotation,
     .inline-expect.failed > .annotation,
     .inline-check > .annotation {
       position: absolute;

@@ -144,13 +144,25 @@ func run(args []string) error {
 
 	if report.Summary.SpecsFailed > 0 {
 		printFailures(report)
-		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, report.Summary.AlloyChecksFailed)
-		fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
+		xfailSuffix := ""
+		if report.Summary.CasesExpectedFail > 0 {
+			xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
+		}
+		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s, %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, report.Summary.AlloyChecksFailed)
+		if reportPath != "" {
+			fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
+		}
 		return fmt.Errorf("spec run failed")
 	}
 
-	fmt.Printf("PASS %d spec(s), %d case(s), %d alloy check(s)\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, report.Summary.AlloyChecksTotal)
-	fmt.Printf("report: %s\n", reportPath)
+	xfailSuffix := ""
+	if report.Summary.CasesExpectedFail > 0 {
+		xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
+	}
+	fmt.Printf("PASS %d spec(s), %d case(s)%s, %d alloy check(s)\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, report.Summary.AlloyChecksTotal)
+	if reportPath != "" {
+		fmt.Printf("report: %s\n", reportPath)
+	}
 	return nil
 }
 
@@ -312,17 +324,23 @@ Only executable blocks and check tables are run.
 }
 
 func writeArtifacts(report core.Report, reportPath string, baseDir string, cfg config.Config) error {
-	if err := htmlreport.Write(report, reportPath); err != nil {
-		return err
+	if reportPath != "" {
+		if err := htmlreport.Write(report, reportPath); err != nil {
+			return err
+		}
 	}
 	jsonPath := cfg.JSONReportOutFile()
 	if jsonPath == "" {
-		jsonPath = jsonReportPath(reportPath)
+		if reportPath != "" {
+			jsonPath = jsonReportPath(reportPath)
+		}
 	} else {
 		jsonPath = resolvePath(baseDir, jsonPath)
 	}
-	if err := jsonreport.Write(report, jsonPath); err != nil {
-		return err
+	if jsonPath != "" {
+		if err := jsonreport.Write(report, jsonPath); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -331,6 +349,9 @@ func resolveReportPath(baseDir string, cfg config.Config, requested string) stri
 	reportPath := requested
 	if reportPath == "" {
 		reportPath = cfg.HTMLReportOutFile()
+	}
+	if reportPath == "" {
+		return ""
 	}
 	return resolvePath(baseDir, reportPath)
 }
@@ -373,7 +394,11 @@ func printCaseFailure(c core.CaseResult) {
 			label = fmt.Sprintf(" row %d %q", c.RowNumber, c.Label)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "  FAIL  %s  [%s]%s\n", path, kind, label)
+	tag := "FAIL"
+	if c.ExpectFail {
+		tag = "XFAIL"
+	}
+	fmt.Fprintf(os.Stderr, "  %s  %s  [%s]%s\n", tag, path, kind, label)
 	if c.Message != "" {
 		fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
 	}

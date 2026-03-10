@@ -96,7 +96,7 @@ printf '%s\n' '# But Scope Test' '' '```alloy:model(scoring)' 'module scoring' '
 specdown run -config .tmp-test/but-cfg.json 2>&1 || true
 ```
 
-```verify:shell
+```run:shell
 grep -q '"status": "passed"' .tmp-test/but-report.json
 ```
 
