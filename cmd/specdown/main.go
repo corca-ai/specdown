@@ -465,11 +465,26 @@ func installSkillsCmd(args []string) error {
 	if err := os.WriteFile(syntaxDest, []byte(specdown.SkillSyntax), 0o644); err != nil {
 		return err
 	}
+	configDest := filepath.Join(dir, "config.md")
+	if err := os.WriteFile(configDest, []byte(specdown.SkillConfig), 0o644); err != nil {
+		return err
+	}
+	traceDest := filepath.Join(dir, "trace.md")
+	if err := os.WriteFile(traceDest, []byte(specdown.SkillTrace), 0o644); err != nil {
+		return err
+	}
+	alloyDest := filepath.Join(dir, "alloy.md")
+	if err := os.WriteFile(alloyDest, []byte(specdown.SkillAlloy), 0o644); err != nil {
+		return err
+	}
 
 	fmt.Printf("Created %s\n", dest)
 	fmt.Printf("Created %s\n", guideDest)
 	fmt.Printf("Created %s\n", protocolDest)
 	fmt.Printf("Created %s\n", syntaxDest)
+	fmt.Printf("Created %s\n", configDest)
+	fmt.Printf("Created %s\n", traceDest)
+	fmt.Printf("Created %s\n", alloyDest)
 	fmt.Println("Use /specdown in Claude Code to run and fix specs.")
 	return nil
 }

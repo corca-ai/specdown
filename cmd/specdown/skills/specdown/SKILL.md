@@ -24,5 +24,8 @@ Run executable specifications and fix failures.
 ## Writing and Editing Specs
 
 - Syntax: `${CLAUDE_SKILL_DIR}/syntax.md` — executable blocks, variables, check tables, hooks, frontmatter
-- Best practices: `${CLAUDE_SKILL_DIR}/guide-writing.md` — patterns, pitfalls, anti-patterns
+- Configuration: `${CLAUDE_SKILL_DIR}/config.md` — specdown.json format, adapters, reporters, defaults
 - Adapter protocol: `${CLAUDE_SKILL_DIR}/adapter-protocol.md` — NDJSON protocol, request/response format, examples
+- Alloy models: `${CLAUDE_SKILL_DIR}/alloy.md` — embedding formal models, check statements, counterexamples
+- Trace graph: `${CLAUDE_SKILL_DIR}/trace.md` — document traceability, typed edges, cardinality constraints
+- Best practices: `${CLAUDE_SKILL_DIR}/guide-writing.md` — patterns, pitfalls, anti-patterns
