@@ -1,5 +1,5 @@
 .artifacts/
-**/report.html
+**/report/
 **/report.json
 /bin/
 .envrc

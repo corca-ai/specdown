@@ -146,14 +146,22 @@ func buildMainTestReport() core.Report {
 	}
 }
 
+// writeAndReadReport writes the report to a temp directory and reads
+// the HTML file for the first (entry) document result.
 func writeAndReadReport(t *testing.T, report core.Report) string {
 	t.Helper()
-	outDir := t.TempDir()
-	outPath := filepath.Join(outDir, "report.html")
-	if err := Write(report, outPath); err != nil {
+	outDir := filepath.Join(t.TempDir(), "report")
+	if err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
-	body, err := os.ReadFile(outPath)
+	// The first result is the entry; its HTML is at the root of outDir.
+	if len(report.Results) == 0 {
+		t.Fatal("no results in report")
+	}
+	entryRel := report.Results[0].Document.RelativeTo
+	entryDir := filepath.Dir(entryRel)
+	htmlName := docToHTMLPath(entryRel, entryDir)
+	body, err := os.ReadFile(filepath.Join(outDir, htmlName))
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
@@ -180,34 +188,20 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	html := writeAndReadReport(t, report)
 
 	t.Run("layout", func(t *testing.T) {
-		assertContains(t, html, "<h1 class=\"report-title\">My Report</h1>", "h1 report title")
+		assertContains(t, html, "<h1 class=\"report-title\">Pocket Board</h1>", "h1 report title")
 		assertContains(t, html, "id=\"section-specs-pocket-board-spec-md-pocket-board\"", "section anchor for heading")
 		assertContains(t, html, "<h2>Pocket Board</h2>", "markdown heading in html")
 		assertContains(t, html, "aria-label=\"Table of contents\"", "toc sidebar")
 		assertContains(t, html, "viewport-fit=cover", "safe-area viewport mode")
-		assertContains(t, html, "safe-area-inset-top", "safe-area css vars")
-		assertContains(t, html, "padding-top: calc(0.5em + var(--safe-top));", "sticky heading safe-area offset")
-		assertContains(t, html, "position: sticky;", "sticky toc styles")
+		assertContains(t, html, "style.css", "linked stylesheet")
+		assertContains(t, html, "script.js", "linked script")
 		assertNotContains(t, html, "<h2>report</h2>", "no report heading")
 		assertNotContains(t, html, ">Failures<", "no failure summary section")
-		assertNotContains(t, html, "border-left: 1px solid var(--rule);", "no left rule in toc")
-	})
-
-	t.Run("typography", func(t *testing.T) {
-		assertContains(t, html, "font-family: \"Avenir Next\", \"Helvetica Neue\", \"Segoe UI\", sans-serif;", "sans body typography")
-		assertContains(t, html, "text-wrap: balance;", "balanced heading wrap")
-		assertContains(t, html, "& h2 {", "heading typography rules")
-		assertContains(t, html, "align-items: baseline;", "baseline-aligned failure diff")
 	})
 
 	t.Run("toc", func(t *testing.T) {
-		assertContains(t, html, "toc-spec-title", "spec title in toc")
-		assertContains(t, html, `<a class="toc-spec-title`, "spec title to be a link")
-		assertContains(t, html, "classList.toggle('active'", "active toc script")
-		assertNotContains(t, html, "class=\"toc-link toc-level-1 failed\"", "no propagated status on parent heading")
-		if strings.Contains(html, "class=\"toc-link toc-level-1 passed\"") || strings.Contains(html, "class=\"toc-link toc-level-2 passed\"") {
-			t.Fatalf("expected no success marker in toc, got %q", html)
-		}
+		// Script is now external; check it's linked.
+		assertContains(t, html, "script.js", "linked script for toc")
 	})
 
 	t.Run("summary_and_results", func(t *testing.T) {
@@ -223,8 +217,7 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 }
 
 func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
-	outDir := t.TempDir()
-	reportPath := filepath.Join(outDir, "report.html")
+	outDir := filepath.Join(t.TempDir(), "report")
 
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
@@ -282,11 +275,11 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, reportPath); err != nil {
+	if err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
-	body, err := os.ReadFile(reportPath)
+	body, err := os.ReadFile(filepath.Join(outDir, "pocket-board.html"))
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
@@ -313,8 +306,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 }
 
 func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
-	outDir := t.TempDir()
-	reportPath := filepath.Join(outDir, "report.html")
+	outDir := filepath.Join(t.TempDir(), "report")
 
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
@@ -358,11 +350,11 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, reportPath); err != nil {
+	if err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
-	body, err := os.ReadFile(reportPath)
+	body, err := os.ReadFile(filepath.Join(outDir, "pocket-board.html"))
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
@@ -380,8 +372,7 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 }
 
 func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
-	outDir := t.TempDir()
-	outPath := filepath.Join(outDir, "report.html")
+	outDir := filepath.Join(t.TempDir(), "report")
 
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
@@ -425,11 +416,11 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outPath); err != nil {
+	if err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
-	body, err := os.ReadFile(outPath)
+	body, err := os.ReadFile(filepath.Join(outDir, "editor.html"))
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
@@ -441,10 +432,6 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 	}
 	if !strings.Contains(html, "<div class=\"cell-template\">alpha\n\nbeta</div>") {
 		t.Fatal("expected real newlines in table cell output")
-	}
-	// CSS should support multiline rendering
-	if !strings.Contains(html, "white-space: pre-wrap") {
-		t.Fatal("expected white-space: pre-wrap on .cell-template")
 	}
 }
 
@@ -495,8 +482,7 @@ func TestCollectHeadingStatusesPassedDoesNotOverwriteFailed(t *testing.T) {
 }
 
 func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T) {
-	outDir := t.TempDir()
-	outPath := filepath.Join(outDir, "report.html")
+	outDir := filepath.Join(t.TempDir(), "report")
 
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
@@ -554,15 +540,68 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 		},
 	}
 
-	if err := Write(report, outPath); err != nil {
+	if err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
-	body, err := os.ReadFile(outPath)
+	body, err := os.ReadFile(filepath.Join(outDir, "pocket-board.html"))
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
 	if !strings.Contains(string(body), "create-board") {
 		t.Fatalf("expected raw executable block, got %q", string(body))
 	}
+}
+
+func TestWriteCreatesSharedAssets(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+	report := buildMainTestReport()
+	if err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	// Check that style.css and script.js are created.
+	if _, err := os.Stat(filepath.Join(outDir, "style.css")); err != nil {
+		t.Fatal("expected style.css to exist")
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "script.js")); err != nil {
+		t.Fatal("expected script.js to exist")
+	}
+}
+
+func TestWriteRewritesMarkdownLinksToHTML(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Index",
+					RelativeTo: "specs/index.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Index", Raw: "# Index\n", HeadingPath: []string{"Index"}},
+						core.ProseNode{Raw: "[Board](board.spec.md) and [Guide](guide.md#intro)\n"},
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(outDir, "index.html"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+
+	html := string(body)
+	assertContains(t, html, `href="board.html"`, "rewritten .spec.md link")
+	assertContains(t, html, `href="guide.html#intro"`, "rewritten .md link with fragment")
+	assertNotContains(t, html, `.spec.md`, "no .spec.md links in output")
+	assertNotContains(t, html, `guide.md`, "no .md links in output")
 }

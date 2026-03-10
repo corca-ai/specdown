@@ -3,7 +3,8 @@
 The HTML report is a core deliverable.
 The goal is to show an "executed specification," not a "test log."
 
-After a spec run, the HTML report is generated as a self-contained file.
+After a spec run, specdown generates a multi-page HTML site.
+Each spec file becomes a separate HTML page, with shared CSS and JS assets.
 It preserves the document structure, annotating execution results inline.
 
 - Prose is displayed as-is; only execution results are annotated with status
@@ -11,6 +12,7 @@ It preserves the document structure, annotating execution results inline.
 - Pass is shown with green, fail with red
 - Failed items display message, expected/actual diff inline
 - A summary shows pass/fail counts
+- Markdown links between spec files are rendered as `<a>` elements
 
 ```run:shell
 # Generate a report with a passing doctest
@@ -18,28 +20,24 @@ mkdir -p .tmp-test
 BT=$(printf '\140\140\140')
 printf '%s\n' '# Summary Test' '' "\${BT}run:shell" '$ echo ok' 'ok' "\${BT}" > .tmp-test/summary-test.spec.md
 printf '# T\n\n- [Summary](summary-test.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"summary-report.html"}]}' > .tmp-test/summary-cfg.json
+printf '{"entry":"index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"summary-report"}]}' > .tmp-test/summary-cfg.json
 specdown run -config .tmp-test/summary-cfg.json 2>&1 || true
 ```
 
-The HTML report contains a pass/fail summary.
+The HTML report contains a pass/fail summary. The entry page shows aggregate stats.
 
 ```run:shell
-$ grep -q 'class="pill pass"' .tmp-test/summary-report.html && echo found
-found
-$ grep -q 'passed' .tmp-test/summary-report.html && echo found
+$ grep -q 'class="pill pass"' .tmp-test/summary-report/index.html && echo found
 found
 ```
 
-## UX Principles
+## Multi-page Structure
 
-- The body and key failure information must be readable without JavaScript
-- Anchor links allow jumping directly to original headings
-- Failed rows and failed blocks support fold/unfold
-- Prose and results from the same document are not separated
+Each document becomes a separate HTML page. Shared assets (style.css, script.js)
+are written to the output root directory.
 
 ```run:shell
-# Generate a minimal report for UX verification
+# Generate a minimal report for structure verification
 mkdir -p .tmp-test
 cat <<'SPEC' > .tmp-test/report-test.spec.md
 # Report Test
@@ -50,17 +48,28 @@ printf '# Report Test\n\n- [Report](report-test.spec.md)\n' > .tmp-test/index.sp
 cat <<'CFG' > .tmp-test/report-test.json
 {"entry":"index.spec.md","adapters":[]}
 CFG
-specdown run -config .tmp-test/report-test.json -out report.html 2>&1 || true
+specdown run -config .tmp-test/report-test.json -out report-out 2>&1 || true
 ```
 
-The report file must exist and contain standard HTML structure.
+The report directory must contain shared assets and per-document HTML files.
 
 ```run:shell
-$ test -f .tmp-test/report.html && echo yes
+$ test -f .tmp-test/report-out/style.css && echo yes
 yes
-$ grep -q '<html' .tmp-test/report.html && echo found
+$ test -f .tmp-test/report-out/script.js && echo yes
+yes
+$ test -f .tmp-test/report-out/index.html && echo yes
+yes
+$ test -f .tmp-test/report-out/report-test.html && echo yes
+yes
+```
+
+Each page must contain standard HTML structure.
+
+```run:shell
+$ grep -q '<html' .tmp-test/report-out/report-test.html && echo found
 found
-$ grep -q 'Report Test' .tmp-test/report.html && echo found
+$ grep -q 'Report Test' .tmp-test/report-out/report-test.html && echo found
 found
 ```
 
@@ -68,14 +77,14 @@ The report must be readable without JavaScript (no script-gated content).
 
 ```run:shell
 # Verify headings appear outside script-gated blocks
-grep -q '<h1' .tmp-test/report.html
+grep -q '<h1' .tmp-test/report-out/report-test.html
 ```
 
 The report must include anchor links for sections.
 
 ```run:shell
 # Verify section anchor IDs exist
-grep -q 'id="section-' .tmp-test/report.html
+grep -q 'id="section-' .tmp-test/report-out/report-test.html
 ```
 
 ### Summary Lines
@@ -85,12 +94,45 @@ The summary text appears in an `exec-summary-text` span inside a
 `<summary>` element, with an expand marker on the right.
 The containing section gets the `has-summary` class.
 
+### Link Rewriting
+
+Markdown links to `.md` and `.spec.md` files are rewritten to `.html` in the output.
+
+```run:shell
+# Create specs with cross-links
+mkdir -p .tmp-test/link-test
+cat <<'SPEC' > .tmp-test/link-test/index.spec.md
+# Links
+
+See [other spec](other.spec.md) and [guide](guide.md#intro).
+SPEC
+cat <<'SPEC' > .tmp-test/link-test/other.spec.md
+# Other
+SPEC
+cat <<'SPEC' > .tmp-test/link-test/guide.md
+# Guide
+SPEC
+cat <<'CFG' > .tmp-test/link-test/cfg.json
+{"entry":"index.spec.md","adapters":[]}
+CFG
+specdown run -config .tmp-test/link-test/cfg.json -out link-out 2>&1 || true
+```
+
+```run:shell
+$ grep -q 'href="other.html"' .tmp-test/link-test/link-out/index.html && echo found
+found
+$ grep -q 'href="guide.html#intro"' .tmp-test/link-test/link-out/index.html && echo found
+found
+```
+
 ## Output Files
 
 | File | Description |
 |------|-------------|
-| `.artifacts/specdown/report.html` | Executed specification HTML report |
-| `.artifacts/specdown/report.json` | Machine-readable results |
+| `<outDir>/style.css` | Shared stylesheet |
+| `<outDir>/script.js` | Shared JavaScript |
+| `<outDir>/<page>.html` | Per-document HTML pages |
+| `<outDir>/report.json` | Machine-readable results |
 | `.artifacts/specdown/models/*.als` | Combined Alloy models |
 | `.artifacts/specdown/counterexamples/*` | Counterexample artifacts (on Alloy check failure) |
 
@@ -139,7 +181,7 @@ cat <<'SPEC' > .tmp-test/diag.spec.md
 SPEC
 printf '# T\n\n- [Diag](diag.spec.md)\n' > .tmp-test/index.spec.md
 cat <<'CFG' > .tmp-test/diag.json
-{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"checks":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report.html"},{"builtin":"json","outFile":"report.json"}]}
+{"entry":"index.spec.md","adapters":[{"name":"d","command":["sh","./diag-adapter.sh"],"blocks":[],"checks":["diag"]}],"reporters":[{"builtin":"html","outFile":"diag-report"},{"builtin":"json","outFile":"report.json"}]}
 CFG
 specdown run -config .tmp-test/diag.json 2>&1 || true
 ```
@@ -147,7 +189,7 @@ specdown run -config .tmp-test/diag.json 2>&1 || true
 The HTML report displays expected/actual values inline for diffing.
 
 ```run:shell
-$ grep -q 'failure-diff' .tmp-test/diag-report.html && echo found
+$ grep -q 'failure-diff' .tmp-test/diag-report/diag.html && echo found
 found
 ```
 

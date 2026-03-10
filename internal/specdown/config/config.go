@@ -41,7 +41,7 @@ func Default() Config {
 		Adapters: nil,
 		Models:   ModelConfig{Builtin: "alloy"},
 		Reporters: []Reporter{
-			{Builtin: "html", OutFile: "specs/report.html"},
+			{Builtin: "html", OutFile: "specs/report"},
 			{Builtin: "json", OutFile: "specs/report.json"},
 		},
 	}
@@ -56,7 +56,7 @@ func applyDefaults(cfg *Config) {
 	}
 	if len(cfg.Reporters) == 0 {
 		cfg.Reporters = []Reporter{
-			{Builtin: "html", OutFile: "specs/report.html"},
+			{Builtin: "html", OutFile: "specs/report"},
 			{Builtin: "json", OutFile: "specs/report.json"},
 		}
 	}

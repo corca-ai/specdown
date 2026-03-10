@@ -130,7 +130,7 @@ func TestDefault(t *testing.T) {
 	if len(cfg.Reporters) != 2 {
 		t.Fatalf("expected 2 reporters, got %d", len(cfg.Reporters))
 	}
-	if cfg.HTMLReportOutFile() != "specs/report.html" {
+	if cfg.HTMLReportOutFile() != "specs/report" {
 		t.Fatalf("unexpected html report %q", cfg.HTMLReportOutFile())
 	}
 	if cfg.JSONReportOutFile() != "specs/report.json" {

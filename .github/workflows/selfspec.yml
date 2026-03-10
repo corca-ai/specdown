@@ -44,8 +44,7 @@ jobs:
       - name: Prepare Pages artifact
         if: github.ref == 'refs/heads/main'
         run: |
-          mkdir -p _site
-          cp specs/report.html _site/index.html
+          cp -r specs/report _site
           cp specs/report.json _site/report.json
 
       - uses: actions/upload-pages-artifact@v3

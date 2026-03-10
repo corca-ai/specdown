@@ -97,7 +97,7 @@ func run(args []string) error {
 	}
 
 	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
-	outPath := fs.String("out", "", "Output HTML report path")
+	outPath := fs.String("out", "", "Output HTML report directory")
 	filter := fs.String("filter", "", "Run only cases whose heading path contains this string")
 	jobs := fs.Int("jobs", 1, "Number of spec files to run in parallel")
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
@@ -291,7 +291,7 @@ func initProject() error {
   "adapters": [],
   "models": { "builtin": "alloy" },
   "reporters": [
-    { "builtin": "html", "outFile": "specs/report.html" },
+    { "builtin": "html", "outFile": "specs/report" },
     { "builtin": "json", "outFile": "specs/report.json" }
   ]
 }
@@ -356,9 +356,8 @@ func resolveReportPath(baseDir string, cfg config.Config, requested string) stri
 	return resolvePath(baseDir, reportPath)
 }
 
-func jsonReportPath(htmlReportPath string) string {
-	dir := filepath.Dir(htmlReportPath)
-	return filepath.Join(dir, "report.json")
+func jsonReportPath(htmlReportDir string) string {
+	return filepath.Join(htmlReportDir, "report.json")
 }
 
 func resolvePath(baseDir string, value string) string {

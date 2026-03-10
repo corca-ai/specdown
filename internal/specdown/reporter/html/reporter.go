@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -18,18 +19,12 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
-type reportView struct {
-	Title string
-	Meta  template.HTML
-	Specs []specView
-}
-
-type specView struct {
-	Title    string
-	Anchor   string
-	Status   string
-	Headings []tocItemView
-	Body     template.HTML
+type pageView struct {
+	Title      string
+	Meta       template.HTML
+	AssetRoot  string
+	Headings   []tocItemView
+	Body       template.HTML
 }
 
 type tocItemView struct {
@@ -40,50 +35,178 @@ type tocItemView struct {
 	Children []tocItemView
 }
 
-func Write(report core.Report, outPath string) (err error) {
-	title := report.Title
+// Write generates a multi-page HTML site in outDir.
+// outDir is the output directory. Each document result becomes a separate HTML page.
+// Shared CSS and JS are written as style.css and script.js.
+func Write(report core.Report, outDir string) error {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+
+	// Write shared assets.
+	if err := os.WriteFile(filepath.Join(outDir, "style.css"), []byte(styleCSS), 0o644); err != nil {
+		return fmt.Errorf("write style.css: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "script.js"), []byte(scriptJS), 0o644); err != nil {
+		return fmt.Errorf("write script.js: %w", err)
+	}
+
+	// Determine entry path for relative path computation.
+	entryPath := ""
+	if len(report.Results) > 0 {
+		entryPath = report.Results[0].Document.RelativeTo
+	}
+	entryDir := path.Dir(path.Clean(entryPath))
+
+	for i, result := range report.Results {
+		meta := buildDocMeta(result, report.GeneratedAt)
+		if i == 0 {
+			meta = buildMeta(report)
+		}
+		if err := writePage(outDir, entryDir, result, meta); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func writePage(outDir, entryDir string, result core.DocumentResult, meta string) error {
+	htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
+	fullPath := filepath.Join(outDir, filepath.FromSlash(htmlPath))
+
+	body, err := renderDocument(result)
+	if err != nil {
+		return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
+	}
+	body = rewriteMarkdownLinks(body)
+
+	title := result.Document.Title
 	if title == "" {
 		title = "Specification"
 	}
-	specs := make([]specView, 0, len(report.Results))
-	for _, result := range report.Results {
-		body, err := renderDocument(result)
-		if err != nil {
-			return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
-		}
-		specs = append(specs, specView{
-			Title:    result.Document.Title,
-			Anchor:   core.HeadingAnchor(result.Document.RelativeTo, []string{result.Document.Title}),
-			Status:   specStatusClass(result),
-			Headings: collectHeadings(result),
-			Body:     template.HTML(body),
-		})
+
+	view := pageView{
+		Title:     title,
+		Meta:      template.HTML(meta), //nolint:gosec // meta is internally generated
+		AssetRoot: computeAssetRoot(path.Dir(htmlPath)),
+		Headings:  collectHeadings(result),
+		Body:      template.HTML(body), //nolint:gosec // body is internally generated
 	}
 
-	view := reportView{
-		Title: title,
-		Meta:  template.HTML(buildMeta(report)),
-		Specs: specs,
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return fmt.Errorf("create dir for %s: %w", htmlPath, err)
 	}
+	return writeHTMLFile(fullPath, view)
+}
 
-	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-		return fmt.Errorf("create report dir: %w", err)
-	}
-
+func writeHTMLFile(outPath string, view pageView) (err error) {
 	file, err := os.Create(outPath)
 	if err != nil {
-		return fmt.Errorf("create report: %w", err)
+		return err
 	}
 	defer func() {
 		if cerr := file.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close report: %w", cerr)
+			err = cerr
 		}
 	}()
+	return pageTemplate.Execute(file, view)
+}
 
-	if err := pageTemplate.Execute(file, view); err != nil {
-		return fmt.Errorf("write report: %w", err)
+// docToHTMLPath converts a document's relative path to an HTML output path.
+// The path is relative to the entry directory.
+func docToHTMLPath(docPath string, entryDir string) string {
+	docPath = path.Clean(docPath)
+	rel := docPath
+	if entryDir != "." && strings.HasPrefix(docPath, entryDir+"/") {
+		rel = docPath[len(entryDir)+1:]
 	}
-	return nil
+	// Replace .spec.md or .md extension with .html
+	if strings.HasSuffix(rel, ".spec.md") {
+		rel = strings.TrimSuffix(rel, ".spec.md") + ".html"
+	} else if strings.HasSuffix(rel, ".md") {
+		rel = strings.TrimSuffix(rel, ".md") + ".html"
+	}
+	return rel
+}
+
+// computeAssetRoot returns a relative path from pageDir to the output root.
+func computeAssetRoot(pageDir string) string {
+	if pageDir == "." || pageDir == "" {
+		return "."
+	}
+	depth := strings.Count(pageDir, "/") + 1
+	parts := make([]string, depth)
+	for i := range parts {
+		parts[i] = ".."
+	}
+	return strings.Join(parts, "/")
+}
+
+// rewriteMarkdownLinks rewrites href attributes pointing to .md or .spec.md files
+// to point to .html files instead, preserving fragments.
+var hrefMDPattern = regexp.MustCompile(`href="([^"]*\.(?:spec\.md|md))(#[^"]*)?(?:")`)
+
+func rewriteMarkdownLinks(html string) string {
+	return hrefMDPattern.ReplaceAllStringFunc(html, func(match string) string {
+		parts := hrefMDPattern.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		linkPath := parts[1]
+		fragment := ""
+		if len(parts) > 2 {
+			fragment = parts[2]
+		}
+		// Rewrite extension.
+		if strings.HasSuffix(linkPath, ".spec.md") {
+			linkPath = strings.TrimSuffix(linkPath, ".spec.md") + ".html"
+		} else if strings.HasSuffix(linkPath, ".md") {
+			linkPath = strings.TrimSuffix(linkPath, ".md") + ".html"
+		}
+		return `href="` + linkPath + fragment + `"`
+	})
+}
+
+// buildDocMeta creates a summary for a single document result.
+func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
+	passed := 0
+	failed := 0
+	xfail := 0
+	for _, c := range result.Cases {
+		switch {
+		case c.Status == core.StatusPassed:
+			passed++
+		case c.ExpectFail:
+			xfail++
+		default:
+			failed++
+		}
+	}
+	for _, c := range result.AlloyChecks {
+		if c.Status == core.StatusPassed {
+			passed++
+		} else {
+			failed++
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(`<p class="content-meta">`)
+	b.WriteString(template.HTMLEscapeString(generatedAt.Format(time.RFC3339)))
+	b.WriteString(`<span class="pill pass">pass `)
+	fmt.Fprintf(&b, "%d", passed)
+	b.WriteString(`</span>`)
+	b.WriteString(`<span class="pill fail">fail `)
+	fmt.Fprintf(&b, "%d", failed)
+	b.WriteString(`</span>`)
+	if xfail > 0 {
+		b.WriteString(`<span class="pill xfail">xfail `)
+		fmt.Fprintf(&b, "%d", xfail)
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</p>`)
+	return b.String()
 }
 
 func collectHeadings(result core.DocumentResult) []tocItemView {
@@ -110,20 +233,6 @@ func collectHeadings(result core.DocumentResult) []tocItemView {
 		}
 	}
 	return roots
-}
-
-func specStatusClass(result core.DocumentResult) string {
-	for _, item := range result.Cases {
-		if item.Status == core.StatusFailed && !item.ExpectFail {
-			return "failed"
-		}
-	}
-	for _, item := range result.AlloyChecks {
-		if item.Status == core.StatusFailed {
-			return "failed"
-		}
-	}
-	return ""
 }
 
 func tocStatusClass(status core.Status) string {
@@ -1090,669 +1199,13 @@ func markdownToHTML(source string) (string, error) {
 	return out.String(), nil
 }
 
-var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
+var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ .Title }}</title>
-  <style>
-    /* ── Design tokens ── */
-    :root {
-      color-scheme: light;
-      --bg: #f3f3f0;
-      --paper: #fcfcfa;
-      --ink: #1f1f1b;
-      --muted: #66665f;
-      --rule: #d6d6cf;
-      --pass-ink: #0a8f3b;
-      --pass-mark: #10b34a;
-      --fail-ink: #a1261a;
-      --fail-mark: #d63b2d;
-      --xfail-ink: #c4776e;
-      --xfail-mark: #e0978f;
-      --accent: #2f64b3;
-      --code-bg: #efefea;
-      --note-bg: #f5f5f1;
-      --pass-bg: #e8f0e6;
-      --fail-bg: #f0e4e2;
-      --xfail-bg: #f5eeec;
-      --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
-
-      --safe-top: env(safe-area-inset-top, 0px);
-      --safe-right: env(safe-area-inset-right, 0px);
-      --safe-bottom: env(safe-area-inset-bottom, 0px);
-      --safe-left: env(safe-area-inset-left, 0px);
-    }
-
-    /* ── Reset ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; }
-
-    /* ── Body ── */
-    html { background: var(--bg); }
-    body {
-      font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
-      color: var(--ink);
-      background: var(--bg);
-    }
-
-    /* ── Page layout ── */
-    main {
-      max-width: 78rem;
-      margin-inline: auto;
-      padding:
-        calc(2.75rem + var(--safe-top))
-        calc(1.5rem + var(--safe-right))
-        calc(4rem + var(--safe-bottom))
-        calc(1.5rem + var(--safe-left));
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: 16rem minmax(0, 54rem);
-      column-gap: 2.5rem;
-      align-items: baseline;
-    }
-
-    /* ── Table of contents ── */
-    .toc {
-      position: sticky;
-      top: calc(1.5rem + var(--safe-top));
-      max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
-      overflow-y: auto;
-      font-size: 0.82rem;
-      line-height: 1.45;
-    }
-
-    .toc-inner { padding: 0 0 0 0.85rem; }
-
-    .toc-title {
-      margin-bottom: 0.75rem;
-      color: var(--muted);
-      font-size: 0.78rem;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .toc-spec {
-      margin-bottom: 1.25rem;
-      &:last-child { margin-bottom: 0; }
-    }
-
-    .toc-spec-title {
-      display: block;
-      margin-bottom: 0.35rem;
-      font-weight: 600;
-      color: var(--ink);
-      text-decoration: none;
-      position: relative;
-    }
-
-    .toc-list {
-      list-style: none;
-      padding-left: 0.85rem;
-      display: none;
-    }
-
-    .toc-spec.expanded > .toc-list { display: block; }
-
-    .toc-item {
-      margin: 0.1rem 0;
-      &:first-child { margin-top: 0; }
-    }
-
-    .toc-link {
-      display: block;
-      text-decoration: none;
-      color: var(--muted);
-      position: relative;
-      transition: color 120ms ease;
-
-      &:hover { color: var(--ink); }
-      &.active { color: var(--ink); font-weight: 600; }
-    }
-
-    :is(.toc-spec-title, .toc-link).failed::before {
-      content: "";
-      position: absolute;
-      left: -0.85rem;
-      top: 50%;
-      translate: 0 -50%;
-      width: 0.38rem;
-      height: 0.38rem;
-      border-radius: 50%;
-      background: var(--fail-mark);
-    }
-
-    .toc-level-4 { padding-left: 0.7rem; }
-    .toc-level-5,
-    .toc-level-6 { padding-left: 1.4rem; }
-
-    .toc-children {
-      list-style: none;
-      padding-left: 0.85rem;
-      display: none;
-    }
-
-    .toc-item.expanded > .toc-children { display: block; }
-
-    /* ── Content area ── */
-    .content { min-width: 0; }
-
-    .report-title {
-      font-family: serif;
-      font-size: 2.8rem;
-      line-height: 1.15;
-      letter-spacing: -0.01em;
-      margin-bottom: 0.4rem;
-    }
-
-    .content-meta {
-      margin-bottom: 2rem;
-      color: var(--muted);
-      font-size: 0.82rem;
-      line-height: 1.65;
-    }
-
-    .pill {
-      &::before { content: "· "; color: var(--muted); }
-      &.pass { color: var(--pass-ink); }
-      &.fail { color: var(--fail-ink); }
-      &.xfail { color: var(--xfail-ink); }
-    }
-
-    /* ── Spec articles ── */
-    .spec + .spec { padding-top: 2rem; }
-
-    .spec-body {
-      line-height: 1.9;
-
-      & > :first-child { margin-top: 0; }
-
-      /* ── Sticky headings ──
-         Each level stacks below the ones above it.
-         The border-bottom separates the heading bar from content.
-         No ::before hacks — just padding + solid background. */
-      /* Sticky headings stack below each other.
-         All levels share em-based padding so height = font-size × 2 + 1px border. */
-      & :is(h2, h3, h4, h5, h6) {
-        font-family: serif;
-        line-height: 1.15;
-        padding: 0.5em 0 0.35em;
-        margin-top: 0.75em;
-        text-wrap: balance;
-        letter-spacing: -0.01em;
-        position: sticky;
-        background: var(--bg);
-        border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
-      }
-
-      & :is(h2, h3, h4, h5, h6).stuck-last::after {
-        content: "";
-        position: absolute;
-        inset: 100% 0 auto 0;
-        height: 4px;
-        background: linear-gradient(rgba(0, 0, 0, 0.06), transparent);
-        pointer-events: none;
-      }
-
-      & > :first-child > :first-child { margin-top: 0; }
-
-      & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0; }
-      & :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
-      & pre { margin: 1rem 0; }
-      & li { margin: 0.25rem 0; }
-      & ul, & ol { padding-left: 1.5rem; }
-
-      & h2 { font-size: 2.5rem; top: 0; padding-top: calc(0.5em + var(--safe-top)); z-index: 4; }
-      & h3 { font-size: 1.85rem; top: calc(5rem + 1px + var(--safe-top)); z-index: 3; }
-      & h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; }
-      & :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
-
-      /* scroll-margin-top on non-sticky section wrappers.
-         section.sN contains h(N+1). Values = the heading's sticky top,
-         so the heading sits exactly at its sticky threshold on navigation.
-         Content's own margin-top (~1rem+) provides clearance below. */
-      & .s2 { scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
-      & .s3 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
-      & .s4, & .s5, & .s6 { scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
-    }
-
-    .status {
-      font-weight: 600;
-      font-size: 0.95rem;
-      &.passed { color: var(--pass-ink); }
-      &.failed { color: var(--fail-ink); }
-      &.expected-fail { color: var(--xfail-ink); }
-    }
-
-    /* ── Executable blocks ── */
-    .exec-block,
-    .exec-table-block {
-      margin: 0.75rem 0;
-    }
-
-    .exec-block { scroll-margin-top: 1.5rem; }
-
-    .exec-source {
-      padding: 0.8rem 0.9rem;
-      border: 1px solid var(--rule);
-      border-radius: 0.2rem;
-      border-left: 3px solid transparent;
-      font-family: var(--font-mono);
-      font-size: 0.92rem;
-      line-height: 1.45;
-      white-space: pre-wrap;
-      overflow-x: auto;
-      background: var(--code-bg);
-
-      &.resolved {
-        margin-top: 0.4rem;
-        border: 1px solid var(--rule);
-      }
-    }
-
-    .exec-block.passed > .exec-source:not(.resolved) {
-      border-left-color: var(--pass-mark);
-      background: var(--pass-bg);
-    }
-
-    .exec-block.failed > .exec-source:not(.resolved) {
-      border-left-color: var(--fail-mark);
-      background: var(--fail-bg);
-    }
-
-    .exec-block.expected-fail > .exec-source:not(.resolved) {
-      border-left-color: var(--xfail-mark);
-      background: var(--xfail-bg);
-    }
-
-    /* ── Collapsible blocks with summary lines ── */
-    .exec-detail {
-      border-radius: 0.2rem;
-    }
-
-    .exec-detail > summary.exec-source {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      list-style: none;
-      font-family: var(--font-body);
-      font-size: 0.95rem;
-      white-space: normal;
-      border-bottom-left-radius: 0;
-      border-bottom-right-radius: 0;
-    }
-
-    .exec-detail > summary.exec-source::-webkit-details-marker { display: none; }
-    .exec-detail > summary.exec-source::marker { display: none; content: ""; }
-
-    .exec-detail:not([open]) > summary.exec-source {
-      border-radius: 0.2rem;
-    }
-
-    .exec-expand-marker::after {
-      content: ">";
-      font-size: 0.7rem;
-      color: var(--muted);
-      transition: transform 0.15s ease;
-      display: inline-block;
-    }
-
-    .exec-detail[open] > summary .exec-expand-marker::after {
-      transform: rotate(90deg);
-    }
-
-    .exec-source-body {
-      border-top: 1px solid var(--rule);
-      border-top-left-radius: 0;
-      border-top-right-radius: 0;
-    }
-
-    .exec-block.passed > .exec-detail > summary.exec-source,
-    .exec-block.passed > .exec-detail > .exec-source-body {
-      border-left-color: var(--pass-mark);
-      background: var(--pass-bg);
-    }
-
-    .exec-block.failed > .exec-detail > summary.exec-source,
-    .exec-block.failed > .exec-detail > .exec-source-body {
-      border-left-color: var(--fail-mark);
-      background: var(--fail-bg);
-    }
-
-    .doctest-steps {
-      font-family: var(--font-mono);
-      font-size: 0.92rem;
-      line-height: 1.45;
-      white-space: pre-wrap;
-    }
-
-    .doctest-prompt { color: var(--muted); user-select: none; }
-
-    .doctest-output.passed { color: var(--pass-ink); }
-    .doctest-output.failed { color: var(--fail-ink); }
-
-    .doctest-expected {
-      color: var(--muted);
-      font-style: italic;
-    }
-
-    .doctest-expected-label {
-      font-size: 0.82rem;
-    }
-
-    .wildcard-fold {
-      display: inline;
-    }
-    .wildcard-fold > summary {
-      display: inline;
-      cursor: pointer;
-      color: var(--muted);
-      font-style: italic;
-      list-style: none;
-    }
-    .wildcard-fold > summary::-webkit-details-marker { display: none; }
-    .wildcard-fold[open] > summary {
-      display: block;
-      color: var(--muted);
-      opacity: 0.6;
-    }
-    .wildcard-expanded {
-      border-left: 2px solid var(--pass-mark);
-      padding-left: 0.6em;
-      display: inline-block;
-    }
-
-    .exec-bindings {
-      margin-top: 0.35rem;
-      font-size: 0.85rem;
-      font-style: italic;
-      color: var(--muted);
-      font-family: var(--font-mono);
-    }
-
-    :is(.exec-block-footer, .exec-table-footer) {
-      text-align: right;
-      font-size: 0.8rem;
-      color: var(--muted);
-      font-family: var(--font-mono);
-    }
-
-    .exec-note {
-      margin: 0.75rem 0 0.35rem;
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-
-    .exec-message {
-      margin-top: 0.75rem;
-      color: var(--fail-ink);
-      font-weight: 600;
-    }
-
-    /* ── Executable tables ── */
-    .exec-table-block { overflow-x: auto; }
-
-    .exec-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95rem;
-
-      & :is(th, td) {
-        padding: 0.7rem 0.75rem;
-        border: 1px solid var(--rule);
-        vertical-align: top;
-        text-align: left;
-      }
-
-      & thead th {
-        border: 0;
-        padding-bottom: 0;
-        font-weight: normal;
-        font-size: 0.8rem;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted);
-        background: var(--bg);
-      }
-
-      & thead th:first-child { border-left: 3px solid transparent; }
-      & tbody td:first-child { border-left: 3px solid transparent; }
-
-      & tbody tr.passed td { background: var(--pass-bg); }
-      & tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
-      & tbody tr.failed td { background: var(--fail-bg); }
-      & tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
-      & tbody tr.expected-fail td { background: var(--xfail-bg); }
-      & tbody tr.expected-fail td:first-child { border-left-color: var(--xfail-mark); }
-    }
-
-    /* ── Prose code blocks & tables ── */
-    .spec-body :not(.exec-source) > pre {
-      padding: 0.8rem 0.9rem;
-      background: var(--code-bg);
-      border: 1px solid var(--rule);
-      border-radius: 0.2rem;
-      overflow-x: auto;
-    }
-
-    .spec-body table:not(.exec-table) {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95rem;
-      margin: 1rem 0;
-      overflow-x: auto;
-      display: block;
-
-      & :is(th, td) {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--rule);
-        text-align: left;
-      }
-
-      & th {
-        background: var(--code-bg);
-        font-size: 0.85rem;
-      }
-    }
-
-    /* ── Inline assertions ── */
-    .inline-var {
-      font-family: var(--font-mono);
-      font-size: 0.94em;
-      padding: 0.1em 0.35em;
-      border-radius: 0.2rem;
-      background: var(--pass-bg);
-      color: var(--pass-ink);
-    }
-
-    .inline-expect {
-      font-family: var(--font-mono);
-      font-size: 0.94em;
-      padding: 0.1em 0.35em;
-      border-radius: 0.2rem;
-    }
-
-    .inline-expect.passed {
-      background: var(--pass-bg);
-      color: var(--pass-ink);
-    }
-
-    .inline-expect.failed {
-      background: var(--fail-bg);
-      color: var(--fail-ink);
-      position: relative;
-      padding-top: 0.02em;
-      padding-bottom: 0.02em;
-    }
-
-    .inline-expect.expected-fail {
-      background: var(--xfail-bg);
-      color: var(--xfail-ink);
-      position: relative;
-      padding-top: 0.02em;
-      padding-bottom: 0.02em;
-    }
-
-    .inline-expect.expected-fail > .annotation,
-    .inline-expect.failed > .annotation,
-    .inline-check > .annotation {
-      position: absolute;
-      left: 0;
-      bottom: 100%;
-      font-size: 0.8em;
-      line-height: 1;
-      color: var(--muted);
-      font-style: italic;
-      white-space: nowrap;
-      pointer-events: none;
-    }
-
-    .spec-body :is(p, li):has(.inline-expect.failed, .inline-check.failed) {
-      position: relative;
-    }
-    .spec-body :is(p, li):has(.inline-expect.failed, .inline-check.failed)::before {
-      content: "";
-      position: absolute;
-      left: -0.85rem;
-      top: 0.55em;
-      width: 0.38rem;
-      height: 0.38rem;
-      border-radius: 50%;
-      background: var(--fail-mark);
-    }
-
-    .inline-check {
-      font-family: var(--font-mono);
-      font-size: 0.94em;
-      padding: 0.1em 0.35em;
-      border-radius: 0.2rem;
-    }
-
-    .inline-check.passed {
-      background: var(--pass-bg);
-      color: var(--pass-ink);
-    }
-
-    .inline-check.failed {
-      background: var(--fail-bg);
-      color: var(--fail-ink);
-    }
-
-    .inline-check:has(.annotation) {
-      position: relative;
-      padding-top: 0.02em;
-      padding-bottom: 0.02em;
-    }
-
-    /* ── Cell styles ── */
-    .cell-template { font-family: var(--font-mono); white-space: pre-wrap; }
-
-    .cell-resolved {
-      margin-top: 0.35rem;
-      color: var(--muted);
-      font-family: var(--font-mono);
-      font-size: 0.92rem;
-    }
-
-    .cell-actual {
-      margin-top: 0.35rem;
-      color: var(--fail-ink);
-      font-size: 0.85rem;
-      font-style: italic;
-      white-space: pre-wrap;
-    }
-
-    .failure-diff {
-      margin: 0.75rem 0 0;
-      padding: 0.65rem 0.8rem;
-      background: var(--fail-bg);
-      border-left: 3px solid var(--fail-mark);
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.35rem 0.75rem;
-      align-items: baseline;
-
-      &.compact { padding: 0.65rem 0.75rem; border-left: 0; }
-
-      & dt {
-        color: var(--muted);
-        font-size: 0.82rem;
-        line-height: 1.45;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-      }
-
-      & dd {
-        font-family: var(--font-mono);
-        line-height: 1.45;
-        word-break: break-word;
-      }
-    }
-
-    /* ── Links & code ── */
-    a { color: var(--accent); }
-
-    code, pre, kbd, samp {
-      font-family: var(--font-mono);
-      font-size: 0.94em;
-      line-height: 1.45;
-    }
-
-    :not(pre) > code {
-      padding: 0.15em 0.35em;
-      background: #e6e6df;
-      border-radius: 0.2rem;
-    }
-
-    .exec-source :not(pre) > code,
-    .exec-source > code {
-      padding: 0;
-      background: transparent;
-    }
-
-    /* ── Mobile layout ── */
-    @media (max-width: 960px) {
-      .layout {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 0;
-      }
-
-      .content { display: contents; }
-
-      .toc {
-        position: static;
-        order: 2;
-        margin-bottom: 1.5rem;
-      }
-
-      .toc-inner { padding-left: 0; padding-bottom: 1rem; }
-      .content-header { order: 1; }
-      .content-body { order: 3; }
-    }
-
-    .site-footer {
-      max-width: 52rem;
-      margin: 3rem auto 0;
-      padding: 0 1rem 4rem;
-      text-align: center;
-      font-size: 0.84rem;
-      color: var(--muted);
-    }
-    .site-footer hr {
-      border: none;
-      border-top: 1px solid var(--muted);
-      opacity: 0.4;
-      margin-bottom: 0.75rem;
-    }
-    .site-footer a {
-      color: var(--muted);
-      text-decoration: underline;
-    }
-  </style>
+  <link rel="stylesheet" href="{{ .AssetRoot }}/style.css">
 </head>
 <body>
   <main>
@@ -1760,9 +1213,7 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       <aside class="toc" aria-label="Table of contents">
         <div class="toc-inner">
           <p class="toc-title">Contents</p>
-          {{ range .Specs }}
-          <section class="toc-spec">
-            <a class="toc-spec-title {{ .Status }}" href="#{{ .Anchor }}">{{ .Title }}</a>
+          <section class="toc-spec expanded">
             <ul class="toc-list">
               {{ range .Headings }}
               <li class="toc-item" data-anchor="{{ .Anchor }}">
@@ -1780,7 +1231,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
               {{ end }}
             </ul>
           </section>
-          {{ end }}
         </div>
       </aside>
 
@@ -1790,11 +1240,9 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
           {{ .Meta }}
         </div>
         <div class="content-body">
-          {{ range .Specs }}
           <article class="spec">
             <section class="spec-body">{{ .Body }}</section>
           </article>
-          {{ end }}
         </div>
       </div>
     </div>
@@ -1803,12 +1251,644 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     <hr>
     <p><a href="https://github.com/corca-ai/specdown">github.com/corca-ai/specdown</a> · written by ak@corca.ai</p>
   </footer>
-<script>
-(() => {
-  // IDs live on non-sticky <section> wrappers, so offsetTop is always
-  // the true document-flow position. No caching or JS scroll needed —
-  // native anchor navigation just works.
+  <script src="{{ .AssetRoot }}/script.js"></script>
+</body>
+</html>
+`))
 
+const styleCSS = `/* ── Design tokens ── */
+:root {
+  color-scheme: light;
+  --bg: #f3f3f0;
+  --paper: #fcfcfa;
+  --ink: #1f1f1b;
+  --muted: #66665f;
+  --rule: #d6d6cf;
+  --pass-ink: #0a8f3b;
+  --pass-mark: #10b34a;
+  --fail-ink: #a1261a;
+  --fail-mark: #d63b2d;
+  --xfail-ink: #c4776e;
+  --xfail-mark: #e0978f;
+  --accent: #2f64b3;
+  --code-bg: #efefea;
+  --note-bg: #f5f5f1;
+  --pass-bg: #e8f0e6;
+  --fail-bg: #f0e4e2;
+  --xfail-bg: #f5eeec;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+/* ── Body ── */
+html { background: var(--bg); }
+body {
+  font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+/* ── Page layout ── */
+main {
+  max-width: 78rem;
+  margin-inline: auto;
+  padding:
+    calc(2.75rem + var(--safe-top))
+    calc(1.5rem + var(--safe-right))
+    calc(4rem + var(--safe-bottom))
+    calc(1.5rem + var(--safe-left));
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 54rem);
+  column-gap: 2.5rem;
+  align-items: baseline;
+}
+
+/* ── Table of contents ── */
+.toc {
+  position: sticky;
+  top: calc(1.5rem + var(--safe-top));
+  max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+  overflow-y: auto;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.toc-inner { padding: 0 0 0 0.85rem; }
+
+.toc-title {
+  margin-bottom: 0.75rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toc-spec {
+  margin-bottom: 1.25rem;
+}
+.toc-spec:last-child { margin-bottom: 0; }
+
+.toc-spec-title {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  position: relative;
+}
+
+.toc-list {
+  list-style: none;
+  padding-left: 0.85rem;
+}
+
+.toc-item {
+  margin: 0.1rem 0;
+}
+.toc-item:first-child { margin-top: 0; }
+
+.toc-link {
+  display: block;
+  text-decoration: none;
+  color: var(--muted);
+  position: relative;
+  transition: color 120ms ease;
+}
+.toc-link:hover { color: var(--ink); }
+.toc-link.active { color: var(--ink); font-weight: 600; }
+
+.toc-spec-title.failed::before,
+.toc-link.failed::before {
+  content: "";
+  position: absolute;
+  left: -0.85rem;
+  top: 50%;
+  translate: 0 -50%;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: var(--fail-mark);
+}
+
+.toc-level-4 { padding-left: 0.7rem; }
+.toc-level-5,
+.toc-level-6 { padding-left: 1.4rem; }
+
+.toc-children {
+  list-style: none;
+  padding-left: 0.85rem;
+  display: none;
+}
+
+.toc-item.expanded > .toc-children { display: block; }
+
+/* ── Content area ── */
+.content { min-width: 0; }
+
+.report-title {
+  font-family: serif;
+  font-size: 2.8rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.4rem;
+}
+
+.content-meta {
+  margin-bottom: 2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.pill::before { content: "\00b7 "; color: var(--muted); }
+.pill.pass { color: var(--pass-ink); }
+.pill.fail { color: var(--fail-ink); }
+.pill.xfail { color: var(--xfail-ink); }
+
+/* ── Spec articles ── */
+.spec + .spec { padding-top: 2rem; }
+
+.spec-body {
+  line-height: 1.9;
+}
+.spec-body > :first-child { margin-top: 0; }
+
+.spec-body :is(h2, h3, h4, h5, h6) {
+  font-family: serif;
+  line-height: 1.15;
+  padding: 0.5em 0 0.35em;
+  margin-top: 0.75em;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+  position: sticky;
+  background: var(--bg);
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent);
+}
+
+.spec-body :is(h2, h3, h4, h5, h6).stuck-last::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto 0;
+  height: 4px;
+  background: linear-gradient(rgba(0, 0, 0, 0.06), transparent);
+  pointer-events: none;
+}
+
+.spec-body > :first-child > :first-child { margin-top: 0; }
+
+.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0; }
+.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
+.spec-body pre { margin: 1rem 0; }
+.spec-body li { margin: 0.25rem 0; }
+.spec-body ul, .spec-body ol { padding-left: 1.5rem; }
+
+.spec-body h2 { font-size: 2.5rem; top: 0; padding-top: calc(0.5em + var(--safe-top)); z-index: 4; }
+.spec-body h3 { font-size: 1.85rem; top: calc(5rem + 1px + var(--safe-top)); z-index: 3; }
+.spec-body h4 { font-size: 1.4rem;  top: calc(8.7rem + 2px + var(--safe-top)); z-index: 2; }
+.spec-body :is(h5, h6) { font-size: 1.08rem; top: calc(11.5rem + 3px + var(--safe-top)); z-index: 1; }
+
+.spec-body .s2 { scroll-margin-top: calc(5rem + 1px + var(--safe-top)); }
+.spec-body .s3 { scroll-margin-top: calc(8.7rem + 2px + var(--safe-top)); }
+.spec-body .s4, .spec-body .s5, .spec-body .s6 { scroll-margin-top: calc(11.5rem + 3px + var(--safe-top)); }
+
+.status {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.status.passed { color: var(--pass-ink); }
+.status.failed { color: var(--fail-ink); }
+.status.expected-fail { color: var(--xfail-ink); }
+
+/* ── Executable blocks ── */
+.exec-block,
+.exec-table-block {
+  margin: 0.75rem 0;
+}
+
+.exec-block { scroll-margin-top: 1.5rem; }
+
+.exec-source {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.2rem;
+  border-left: 3px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.exec-source.resolved {
+  margin-top: 0.4rem;
+  border: 1px solid var(--rule);
+}
+
+.exec-block.passed > .exec-source:not(.resolved) {
+  border-left-color: var(--pass-mark);
+  background: var(--pass-bg);
+}
+
+.exec-block.failed > .exec-source:not(.resolved) {
+  border-left-color: var(--fail-mark);
+  background: var(--fail-bg);
+}
+
+.exec-block.expected-fail > .exec-source:not(.resolved) {
+  border-left-color: var(--xfail-mark);
+  background: var(--xfail-bg);
+}
+
+/* ── Collapsible blocks with summary lines ── */
+.exec-detail {
+  border-radius: 0.2rem;
+}
+
+.exec-detail > summary.exec-source {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  white-space: normal;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.exec-detail > summary.exec-source::-webkit-details-marker { display: none; }
+.exec-detail > summary.exec-source::marker { display: none; content: ""; }
+
+.exec-detail:not([open]) > summary.exec-source {
+  border-radius: 0.2rem;
+}
+
+.exec-expand-marker::after {
+  content: ">";
+  font-size: 0.7rem;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.exec-detail[open] > summary .exec-expand-marker::after {
+  transform: rotate(90deg);
+}
+
+.exec-source-body {
+  border-top: 1px solid var(--rule);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.exec-block.passed > .exec-detail > summary.exec-source,
+.exec-block.passed > .exec-detail > .exec-source-body {
+  border-left-color: var(--pass-mark);
+  background: var(--pass-bg);
+}
+
+.exec-block.failed > .exec-detail > summary.exec-source,
+.exec-block.failed > .exec-detail > .exec-source-body {
+  border-left-color: var(--fail-mark);
+  background: var(--fail-bg);
+}
+
+.doctest-steps {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.doctest-prompt { color: var(--muted); user-select: none; }
+
+.doctest-output.passed { color: var(--pass-ink); }
+.doctest-output.failed { color: var(--fail-ink); }
+
+.doctest-expected {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.doctest-expected-label {
+  font-size: 0.82rem;
+}
+
+.wildcard-fold {
+  display: inline;
+}
+.wildcard-fold > summary {
+  display: inline;
+  cursor: pointer;
+  color: var(--muted);
+  font-style: italic;
+  list-style: none;
+}
+.wildcard-fold > summary::-webkit-details-marker { display: none; }
+.wildcard-fold[open] > summary {
+  display: block;
+  color: var(--muted);
+  opacity: 0.6;
+}
+.wildcard-expanded {
+  border-left: 2px solid var(--pass-mark);
+  padding-left: 0.6em;
+  display: inline-block;
+}
+
+.exec-bindings {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.exec-block-footer, .exec-table-footer {
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.exec-note {
+  margin: 0.75rem 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.exec-message {
+  margin-top: 0.75rem;
+  color: var(--fail-ink);
+  font-weight: 600;
+}
+
+/* ── Executable tables ── */
+.exec-table-block { overflow-x: auto; }
+
+.exec-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.exec-table :is(th, td) {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--rule);
+  vertical-align: top;
+  text-align: left;
+}
+.exec-table thead th {
+  border: 0;
+  padding-bottom: 0;
+  font-weight: normal;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg);
+}
+.exec-table thead th:first-child { border-left: 3px solid transparent; }
+.exec-table tbody td:first-child { border-left: 3px solid transparent; }
+
+.exec-table tbody tr.passed td { background: var(--pass-bg); }
+.exec-table tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
+.exec-table tbody tr.failed td { background: var(--fail-bg); }
+.exec-table tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
+.exec-table tbody tr.expected-fail td { background: var(--xfail-bg); }
+.exec-table tbody tr.expected-fail td:first-child { border-left-color: var(--xfail-mark); }
+
+/* ── Prose code blocks & tables ── */
+.spec-body :not(.exec-source) > pre {
+  padding: 0.8rem 0.9rem;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 0.2rem;
+  overflow-x: auto;
+}
+
+.spec-body table:not(.exec-table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+  display: block;
+}
+.spec-body table:not(.exec-table) :is(th, td) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  text-align: left;
+}
+.spec-body table:not(.exec-table) th {
+  background: var(--code-bg);
+  font-size: 0.85rem;
+}
+
+/* ── Inline assertions ── */
+.inline-var {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.2rem;
+  background: var(--pass-bg);
+  color: var(--pass-ink);
+}
+
+.inline-expect {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.2rem;
+}
+
+.inline-expect.passed {
+  background: var(--pass-bg);
+  color: var(--pass-ink);
+}
+
+.inline-expect.failed {
+  background: var(--fail-bg);
+  color: var(--fail-ink);
+  position: relative;
+  padding-top: 0.02em;
+  padding-bottom: 0.02em;
+}
+
+.inline-expect.expected-fail {
+  background: var(--xfail-bg);
+  color: var(--xfail-ink);
+  position: relative;
+  padding-top: 0.02em;
+  padding-bottom: 0.02em;
+}
+
+.inline-expect.expected-fail > .annotation,
+.inline-expect.failed > .annotation,
+.inline-check > .annotation {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  font-size: 0.8em;
+  line-height: 1;
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.spec-body :is(p, li):has(.inline-expect.failed, .inline-check.failed) {
+  position: relative;
+}
+.spec-body :is(p, li):has(.inline-expect.failed, .inline-check.failed)::before {
+  content: "";
+  position: absolute;
+  left: -0.85rem;
+  top: 0.55em;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: var(--fail-mark);
+}
+
+.inline-check {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.2rem;
+}
+
+.inline-check.passed {
+  background: var(--pass-bg);
+  color: var(--pass-ink);
+}
+
+.inline-check.failed {
+  background: var(--fail-bg);
+  color: var(--fail-ink);
+}
+
+.inline-check:has(.annotation) {
+  position: relative;
+  padding-top: 0.02em;
+  padding-bottom: 0.02em;
+}
+
+/* ── Cell styles ── */
+.cell-template { font-family: var(--font-mono); white-space: pre-wrap; }
+
+.cell-resolved {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+}
+
+.cell-actual {
+  margin-top: 0.35rem;
+  color: var(--fail-ink);
+  font-size: 0.85rem;
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.failure-diff {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.8rem;
+  background: var(--fail-bg);
+  border-left: 3px solid var(--fail-mark);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+}
+.failure-diff.compact { padding: 0.65rem 0.75rem; border-left: 0; }
+.failure-diff dt {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.failure-diff dd {
+  font-family: var(--font-mono);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* ── Links & code ── */
+a { color: var(--accent); }
+
+code, pre, kbd, samp {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  line-height: 1.45;
+}
+
+:not(pre) > code {
+  padding: 0.15em 0.35em;
+  background: #e6e6df;
+  border-radius: 0.2rem;
+}
+
+.exec-source :not(pre) > code,
+.exec-source > code {
+  padding: 0;
+  background: transparent;
+}
+
+/* ── Mobile layout ── */
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .content { display: contents; }
+
+  .toc {
+    position: static;
+    order: 2;
+    margin-bottom: 1.5rem;
+  }
+
+  .toc-inner { padding-left: 0; padding-bottom: 1rem; }
+  .content-header { order: 1; }
+  .content-body { order: 3; }
+}
+
+.site-footer {
+  max-width: 52rem;
+  margin: 3rem auto 0;
+  padding: 0 1rem 4rem;
+  text-align: center;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.site-footer hr {
+  border: none;
+  border-top: 1px solid var(--muted);
+  opacity: 0.4;
+  margin-bottom: 0.75rem;
+}
+.site-footer a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+`
+
+const scriptJS = `(() => {
   const resolve = (href) => {
     const id = decodeURIComponent(href.slice(1));
     return document.getElementById(id);
@@ -1823,15 +1903,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
 
   if (!allItems.length) return;
 
-  const specEntries = Array.from(document.querySelectorAll('.toc-spec'))
-    .map((section) => {
-      const titleLink = section.querySelector('.toc-spec-title');
-      if (!titleLink) return null;
-      const el = resolve(titleLink.getAttribute('href'));
-      return el ? { section, el } : null;
-    })
-    .filter(Boolean);
-
   const h2Entries = Array.from(document.querySelectorAll('.toc-list > .toc-item[data-anchor]'))
     .map((li) => {
       const el = document.getElementById(li.getAttribute('data-anchor'));
@@ -1839,7 +1910,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
     })
     .filter(Boolean);
 
-  // Shadow on the bottommost stuck heading
   const stickyHeadings = Array.from(document.querySelectorAll('.spec-body :is(h2,h3,h4,h5,h6)'))
     .map(el => ({ el, top: parseFloat(getComputedStyle(el).top) || 0 }));
   let prevStuckLast = null;
@@ -1873,15 +1943,6 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
       item.link.classList.toggle('active', item === active);
     }
 
-    let activeSpec = specEntries[0];
-    for (const entry of specEntries) {
-      if (entry.el.offsetTop <= offset) { activeSpec = entry; continue; }
-      break;
-    }
-    for (const entry of specEntries) {
-      entry.section.classList.toggle('expanded', entry === activeSpec);
-    }
-
     let activeH2 = h2Entries[0];
     for (const entry of h2Entries) {
       if (entry.el.offsetTop <= offset) { activeH2 = entry; continue; }
@@ -1901,7 +1962,4 @@ var pageTemplate = template.Must(template.New("report").Parse(`<!doctype html>
   window.addEventListener('resize', schedule);
   update();
 })();
-</script>
-</body>
-</html>
-`))
+`

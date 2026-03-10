@@ -1,10 +1,10 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -52,55 +52,130 @@ type Plan struct {
 	Documents []DocumentPlan
 }
 
+// resolveLink resolves a markdown link relative to the current document.
+// Returns empty string if the link should be skipped (external, anchor, non-md).
+func resolveLink(link string, currentDir string) string {
+	if strings.Contains(link, "://") || strings.HasPrefix(link, "#") {
+		return ""
+	}
+	linkPath := link
+	if idx := strings.Index(linkPath, "#"); idx >= 0 {
+		linkPath = linkPath[:idx]
+	}
+	if linkPath == "" || !strings.HasSuffix(linkPath, ".md") {
+		return ""
+	}
+	return path.Clean(path.Join(currentDir, linkPath))
+}
+
+// crawlState holds mutable state for the BFS document crawl.
+type crawlState struct {
+	baseDir         string
+	entryDir        string
+	ignorePrefixes  []string
+	seen            map[string]struct{}
+	docs            []Document
+	warnings        []string
+}
+
+// processLink resolves a single link from a document and, if valid,
+// reads the target document and appends it to the crawl state.
+// Returns the new document (for queueing) or nil if skipped.
+func (cs *crawlState) processLink(link string, source Document) (*Document, error) {
+	currentDir := path.Dir(source.RelativeTo)
+	resolved := resolveLink(link, currentDir)
+	if resolved == "" {
+		return nil, nil
+	}
+	if !isInsideDir(resolved, cs.entryDir) {
+		cs.warnings = append(cs.warnings, fmt.Sprintf(
+			"%s: link %q points outside entry directory %s", source.RelativeTo, link, cs.entryDir))
+		return nil, nil
+	}
+	if _, ok := cs.seen[resolved]; ok {
+		return nil, nil
+	}
+	cs.seen[resolved] = struct{}{}
+
+	doc, err := readDocument(cs.baseDir, resolved, cs.ignorePrefixes)
+	if err != nil {
+		if os.IsNotExist(unwrapPathError(err)) {
+			return nil, fmt.Errorf("%s: broken link %q (file not found: %s)", source.RelativeTo, link, resolved)
+		}
+		return nil, err
+	}
+	cs.docs = append(cs.docs, doc)
+	return &doc, nil
+}
+
 func DiscoverFromEntry(baseDir string, entryPath string, ignorePrefixes []string) (string, []Document, error) {
-	fullPath := filepath.Join(baseDir, filepath.FromSlash(entryPath))
-	body, err := os.ReadFile(fullPath)
+	entryPath = path.Clean(entryPath)
+
+	entryDoc, err := readDocument(baseDir, entryPath, ignorePrefixes)
 	if err != nil {
 		return "", nil, fmt.Errorf("read entry %s: %w", entryPath, err)
 	}
 
-	content := string(body)
-	title := parseEntryTitle(content)
-	if title == "" {
-		return "", nil, fmt.Errorf("entry file %s must have an H1 heading", entryPath)
+	cs := crawlState{
+		baseDir:        baseDir,
+		entryDir:       path.Dir(entryPath),
+		ignorePrefixes: ignorePrefixes,
+		seen:           map[string]struct{}{entryPath: {}},
+		docs:           []Document{entryDoc},
 	}
 
-	links := parseEntryLinks(content)
-	if len(links) == 0 {
-		return "", nil, fmt.Errorf("entry file %s contains no links to spec files", entryPath)
+	queue := []Document{entryDoc}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		for _, link := range parseMarkdownLinks(current.Markdown) {
+			doc, linkErr := cs.processLink(link, current)
+			if linkErr != nil {
+				return "", nil, linkErr
+			}
+			if doc != nil {
+				queue = append(queue, *doc)
+			}
+		}
 	}
 
-	entryDir := path.Dir(path.Clean(entryPath))
-	docs := make([]Document, 0, len(links))
-	seen := make(map[string]struct{})
-	for _, link := range links {
-		relativePath := path.Clean(path.Join(entryDir, link))
-		if _, ok := seen[relativePath]; ok {
-			continue
-		}
-		seen[relativePath] = struct{}{}
-		doc, err := readDocument(baseDir, relativePath, ignorePrefixes)
-		if err != nil {
-			return "", nil, err
-		}
-		docs = append(docs, doc)
+	if len(cs.warnings) > 0 {
+		cs.docs[0].Warnings = append(cs.docs[0].Warnings, cs.warnings...)
 	}
-	return title, docs, nil
+
+	return entryDoc.Title, cs.docs, nil
 }
 
-var markdownLinkPattern = regexp.MustCompile(`\[([^\]]*)\]\(([^)]+\.spec\.md)\)`)
-
-func parseEntryTitle(markdown string) string {
-	for _, line := range strings.Split(markdown, "\n") {
-		if level, text, ok := parseHeading(line + "\n"); ok && level == 1 {
-			return text
-		}
+// isInsideDir checks if a cleaned path is inside the given directory.
+func isInsideDir(filePath string, dir string) bool {
+	if dir == "." {
+		// Root-relative: anything without ".." prefix is inside.
+		return !strings.HasPrefix(filePath, "..")
 	}
-	return ""
+	return filePath == dir || strings.HasPrefix(filePath, dir+"/")
 }
 
-func parseEntryLinks(markdown string) []string {
-	matches := markdownLinkPattern.FindAllStringSubmatch(markdown, -1)
+// unwrapPathError returns the underlying error if it's an *os.PathError.
+func unwrapPathError(err error) error {
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		return pe.Err
+	}
+	return err
+}
+
+// markdownLinkAllPattern matches markdown links to any target.
+var markdownLinkAllPattern = regexp.MustCompile(`\[([^\]]*)\]\(([^)]+)\)`)
+
+// fencedCodeBlockPattern strips fenced code blocks from markdown.
+var fencedCodeBlockPattern = regexp.MustCompile("(?m)^```[^\n]*\n(?s:.*?)\n```\\s*$")
+
+// parseMarkdownLinks extracts all markdown link targets from content,
+// excluding links inside fenced code blocks.
+func parseMarkdownLinks(markdown string) []string {
+	// Strip fenced code blocks so we don't follow links inside them.
+	stripped := fencedCodeBlockPattern.ReplaceAllString(markdown, "")
+	matches := markdownLinkAllPattern.FindAllStringSubmatch(stripped, -1)
 	var paths []string
 	for _, match := range matches {
 		paths = append(paths, match[2])

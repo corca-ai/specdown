@@ -38,7 +38,7 @@ specdown version          # print build version
 specdown alloy dump       # generate only Alloy model .als files
 ```
 
-Reports are generated at `specs/report.html`.
+Reports are generated in `specs/report/`.
 
 ## Test
 
@@ -56,7 +56,7 @@ recursively, so `bin/` must be on `PATH`:
 PATH="$(pwd)/bin:$PATH" bin/specdown run
 ```
 
-Reports are generated at `specs/report.html`.
+Reports are generated in `specs/report/`.
 
 ### Pocket-Board Example
 

@@ -11,7 +11,7 @@
   "reporters": [
     {
       "builtin": "html",
-      "outFile": "specs/report.html"
+      "outFile": "specs/report"
     },
     {
       "builtin": "json",

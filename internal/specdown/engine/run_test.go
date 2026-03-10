@@ -86,22 +86,24 @@ func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	if report.Summary.SpecsPassed != 1 || report.Summary.CasesFailed != 0 {
+	// Results[0] is the entry doc (no cases); Results[1] is the spec.
+	if report.Summary.CasesFailed != 0 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
 	if report.Summary.CasesPassed != 8 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].Cases[0].Bindings; len(got) != 1 || got[0].Name != "boardName" || got[0].Value != "board-1" {
+	specResult := report.Results[1]
+	if got := specResult.Cases[0].Bindings; len(got) != 1 || got[0].Name != "boardName" || got[0].Value != "board-1" {
 		t.Fatalf("unexpected board binding %#v", got)
 	}
-	if got := report.Results[0].Cases[3].Bindings; len(got) != 1 || got[0].Name != "cardId" || got[0].Value != "card-1" {
+	if got := specResult.Cases[3].Bindings; len(got) != 1 || got[0].Name != "cardId" || got[0].Value != "card-1" {
 		t.Fatalf("unexpected card binding %#v", got)
 	}
-	if got := report.Results[0].Cases[4].RenderedCells; len(got) != 3 || got[0] != "board-1" || got[1] != "card-1" || got[2] != "yes" {
+	if got := specResult.Cases[4].RenderedCells; len(got) != 3 || got[0] != "board-1" || got[1] != "card-1" || got[2] != "yes" {
 		t.Fatalf("unexpected card exists row %#v", got)
 	}
-	if got := report.Results[0].Cases[7].RenderedCells; len(got) != 3 || got[2] != "doing" {
+	if got := specResult.Cases[7].RenderedCells; len(got) != 3 || got[2] != "doing" {
 		t.Fatalf("unexpected moved card row %#v", got)
 	}
 }
@@ -148,7 +150,7 @@ func TestRunFailsWhenCardColumnCheckMismatches(t *testing.T) {
 	if report.Summary.CasesFailed != 1 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	failedCase := report.Results[0].Cases[2]
+	failedCase := report.Results[1].Cases[2]
 	if failedCase.Message != "column mismatch for card \"card-1\" in board \"board-1\"" {
 		t.Fatalf("unexpected failure message %q", failedCase.Message)
 	}
@@ -199,7 +201,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 	if report.Summary.CasesFailed != 2 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].Cases[1].Message; got != `missing runtime binding for "boardName"` {
+	if got := report.Results[1].Cases[1].Message; got != `missing runtime binding for "boardName"` {
 		t.Fatalf("unexpected message %q", got)
 	}
 }
@@ -294,10 +296,11 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	if report.Summary.SpecsPassed != 1 || report.Summary.CasesPassed != 1 || report.Summary.AlloyChecksPassed != 1 {
+	if report.Summary.CasesPassed != 1 || report.Summary.AlloyChecksPassed != 1 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[0].AlloyChecks[0].Label; got != "alloy:ref(board#cardShape, scope=5) @ Formal Rules" {
+	// Results[0] is entry (no cases); Results[1] has the spec.
+	if got := report.Results[1].AlloyChecks[0].Label; got != "alloy:ref(board#cardShape, scope=5) @ Formal Rules" {
 		t.Fatalf("unexpected alloy label %q", got)
 	}
 }

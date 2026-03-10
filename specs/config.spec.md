@@ -16,7 +16,7 @@ For v1, a single `specdown.json` is sufficient.
     }
   ],
   "reporters": [
-    { "builtin": "html", "outFile": ".artifacts/specdown/report.html" },
+    { "builtin": "html", "outFile": ".artifacts/specdown/report" },
     { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
   ],
   "models": { "builtin": "alloy" }
@@ -25,8 +25,9 @@ For v1, a single `specdown.json` is sufficient.
 
 ## Entry File
 
-The `entry` field points to a Markdown file whose H1 heading becomes the report title.
-The entry file lists spec documents as Markdown links; their order determines the table of contents.
+The `entry` field points to a Markdown file that serves as the starting point for recursive crawling.
+If it has an H1 heading, that becomes the entry page title.
+Markdown links to `.md` and `.spec.md` files are followed recursively to discover all pages.
 
 ```run:shell
 # Generate report from entry file and verify title
@@ -38,15 +39,15 @@ Some prose.
 SPEC
 printf '# My Project Title\n\n- [Feature](entry-test.spec.md)\n' > .tmp-test/entry-index.spec.md
 cat <<'CFG' > .tmp-test/entry-test-cfg.json
-{"entry":"entry-index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"entry-report.html"}]}
+{"entry":"entry-index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"entry-report"}]}
 CFG
 specdown run -config .tmp-test/entry-test-cfg.json 2>&1 || true
 ```
 
-The H1 heading from the entry file appears as the report title.
+The H1 heading from the entry file appears as that page's title.
 
 ```run:shell
-$ grep -o '<title>[^<]*</title>' .tmp-test/entry-report.html
+$ grep -o '<title>[^<]*</title>' .tmp-test/entry-report/entry-index.html
 <title>My Project Title</title>
 ```
 
@@ -67,7 +68,7 @@ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true
 
 ```run:shell
 $ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | head -1
-PASS 1 spec(s), 1 case(s), 0 alloy check(s)
+PASS 2 spec(s), 1 case(s), 0 alloy check(s)
 ```
 
 If a user adapter explicitly claims a shell block (e.g., `"blocks": ["run:shell"]`),
@@ -77,7 +78,7 @@ the user adapter takes precedence over the built-in.
 
 | Field | Description |
 |-------|-------------|
-| `entry` | Path to the entry Markdown file. Its H1 is the report title; links define spec order |
+| `entry` | Path to the entry Markdown file. Starting point for recursive link crawling |
 | `adapters` | List of adapters that handle executable blocks and checks |
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification. Can be omitted if not used |
