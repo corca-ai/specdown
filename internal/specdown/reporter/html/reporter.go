@@ -358,32 +358,16 @@ func renderPageTraceLinks(docPath string, tg *core.TraceGraphData, entryDir stri
 	return b.String()
 }
 
-// writeTracePage generates the trace.html visualization page.
+// writeTracePage generates the trace.html page.
 func writeTracePage(outDir string, report core.Report, globalTOC []globalTocEntry) error {
 	tg := report.TraceGraph
 	var b strings.Builder
 
-	b.WriteString(`<h1>Trace Graph</h1>`)
-	b.WriteString(`<p class="trace-meta">`)
-	fmt.Fprintf(&b, `Class: <strong>%s</strong> · Layout: <strong>%s</strong>`,
-		template.HTMLEscapeString(tg.Class),
-		template.HTMLEscapeString(tg.Layout))
-	fmt.Fprintf(&b, ` · %d documents · %d edges`, len(tg.Documents), len(tg.Edges))
-	if len(tg.Layers) > 0 {
-		b.WriteString(` · Layers: `)
-		b.WriteString(template.HTMLEscapeString(strings.Join(tg.Layers, " → ")))
-	}
-	b.WriteString(`</p>`)
+	b.WriteString(`<h1>Trace</h1>`)
 
-	// Graph visualization
-	b.WriteString(renderTraceGraph(tg))
-
-	// Coverage matrix
-	b.WriteString(renderTraceMatrix(tg))
-
-	// Trace errors
+	// Errors first — the actionable part.
 	if len(report.TraceErrors) > 0 {
-		b.WriteString(`<h2>Trace Errors</h2>`)
+		b.WriteString(`<h2>Errors</h2>`)
 		b.WriteString(`<ul class="trace-error-list">`)
 		for _, e := range report.TraceErrors {
 			b.WriteString(`<li class="trace-error">`)
@@ -393,9 +377,15 @@ func writeTracePage(outDir string, report core.Report, globalTOC []globalTocEntr
 		b.WriteString(`</ul>`)
 	}
 
+	// Tree/forest visualization — only when the graph is actually a tree.
+	b.WriteString(renderTraceGraph(tg))
+
+	meta := `<p class="content-meta">` +
+		template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)) + `</p>`
+
 	view := pageView{
-		Title:     "Trace Graph",
-		Meta:      template.HTML(buildTracePageMeta(report)),
+		Title:     "Trace",
+		Meta:      template.HTML(meta), //nolint:gosec // internally generated
 		AssetRoot: ".",
 		GlobalTOC: globalTOC,
 		Body:      template.HTML(b.String()), //nolint:gosec // internally generated
@@ -404,411 +394,181 @@ func writeTracePage(outDir string, report core.Report, globalTOC []globalTocEntr
 	return writeHTMLFile(filepath.Join(outDir, "trace.html"), view)
 }
 
-func buildTracePageMeta(report core.Report) string {
-	var b strings.Builder
-	b.WriteString(`<p class="content-meta">`)
-	b.WriteString(template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)))
-	fmt.Fprintf(&b, `<span class="pill pass">docs %d</span>`, len(report.TraceGraph.Documents))
-	fmt.Fprintf(&b, `<span class="pill pass">edges %d</span>`, len(report.TraceGraph.Edges))
-	if len(report.TraceErrors) > 0 {
-		fmt.Fprintf(&b, `<span class="pill fail">errors %d</span>`, len(report.TraceErrors))
-	}
-	b.WriteString(`</p>`)
-	return b.String()
+// spanningForest holds the BFS spanning tree decomposition of a trace graph.
+type spanningForest struct {
+	roots        []string
+	treeChildren map[string][]core.TraceEdge // tree edges per parent
+	extraParents map[string][]core.TraceEdge // non-tree incoming edges per target
+	backEdges    map[string][]core.TraceEdge // back-edges (cycles) per source
+	docByPath    map[string]core.TraceDocument
 }
 
-// renderTraceGraph generates an HTML representation of the trace graph.
-// Trees use nested lists, DAGs use rank-grouped lists with parent
-// annotations, cyclic graphs get matrix-only (no graph view).
-func renderTraceGraph(tg *core.TraceGraphData) string {
-	if len(tg.Documents) == 0 {
-		return ""
-	}
-	switch tg.Layout {
-	case "linear":
-		return renderLinearChain(tg)
-	case "radial":
-		return renderFlatStar(tg)
-	case "dendrogram":
-		return renderTreeOrForest(tg)
-	case "grid":
-		return renderLayeredGrid(tg)
-	case "sugiyama":
-		return renderRankedList(tg)
-	default:
-		return ""
-	}
-}
-
-// renderLinearChain renders as an ordered list with edge arrows.
-func renderLinearChain(tg *core.TraceGraphData) string {
-	order := traceTopoOrder(tg)
-	var b strings.Builder
-	b.WriteString(`<ol class="trace-chain">`)
-	for i, d := range order {
-		writeTraceNode(&b, d, nil)
-		if i < len(order)-1 {
-			name := findEdgeName(tg, d.Path, order[i+1].Path)
-			fmt.Fprintf(&b, `<li class="trace-chain-arrow" aria-hidden="true">↓ <span class="trace-edge-name">%s</span></li>`,
-				template.HTMLEscapeString(name))
-		}
-	}
-	b.WriteString(`</ol>`)
-	return b.String()
-}
-
-// renderFlatStar renders as root heading + flat child list.
-func renderFlatStar(tg *core.TraceGraphData) string {
-	incoming := buildIncomingMap(tg)
-	var root core.TraceDocument
-	var children []core.TraceDocument
-	for _, d := range tg.Documents {
-		if len(incoming[d.Path]) == 0 && hasOutgoing(tg, d.Path) {
-			root = d
-		} else {
-			children = append(children, d)
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString(`<div class="trace-star">`)
-	writeTraceNodeBlock(&b, root)
-	b.WriteString(`<ul class="trace-graph-list">`)
-	for _, c := range children {
-		name := findEdgeName(tg, root.Path, c.Path)
-		writeTraceNode(&b, c, []string{name})
-	}
-	b.WriteString(`</ul></div>`)
-	return b.String()
-}
-
-// renderTreeOrForest renders as nested <ul>/<li> trees.
-func renderTreeOrForest(tg *core.TraceGraphData) string {
-	incoming := buildIncomingMap(tg)
-	outgoing := buildOutgoingMap(tg)
-	docByPath := traceDocMap(tg)
-
-	var roots []core.TraceDocument
-	for _, d := range tg.Documents {
-		if len(incoming[d.Path]) == 0 {
-			roots = append(roots, d)
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString(`<div class="trace-tree">`)
-	for _, root := range roots {
-		b.WriteString(`<ul class="trace-graph-list">`)
-		writeTreeNode(&b, root, outgoing, docByPath)
-		b.WriteString(`</ul>`)
-	}
-	b.WriteString(`</div>`)
-	return b.String()
-}
-
-func writeTreeNode(b *strings.Builder, doc core.TraceDocument, outgoing map[string][]core.TraceEdge, docByPath map[string]core.TraceDocument) {
-	hue := typeHue(doc.Type)
-	fmt.Fprintf(b, `<li class="trace-graph-item" style="--type-hue:%d">`, hue)
-	writeTraceNodeInner(b, doc, nil)
-	if children := outgoing[doc.Path]; len(children) > 0 {
-		b.WriteString(`<ul class="trace-graph-list">`)
-		for _, edge := range children {
-			if child, ok := docByPath[edge.Target]; ok {
-				writeTreeNode(b, child, outgoing, docByPath)
-			}
-		}
-		b.WriteString(`</ul>`)
-	}
-	b.WriteString(`</li>`)
-}
-
-// renderLayeredGrid renders as columns per type layer with items stacked.
-func renderLayeredGrid(tg *core.TraceGraphData) string {
-	incoming := buildIncomingMap(tg)
-
-	// Group documents by layer.
-	layerDocs := make(map[string][]core.TraceDocument)
-	for _, d := range tg.Documents {
-		t := d.Type
-		if t == "" {
-			t = "_untyped"
-		}
-		layerDocs[t] = append(layerDocs[t], d)
-	}
-
-	var b strings.Builder
-	fmt.Fprintf(&b, `<div class="trace-grid" style="--cols:%d">`, len(tg.Layers))
-	for _, layer := range tg.Layers {
-		b.WriteString(`<div class="trace-grid-col">`)
-		fmt.Fprintf(&b, `<p class="trace-grid-header">%s</p>`, template.HTMLEscapeString(layer))
-		b.WriteString(`<ul class="trace-graph-list">`)
-		for _, d := range layerDocs[layer] {
-			parents := incomingNames(incoming, d.Path)
-			writeTraceNode(&b, d, parents)
-		}
-		b.WriteString(`</ul></div>`)
-	}
-	b.WriteString(`</div>`)
-	return b.String()
-}
-
-// renderRankedList renders DAGs as rank-grouped lists with parent annotations.
-func renderRankedList(tg *core.TraceGraphData) string {
-	incoming := buildIncomingMap(tg)
-	ranks := traceRanks(tg)
-
-	// Group by rank.
-	maxRank := 0
-	rankDocs := make(map[int][]core.TraceDocument)
-	for _, d := range tg.Documents {
-		r := ranks[d.Path]
-		rankDocs[r] = append(rankDocs[r], d)
-		if r > maxRank {
-			maxRank = r
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString(`<div class="trace-ranked">`)
-	for r := 0; r <= maxRank; r++ {
-		docs := rankDocs[r]
-		if len(docs) == 0 {
-			continue
-		}
-		b.WriteString(`<ul class="trace-graph-list">`)
-		for _, d := range docs {
-			parents := incomingAnnotations(incoming, d.Path)
-			writeTraceNode(&b, d, parents)
-		}
-		b.WriteString(`</ul>`)
-	}
-	b.WriteString(`</div>`)
-	return b.String()
-}
-
-// ── trace graph helpers ──
-
-func buildIncomingMap(tg *core.TraceGraphData) map[string][]core.TraceEdge {
-	m := make(map[string][]core.TraceEdge)
-	for _, e := range tg.Edges {
-		m[e.Target] = append(m[e.Target], e)
-	}
-	return m
-}
-
-func buildOutgoingMap(tg *core.TraceGraphData) map[string][]core.TraceEdge {
-	m := make(map[string][]core.TraceEdge)
-	for _, e := range tg.Edges {
-		m[e.Source] = append(m[e.Source], e)
-	}
-	return m
-}
-
-func traceDocMap(tg *core.TraceGraphData) map[string]core.TraceDocument {
-	m := make(map[string]core.TraceDocument, len(tg.Documents))
-	for _, d := range tg.Documents {
-		m[d.Path] = d
-	}
-	return m
-}
-
-func hasOutgoing(tg *core.TraceGraphData, path string) bool {
-	for _, e := range tg.Edges {
-		if e.Source == path {
-			return true
-		}
-	}
-	return false
-}
-
-func findEdgeName(tg *core.TraceGraphData, src, tgt string) string {
-	for _, e := range tg.Edges {
-		if e.Source == src && e.Target == tgt {
-			return e.EdgeName
-		}
-	}
-	return ""
-}
-
-func incomingNames(incoming map[string][]core.TraceEdge, path string) []string {
-	edges := incoming[path]
-	if len(edges) == 0 {
-		return nil
-	}
-	var names []string
-	for _, e := range edges {
-		names = append(names, e.EdgeName+" "+titleFromPath(e.Source))
-	}
-	return names
-}
-
-func incomingAnnotations(incoming map[string][]core.TraceEdge, path string) []string {
-	edges := incoming[path]
-	if len(edges) == 0 {
-		return nil
-	}
-	var parts []string
-	for _, e := range edges {
-		parts = append(parts, titleFromPath(e.Source)+" ("+e.EdgeName+")")
-	}
-	return parts
-}
-
-// traceTopoOrder returns documents in topological order.
+// buildSpanningForest extracts a BFS spanning forest from the trace graph,
+// classifying each edge as tree, extra-parent, or back-edge.
 //
-//nolint:gocognit // Kahn's algorithm with cycle fallback
-func traceTopoOrder(tg *core.TraceGraphData) []core.TraceDocument {
-	idx := make(map[string]int, len(tg.Documents))
-	for i, d := range tg.Documents {
-		idx[d.Path] = i
-	}
-
-	inDeg := make(map[string]int)
-	adj := make(map[string][]string)
+//nolint:gocognit // BFS with edge classification is inherently branchy
+func buildSpanningForest(tg *core.TraceGraphData) spanningForest {
+	outgoing := make(map[string][]core.TraceEdge)
 	for _, e := range tg.Edges {
-		adj[e.Source] = append(adj[e.Source], e.Target)
-		inDeg[e.Target]++
+		outgoing[e.Source] = append(outgoing[e.Source], e)
 	}
 
-	var queue []string
+	docByPath := make(map[string]core.TraceDocument, len(tg.Documents))
 	for _, d := range tg.Documents {
-		if inDeg[d.Path] == 0 {
-			queue = append(queue, d.Path)
+		docByPath[d.Path] = d
+	}
+
+	// Find roots: nodes with no incoming edges.
+	hasIncoming := make(map[string]bool)
+	for _, e := range tg.Edges {
+		hasIncoming[e.Target] = true
+	}
+	var roots []string
+	for _, d := range tg.Documents {
+		if !hasIncoming[d.Path] {
+			roots = append(roots, d.Path)
 		}
 	}
+	if len(roots) == 0 && len(tg.Documents) > 0 {
+		roots = append(roots, tg.Documents[0].Path)
+	}
 
-	var order []core.TraceDocument
+	// BFS to assign tree parents.
+	treeParent := make(map[string]string)
 	visited := make(map[string]bool)
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		if visited[cur] {
-			continue
-		}
-		visited[cur] = true
-		if i, ok := idx[cur]; ok {
-			order = append(order, tg.Documents[i])
-		}
-		for _, next := range adj[cur] {
-			inDeg[next]--
-			if inDeg[next] == 0 {
-				queue = append(queue, next)
-			}
-		}
-	}
-	// Append any remaining (cycles).
-	for _, d := range tg.Documents {
-		if !visited[d.Path] {
-			order = append(order, d)
-		}
-	}
-	return order
-}
-
-// traceRanks computes the longest-path rank for each document.
-func traceRanks(tg *core.TraceGraphData) map[string]int {
-	order := traceTopoOrder(tg)
-	ranks := make(map[string]int, len(tg.Documents))
-	for _, d := range order {
-		for _, e := range tg.Edges {
-			if e.Source == d.Path {
-				if r := ranks[d.Path] + 1; r > ranks[e.Target] {
-					ranks[e.Target] = r
+	bfsFrom := func(start string) {
+		queue := []string{start}
+		visited[start] = true
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			for _, e := range outgoing[cur] {
+				if !visited[e.Target] {
+					visited[e.Target] = true
+					treeParent[e.Target] = cur
+					queue = append(queue, e.Target)
 				}
 			}
 		}
 	}
-	return ranks
-}
+	for _, r := range roots {
+		if !visited[r] {
+			bfsFrom(r)
+		}
+	}
+	// Pick up unvisited nodes (in cycles unreachable from roots).
+	for _, d := range tg.Documents {
+		if !visited[d.Path] {
+			roots = append(roots, d.Path)
+			bfsFrom(d.Path)
+		}
+	}
 
-// writeTraceNode writes a single <li> node with type badge and optional parent annotations.
-func writeTraceNode(b *strings.Builder, d core.TraceDocument, parents []string) {
-	hue := typeHue(d.Type)
-	fmt.Fprintf(b, `<li class="trace-graph-item" style="--type-hue:%d">`, hue)
-	writeTraceNodeInner(b, d, parents)
-	b.WriteString(`</li>`)
-}
+	// Classify edges.
+	treeChildren := make(map[string][]core.TraceEdge)
+	extraParents := make(map[string][]core.TraceEdge)
+	backEdges := make(map[string][]core.TraceEdge)
+	for _, e := range tg.Edges {
+		if treeParent[e.Target] == e.Source {
+			treeChildren[e.Source] = append(treeChildren[e.Source], e)
+			continue
+		}
+		if isAncestor(treeParent, e.Source, e.Target) || e.Target == e.Source {
+			backEdges[e.Source] = append(backEdges[e.Source], e)
+		} else {
+			extraParents[e.Target] = append(extraParents[e.Target], e)
+		}
+	}
 
-func writeTraceNodeInner(b *strings.Builder, d core.TraceDocument, parents []string) {
-	b.WriteString(`<span class="trace-doc-name">`)
-	b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
-	b.WriteString(`</span>`)
-	writeTypeBadge(b, d.Type)
-	if len(parents) > 0 {
-		b.WriteString(` <span class="trace-parents">← `)
-		b.WriteString(template.HTMLEscapeString(strings.Join(parents, ", ")))
-		b.WriteString(`</span>`)
+	return spanningForest{
+		roots:        roots,
+		treeChildren: treeChildren,
+		extraParents: extraParents,
+		backEdges:    backEdges,
+		docByPath:    docByPath,
 	}
 }
 
-func writeTraceNodeBlock(b *strings.Builder, d core.TraceDocument) {
-	hue := typeHue(d.Type)
-	fmt.Fprintf(b, `<div class="trace-graph-item trace-graph-root" style="--type-hue:%d">`, hue)
-	b.WriteString(`<span class="trace-doc-name">`)
-	b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
-	b.WriteString(`</span>`)
-	writeTypeBadge(b, d.Type)
-	b.WriteString(`</div>`)
-}
-
-func writeTypeBadge(b *strings.Builder, docType string) {
-	if docType == "" {
-		return
+// isAncestor checks whether target is an ancestor of source in the spanning tree.
+func isAncestor(treeParent map[string]string, source, target string) bool {
+	cur := source
+	for {
+		p, ok := treeParent[cur]
+		if !ok {
+			return false
+		}
+		if p == target {
+			return true
+		}
+		cur = p
 	}
-	fmt.Fprintf(b, ` <span class="trace-type-badge">%s</span>`, template.HTMLEscapeString(docType))
 }
 
-// renderTraceMatrix builds an HTML adjacency matrix table.
-func renderTraceMatrix(tg *core.TraceGraphData) string {
+// renderTraceGraph renders the trace graph as a spanning forest with inline
+// annotations for non-tree edges (extra parents, back-edges/cycles).
+func renderTraceGraph(tg *core.TraceGraphData) string {
 	if len(tg.Documents) == 0 {
 		return ""
 	}
 
-	// Collect all edge types per (source, target) pair.
-	type cellKey struct{ src, tgt string }
-	cells := make(map[cellKey][]string)
-	for _, e := range tg.Edges {
-		k := cellKey{e.Source, e.Target}
-		cells[k] = append(cells[k], e.EdgeName)
-	}
+	sf := buildSpanningForest(tg)
 
 	var b strings.Builder
-	b.WriteString(`<h2>Coverage Matrix</h2>`)
-	b.WriteString(`<div class="trace-matrix-wrap"><table class="trace-matrix">`)
+	b.WriteString(`<div class="trace-forest">`)
 
-	// Header row.
-	b.WriteString(`<thead><tr><th></th>`)
-	for _, d := range tg.Documents {
-		b.WriteString(`<th class="trace-matrix-colhead">`)
+	var writeNode func(path string)
+	writeNode = func(path string) {
+		d := sf.docByPath[path]
+		b.WriteString(`<li class="trace-node">`)
 		b.WriteString(template.HTMLEscapeString(titleFromPath(d.Path)))
-		b.WriteString(`</th>`)
-	}
-	b.WriteString(`</tr></thead><tbody>`)
-
-	// Data rows.
-	for _, src := range tg.Documents {
-		b.WriteString(`<tr><th>`)
-		b.WriteString(template.HTMLEscapeString(titleFromPath(src.Path)))
-		b.WriteString(`</th>`)
-		for _, tgt := range tg.Documents {
-			k := cellKey{src.Path, tgt.Path}
-			edges := cells[k]
-			switch {
-			case len(edges) > 0:
-				b.WriteString(`<td class="trace-matrix-filled">`)
-				b.WriteString(template.HTMLEscapeString(strings.Join(edges, ", ")))
-				b.WriteString(`</td>`)
-			case src.Path == tgt.Path:
-				b.WriteString(`<td class="trace-matrix-diag"></td>`)
-			default:
-				b.WriteString(`<td></td>`)
+		writeExtraParents(&b, sf.extraParents[path])
+		writeBackEdges(&b, sf.backEdges[path])
+		if children := sf.treeChildren[path]; len(children) > 0 {
+			b.WriteString(`<ul>`)
+			for _, e := range children {
+				writeNode(e.Target)
 			}
+			b.WriteString(`</ul>`)
 		}
-		b.WriteString(`</tr>`)
+		b.WriteString(`</li>`)
 	}
 
-	b.WriteString(`</tbody></table></div>`)
+	for _, r := range sf.roots {
+		b.WriteString(`<ul class="trace-tree">`)
+		writeNode(r)
+		b.WriteString(`</ul>`)
+	}
+
+	b.WriteString(`</div>`)
 	return b.String()
+}
+
+func writeExtraParents(b *strings.Builder, extras []core.TraceEdge) {
+	if len(extras) == 0 {
+		return
+	}
+	var parts []string
+	for _, e := range extras {
+		ann := titleFromPath(e.Source)
+		if e.EdgeName != "" {
+			ann += " (" + e.EdgeName + ")"
+		}
+		parts = append(parts, ann)
+	}
+	fmt.Fprintf(b, ` <span class="trace-also">← also: %s</span>`,
+		template.HTMLEscapeString(strings.Join(parts, ", ")))
+}
+
+func writeBackEdges(b *strings.Builder, backs []core.TraceEdge) {
+	if len(backs) == 0 {
+		return
+	}
+	var parts []string
+	for _, e := range backs {
+		parts = append(parts, titleFromPath(e.Target))
+	}
+	fmt.Fprintf(b, ` <span class="trace-cycle">↻ %s</span>`,
+		template.HTMLEscapeString(strings.Join(parts, ", ")))
 }
 
 // typeHue returns a stable hue (0–359) for a type string.
@@ -2700,152 +2460,36 @@ code, pre, kbd, samp {
   margin: 0.5rem 0 1.5rem;
 }
 
-/* ── Trace graph (HTML) ── */
-.trace-graph-list {
-  list-style: none;
-  padding-left: 1.5rem;
-  margin: 0.25rem 0;
-}
+/* ── Trace graph ── */
+.trace-forest { margin: 1rem 0; }
 
-.trace-graph-item {
-  padding: 0.3rem 0.55rem;
-  margin: 0.25rem 0;
-  border-left: 3px solid hsl(var(--type-hue, 0) 40% 72%);
-  background: hsl(var(--type-hue, 0) 55% 96%);
-  border-radius: 0 0.2rem 0.2rem 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.trace-graph-root {
-  font-weight: 600;
-  font-size: 1rem;
-  margin-bottom: 0.5rem;
-}
-
-.trace-doc-name {
-  font-weight: 600;
-}
-
-.trace-type-badge {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.08em 0.4em;
-  border-radius: 0.15rem;
-  background: hsl(var(--type-hue, 0) 40% 88%);
-  color: hsl(var(--type-hue, 0) 45% 40%);
-  vertical-align: middle;
-}
-
-.trace-parents {
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-style: italic;
-}
-
-.trace-chain {
+.trace-tree {
   list-style: none;
   padding: 0;
-  margin: 1rem 0;
-  max-width: 24rem;
+  margin: 0.5rem 0;
 }
 
-.trace-chain-arrow {
+.trace-tree ul {
+  list-style: none;
+  padding-left: 1.5rem;
+  margin: 0;
+}
+
+.trace-node {
+  padding: 0.2rem 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.trace-also {
   color: var(--muted);
-  padding: 0.15rem 0 0.15rem 0.55rem;
   font-size: 0.82rem;
-}
-
-.trace-edge-name {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
   font-style: italic;
 }
 
-.trace-star { margin: 1rem 0; }
-.trace-star > .trace-graph-list { padding-left: 2rem; }
-
-.trace-tree { margin: 1rem 0; }
-.trace-tree > .trace-graph-list { padding-left: 0; }
-
-.trace-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--cols, 3), 1fr);
-  gap: 1rem;
-  margin: 1rem 0;
-}
-
-.trace-grid-col > .trace-graph-list { padding-left: 0; }
-
-.trace-grid-header {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--rule);
-  margin-bottom: 0.5rem;
-}
-
-.trace-ranked { margin: 1rem 0; }
-.trace-ranked > .trace-graph-list { padding-left: 0; }
-.trace-ranked > .trace-graph-list + .trace-graph-list {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--rule);
-}
-
-/* ── Trace matrix ── */
-.trace-matrix-wrap {
-  overflow-x: auto;
-  margin: 1rem 0 2rem;
-}
-
-.trace-matrix {
-  border-collapse: collapse;
+.trace-cycle {
+  color: var(--fail-mark);
   font-size: 0.82rem;
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-
-.trace-matrix th,
-.trace-matrix td {
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--rule);
-  text-align: center;
-}
-
-.trace-matrix thead th {
-  background: var(--code-bg);
-  font-weight: normal;
-  font-size: 0.75rem;
-}
-
-.trace-matrix tbody th {
-  text-align: right;
-  background: var(--code-bg);
-  font-weight: normal;
-}
-
-.trace-matrix-colhead {
-  writing-mode: vertical-lr;
-  transform: rotate(180deg);
-  max-width: 2rem;
-}
-
-.trace-matrix-filled {
-  background: hsl(210 50% 93%);
-  color: var(--accent);
-  font-size: 0.78rem;
-}
-
-.trace-matrix-diag {
-  background: var(--code-bg);
 }
 
 /* ── Trace errors ── */

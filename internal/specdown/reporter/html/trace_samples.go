@@ -87,15 +87,7 @@ func WriteTraceSampleGallery(outDir string) error {
 		var body strings.Builder
 		fmt.Fprintf(&body, `<h1>%s</h1>`, s.Name)
 		fmt.Fprintf(&body, `<p>%s</p>`, s.Description)
-		fmt.Fprintf(&body, `<p class="trace-meta">Class: <strong>%s</strong> · Layout: <strong>%s</strong>`,
-			tg.Class, tg.Layout)
-		fmt.Fprintf(&body, ` · %d documents · %d edges`, len(tg.Documents), len(tg.Edges))
-		if len(tg.Layers) > 0 {
-			fmt.Fprintf(&body, ` · Layers: %s`, strings.Join(tg.Layers, " → "))
-		}
-		body.WriteString(`</p>`)
 		body.WriteString(renderTraceGraph(&tg))
-		body.WriteString(renderTraceMatrix(&tg))
 
 		// Add sample trace errors for visual testing.
 		errs := sampleTraceErrors(s)
