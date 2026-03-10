@@ -1,9 +1,18 @@
+---
+type: spec
+---
+
 # CLI
+
+The `specdown` command line drives every workflow: scaffolding projects,
+running specs, generating reports, and dumping Alloy models.
 
 ## Getting Started
 
-A specdown workflow has three parts: a spec document that describes behavior,
-a configuration file that registers adapters, and the `specdown run` command.
+A specdown workflow has three parts:
+a [depends::spec document](syntax.spec.md) that describes behavior,
+a [depends::configuration file](config.spec.md) that registers adapters,
+and the `specdown run` command.
 
 ### A Minimal Spec
 

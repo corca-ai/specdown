@@ -1,8 +1,15 @@
+---
+type: spec
+---
+
 # Configuration
 
-specdown uses a data-only JSON configuration file.
-The canonical config must not depend on any specific language runtime.
-For v1, a single `specdown.json` is sufficient.
+Every project needs a `specdown.json`. It tells specdown where specs live,
+which [depends::adapters](adapter-protocol.spec.md) to launch, and what
+[reporters](report.spec.md) to generate.
+
+The config is data-only JSON — no scripting, no language runtime dependency.
+For v1, a single file is sufficient.
 
 ```json
 {
@@ -83,6 +90,29 @@ the user adapter takes precedence over the built-in.
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification. Can be omitted if not used |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
+| `trace` | Trace graph configuration. See [Trace Graph](trace.spec.md) |
+
+### Adapter Fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique identifier for the adapter |
+| `command` | Array of strings — the executable and its arguments |
+| `blocks` | List of block prefixes this adapter handles (e.g. `["run:myapp"]`) |
+| `checks` | List of check names this adapter handles (e.g. `["user-exists"]`) |
+
+### Reporter Fields
+
+| Field | Description |
+|-------|-------------|
+| `builtin` | Reporter type: `"html"` or `"json"` |
+| `outFile` | Output path. For HTML, this is a directory; for JSON, a file path |
+
+### Models Fields
+
+| Field | Description |
+|-------|-------------|
+| `builtin` | Model checker: only `"alloy"` is supported |
 
 ## Defaults
 

@@ -1,8 +1,37 @@
+---
+type: spec
+---
+
 # Trace Graph
 
-Documents are nodes. Named, typed links between documents are edges.
-Edge names, types, and properties are configured in `specdown.json`.
-Everything else is derived.
+Consider a project with four layers of documentation: Themes describe
+business goals, Epics break themes into deliverables, User Stories
+describe end-user behavior, and Acceptance Tests verify each story.
+How do you know every story has at least one test? That every epic
+traces back to a theme? That no test is orphaned?
+
+The trace graph answers these questions. Documents are nodes; named,
+typed links between them are edges. Configure edge types and
+cardinality constraints in [depends::specdown.json](config.spec.md),
+and specdown checks them automatically:
+
+```json
+{
+  "trace": {
+    "types": ["theme", "epic", "story", "at"],
+    "edges": {
+      "decomposes": { "from": "epic",  "to": "theme", "count": "1 → 1..*" },
+      "covers":     { "from": "story", "to": "epic",  "count": "1 → 1..*" },
+      "tests":      { "from": "at",    "to": "story", "count": "1 → 1..*" }
+    }
+  }
+}
+```
+
+With this configuration, `specdown trace --strict` fails if any epic
+lacks a theme link, any story is not covered by an acceptance test,
+or any document violates its declared cardinality. Everything else
+is derived.
 
 ## Authoring Surface
 

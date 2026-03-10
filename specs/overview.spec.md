@@ -1,3 +1,7 @@
+---
+type: guide
+---
+
 # Overview
 
 `specdown` is a Markdown-first executable specification system.
@@ -31,7 +35,7 @@ brew install corca-ai/tap/specdown
 specdown init
 ```
 
-This creates `specdown.json`, `specs/index.spec.md`, and `specs/example.spec.md`.
+This creates a [explains::configuration file](config.spec.md) and example specs.
 
 ```run:shell
 # Scaffold a fresh project and verify files exist
@@ -49,7 +53,10 @@ yes
 
 ### What a spec looks like
 
-This section is a working example. In the HTML report, the block below appears green:
+This document is itself a spec — the blocks below are executed when
+you run `specdown run`, and their results appear in the
+[explains::HTML report](report.spec.md).
+A green left border means the block passed:
 
 ```run:shell
 $ echo hello
@@ -70,8 +77,8 @@ goodbye
 specdown run
 ```
 
-Specs are parsed, executed via adapters, and results are rendered as an HTML report.
-Use `-dry-run` to validate syntax without executing.
+Specs are parsed, executed via [explains::adapters](adapter-protocol.spec.md), and results are rendered as an [explains::HTML report](report.spec.md).
+See the [explains::CLI reference](cli.spec.md) for all flags. Use `-dry-run` to validate syntax without executing.
 
 ```run:shell
 $ cd .tmp-test/init-overview && specdown run -dry-run 2>&1 | grep 'spec(s)'
@@ -90,4 +97,8 @@ This installs the `/specdown` skill with syntax reference, adapter protocol, and
 
 When documents and test code are separated, properties stated in documents may not be verified, and tests verify behavior but do not explain design intent.
 
-specdown solves this by making a single Markdown document serve as prose, executable tests, and optional formal models.
+specdown solves this by making a single Markdown document serve as prose, executable tests, and optional [explains::formal models](alloy.spec.md).
+Alloy models let you prove that a property holds for every case within a bounded scope — not just the examples you happened to test.
+Combined in one document, prose explains intent, executable blocks confirm implementation, and Alloy models guarantee structural properties.
+
+The next chapter, [explains::Spec Syntax](syntax.spec.md), covers the full authoring surface: executable blocks, variables, check tables, and hooks.

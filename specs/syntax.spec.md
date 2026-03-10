@@ -1,7 +1,12 @@
+---
+type: spec
+---
+
 # Spec Syntax
 
-This document builds up spec syntax from simple to complex:
-headings, executable blocks, variables, check tables, hooks, and frontmatter.
+A spec file is plain Markdown. This document builds up the authoring surface
+from simple to complex: headings, executable blocks, variables, check tables,
+hooks, and frontmatter.
 
 ## Headings and Prose
 

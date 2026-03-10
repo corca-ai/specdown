@@ -272,6 +272,15 @@ func rewriteTraceLinks(html string) string {
 	})
 }
 
+// typeHue returns a stable hue (0–359) for a type string.
+func typeHue(t string) int {
+	var h uint32
+	for _, c := range t {
+		h = h*31 + uint32(c)
+	}
+	return int(h % 360)
+}
+
 // buildDocMeta creates a summary for a single document result.
 func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
 	passed := 0
@@ -501,6 +510,7 @@ func renderDocument(result core.DocumentResult) (string, error) {
 	var out strings.Builder
 	var sectionStack []int
 	var accBindings []core.Binding
+	h1Done := false
 	for _, node := range result.Document.Nodes {
 		sectionStack = closeSections(&out, sectionStack, node, result.Document.RelativeTo)
 		var rendered string
@@ -513,6 +523,9 @@ func renderDocument(result core.DocumentResult) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if !h1Done {
+			h1Done = maybeInjectTypeBadge(&out, node, result.Document.Frontmatter.Type)
+		}
 		out.WriteString(rendered)
 		accBindings = accumulateNodeBindings(accBindings, node, caseResults)
 	}
@@ -520,6 +533,22 @@ func renderDocument(result core.DocumentResult) (string, error) {
 		out.WriteString(`</section>`)
 	}
 	return out.String(), nil
+}
+
+// maybeInjectTypeBadge writes a type badge before the first H1 heading.
+// It returns true if the H1 was found (regardless of whether a badge was written).
+func maybeInjectTypeBadge(out *strings.Builder, node core.Node, docType string) bool {
+	h, ok := node.(core.HeadingNode)
+	if !ok || h.Level != 1 {
+		return false
+	}
+	if docType != "" {
+		hue := typeHue(docType)
+		fmt.Fprintf(out,
+			`<span class="doc-type" style="--type-hue:%d">%s</span>`,
+			hue, template.HTMLEscapeString(docType))
+	}
+	return true
 }
 
 func closeSections(out *strings.Builder, sectionStack []int, node core.Node, documentPath string) []int {
@@ -1626,6 +1655,21 @@ main {
   letter-spacing: -0.01em;
   margin-bottom: 0.4rem;
   text-wrap: balance;
+}
+
+.doc-type {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15em 0.5em;
+  border-radius: 0.2rem;
+  margin-bottom: 0.3rem;
+  background: hsl(var(--type-hue) 55% 92%);
+  color: hsl(var(--type-hue) 50% 35%);
+  border: 1px solid hsl(var(--type-hue) 40% 82%);
 }
 
 .spec-body :is(h2, h3, h4, h5, h6) {

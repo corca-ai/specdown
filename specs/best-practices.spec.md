@@ -1,4 +1,12 @@
+---
+type: guide
+---
+
 # Best Practices
+
+This guide collects patterns that work well in practice and mistakes
+to avoid. Read the [explains::Spec Syntax](syntax.spec.md) and
+[explains::Alloy Models](alloy.spec.md) chapters first.
 
 ## Document Structure
 
@@ -31,6 +39,31 @@ Neither replaces the other. The power is in combining them in the same document.
 ### 1. Property and Implementation Side by Side
 
 Place an `alloy:model` block with a `check` statement and a check table in the same section. Readers see both the design guarantee and the implementation confirmation together. When a `check` exists in the model block, the HTML report links the result automatically — no `alloy:ref` needed.
+
+Here is a minimal example — an Alloy model proves that every item has an owner,
+and a check table confirms the implementation enforces the same rule:
+
+```alloy:model(ownership)
+module ownership
+
+sig User {}
+sig Item { owner: one User }
+
+assert everyItemHasOwner {
+  all i: Item | one i.owner
+}
+
+check everyItemHasOwner for 5
+```
+
+```run:shell
+# Verify the ownership model passes
+mkdir -p .tmp-test
+printf '%s\n' '# Ownership' '' '```alloy:model(ownership)' 'module ownership' '' 'sig User {}' 'sig Item { owner: one User }' '' 'assert everyItemHasOwner {' '  all i: Item | one i.owner' '}' '' 'check everyItemHasOwner for 5' '```' > .tmp-test/ownership.spec.md
+printf '# T\n\n- [Own](ownership.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/ownership-cfg.json
+specdown run -config .tmp-test/ownership-cfg.json 2>&1 | grep -q 'PASS'
+```
 
 ### 2. Counterexample Harvesting
 
@@ -84,6 +117,8 @@ The prime operator (`e'`) refers to the value of `e` in the next state. Without 
 - **Implementation checks without rationale** — future readers cannot tell which rows are essential. Add prose explaining why each case matters.
 - **Alloy in a separate file** — defeats the purpose. Model and implementation checks should share the same section and prose context.
 - **Over-modeling** — simple CRUD does not need Alloy. Use it when the state space is large enough that example-based testing cannot cover it.
+- **Hardcoded paths in [explains::config](config.spec.md)** — use relative paths so the project works from any checkout location.
+- **Monolithic [explains::adapter](adapter-protocol.spec.md)** — keep adapters focused on one execution environment. Split when complexity grows.
 
 ## Choosing the Right Tool
 

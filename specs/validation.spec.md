@@ -1,9 +1,27 @@
+---
+type: spec
+---
+
 # Validation Rules
 
-specdown validates spec documents at parse time and rejects malformed input
-before any adapter is invoked. The following errors are caught during parsing.
+Malformed specs fail fast. specdown validates documents against the
+[depends::spec syntax](syntax.spec.md) at parse time and rejects errors
+before any adapter is invoked. Each section below demonstrates one
+class of parse-time error.
 
 ## Unclosed code block
+
+A properly closed code block parses without error:
+
+```run:shell
+# Accept well-formed code block
+mkdir -p .tmp-test
+BT=$(printf '\140\140\140')
+printf '%s\n' '# Good' '' "\${BT}run:shell" 'echo ok' "\${BT}" > .tmp-test/closed.spec.md
+printf '# T\n\n- [C](closed.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/closed-cfg.json
+specdown run -config .tmp-test/closed-cfg.json -dry-run 2>&1 | grep -q 'spec(s)'
+```
 
 A spec with an unclosed fenced code block must be rejected at parse time.
 
@@ -55,6 +73,18 @@ specdown run -config .tmp-test/check-call-cfg.json -dry-run 2>&1
 
 ## Hook without code block
 
+A hook followed by an executable code block is valid:
+
+```run:shell
+# Accept hook with executable code block
+mkdir -p .tmp-test
+BT=$(printf '\140\140\140')
+printf '%s\n' '# Good' '' '> setup' '' "\${BT}run:shell" 'echo init' "\${BT}" '' '## S' '' 'Prose.' > .tmp-test/hook-ok.spec.md
+printf '# T\n\n- [H](hook-ok.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-ok-cfg.json
+specdown run -config .tmp-test/hook-ok-cfg.json -dry-run 2>&1 | grep -q 'spec(s)'
+```
+
 A setup or teardown directive not followed by a code block must be rejected.
 
 ```run:shell
@@ -78,6 +108,24 @@ printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-nonexec-cfg.js
 ```
 
 ## Table structure
+
+A well-formed check table with a header, separator, and data rows is valid:
+
+```run:shell
+# Accept well-formed check table
+mkdir -p .tmp-test
+cat <<'SPEC' > .tmp-test/table-ok.spec.md
+# Good
+
+> check:cell-escape
+| input | expected |
+| --- | --- |
+| hello | hello |
+SPEC
+printf '# T\n\n- [TO](table-ok.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"checks":["cell-escape"]}]}' > .tmp-test/table-ok-cfg.json
+specdown run -config .tmp-test/table-ok-cfg.json -dry-run 2>&1 | grep -q 'spec(s)'
+```
 
 A table header must define at least one column.
 

@@ -1,9 +1,17 @@
+---
+type: spec
+---
+
 # Alloy Models
 
-Alloy fragments can be embedded directly in a spec document using
-`alloy:model(name)` code blocks. This supports literate-style formal
-verification — Alloy models are woven with natural language inside
-the document.
+Executable blocks test selected examples; Alloy proves properties
+for all cases within scope. Both live in the same document.
+
+Alloy fragments are embedded using `alloy:model(name)`
+[depends::code blocks](syntax.spec.md) and verified through the
+[depends::Alloy runner](adapter-protocol.spec.md).
+See [Best Practices](best-practices.spec.md) for patterns
+on combining Alloy models with implementation checks.
 
 ## Embedding Rules
 
@@ -19,8 +27,9 @@ is automatically displayed as a status badge in the HTML report.
 
 ## Formal Properties
 
-The document model has a simple structural invariant:
-every executable block belongs to exactly one heading scope.
+specdown's own document model provides a worked example.
+Every executable unit belongs to exactly one heading scope,
+and no two heading scopes can share an executable unit.
 
 ```alloy:model(docmodel)
 module docmodel
@@ -36,7 +45,11 @@ sig TableRow {
 }
 ```
 
-A block must not belong to more than one heading scope.
+The `one` multiplicity on `scope` already guarantees single ownership,
+so the following assertions are provably true by construction.
+In a real project you would model properties that are *not* obvious
+from the signature alone — this example is deliberately simple to
+introduce the syntax.
 
 ```alloy:model(docmodel)
 assert blockBelongsToOneScope {
@@ -45,8 +58,6 @@ assert blockBelongsToOneScope {
 
 check blockBelongsToOneScope for 5
 ```
-
-A table row must not belong to more than one heading scope.
 
 ```alloy:model(docmodel)
 assert rowBelongsToOneScope {

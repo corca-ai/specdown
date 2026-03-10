@@ -1,4 +1,19 @@
+---
+type: spec
+---
+
 # Internals
+
+This chapter describes how specdown is built. It is not required for
+writing specs, but helps adapter authors and contributors understand
+the core/adapter/reporter separation.
+
+You can verify the tool is available and see its version:
+
+```run:shell
+$ specdown version
+...
+```
 
 ## Design Pillars
 
@@ -30,13 +45,21 @@ Spec Document (.spec.md)
           +-- model check + event emission
 ```
 
-- Core structures the document and creates the execution plan
-- Runtime adapter turns each block/table into an actual test or command
-- Reporter turns execution events into human-readable output
-- Alloy runner feeds formal verification results into the same event model
-- Adapters connect as out-of-process commands
+The core parses the document and produces an execution plan — a list of
+blocks and table rows tagged with adapter names. It never executes anything
+itself. The runtime adapter receives each unit, runs the actual code, and
+emits pass/fail events. The reporter collects those events and renders
+the final HTML or JSON output. The Alloy runner is a parallel path:
+it extracts embedded model fragments, invokes the Alloy solver, and
+feeds results into the same event stream.
+
+All four components communicate through a common event schema. This means
+a new reporter or a new adapter can be added without changing the core.
 
 ## Core and Adapter Boundary
+
+Core parses [depends::spec documents](syntax.spec.md) and produces an execution plan.
+Adapters execute it via the [depends::adapter protocol](adapter-protocol.spec.md).
 
 Core is responsible for:
 
@@ -59,3 +82,11 @@ Reporters are responsible for:
 - Rendering execution results as HTML/JSON from the event stream
 
 Core must not know about any specific test framework, product-specific filesystem layouts, product-specific command vocabularies, or the adapter implementation language.
+
+A dry run demonstrates the boundary: the core parses and validates
+without launching any adapter.
+
+```run:shell
+$ specdown run -dry-run 2>&1 | grep 'spec(s)'
+...
+```

@@ -9,16 +9,16 @@
     }
   ],
   "reporters": [
-    {
-      "builtin": "html",
-      "outFile": "report"
-    },
-    {
-      "builtin": "json",
-      "outFile": "report.json"
-    }
+    { "builtin": "html", "outFile": "report" },
+    { "builtin": "json", "outFile": "report.json" }
   ],
-  "models": {
-    "builtin": "alloy"
+  "models": { "builtin": "alloy" },
+  "trace": {
+    "types": ["spec", "guide"],
+    "ignore": [".tmp-test/**"],
+    "edges": {
+      "depends":  { "from": "spec",  "to": "spec",  "acyclic": true, "transitive": true },
+      "explains": { "from": "guide", "to": "spec",  "count": "1..* → 0..*" }
+    }
   }
 }

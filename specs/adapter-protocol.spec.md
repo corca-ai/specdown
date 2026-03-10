@@ -1,10 +1,16 @@
+---
+type: spec
+---
+
 # Adapter Protocol
 
-The adapter boundary is a process protocol, not an in-process language API.
-This allows each project to build adapters with minimal effort in any language.
+Adapters are how specs talk to real code.
+The boundary is a process protocol, not an in-process language API —
+any executable that reads NDJSON from stdin and writes NDJSON to stdout is an adapter.
 
-An adapter is an executable that exchanges NDJSON messages via stdin/stdout.
-Any language works as long as it reads JSON from stdin and writes JSON to stdout.
+Adapters execute the [depends::executable blocks](syntax.spec.md) defined in spec documents
+and evaluate [depends::check table](syntax.spec.md) rows.
+This allows each project to build adapters with minimal effort in any language.
 
 ## Protocol Flow
 
@@ -211,6 +217,43 @@ while IFS= read -r line; do
       ;;
   esac
 done
+```
+
+### End-to-End Example
+
+Here is a minimal adapter that actually runs. It echoes the source back as output
+for `exec` requests and passes all `assert` requests.
+
+```run:shell
+# Create a minimal echo adapter
+mkdir -p .tmp-test
+cat <<'ADAPTER' > .tmp-test/echo-adapter.sh
+#!/bin/sh
+while IFS= read -r line; do
+  type=$(printf '%s' "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
+  id=$(printf '%s' "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+  case "$type" in
+    exec) printf '{"id":%s,"output":"echo-ok"}\n' "$id" ;;
+    assert) printf '{"id":%s,"type":"passed"}\n' "$id" ;;
+  esac
+done
+ADAPTER
+chmod +x .tmp-test/echo-adapter.sh
+```
+
+Wire the adapter to a spec and run it:
+
+```run:shell
+# Run a spec through the echo adapter
+BT=$(printf '\140\140\140')
+printf '%s\n' '# E2E' '' "\${BT}run:echo" 'some source' "\${BT}" > .tmp-test/e2e.spec.md
+printf '# T\n\n- [E2E](e2e.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"echo","command":["sh","./echo-adapter.sh"],"blocks":["run:echo"]}]}' > .tmp-test/e2e-cfg.json
+```
+
+```run:shell
+$ specdown run -config .tmp-test/e2e-cfg.json 2>&1 | head -1
+...
 ```
 
 ### Structured Failure Reporting
