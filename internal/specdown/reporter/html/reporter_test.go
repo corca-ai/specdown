@@ -605,3 +605,25 @@ func TestWriteRewritesMarkdownLinksToHTML(t *testing.T) {
 	assertNotContains(t, html, `.spec.md`, "no .spec.md links in output")
 	assertNotContains(t, html, `guide.md`, "no .md links in output")
 }
+
+func TestWriteOverwritesStaleFile(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	// Create a plain file at the output path (simulates stale artifact).
+	if err := os.WriteFile(outDir, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := buildMainTestReport()
+	if err := Write(report, outDir); err != nil {
+		t.Fatalf("Write should overwrite stale file: %v", err)
+	}
+
+	info, err := os.Stat(outDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected outDir to be a directory after Write")
+	}
+}

@@ -49,6 +49,12 @@ type globalTocEntry struct {
 // outDir is the output directory. Each document result becomes a separate HTML page.
 // Shared CSS and JS are written as style.css and script.js.
 func Write(report core.Report, outDir string) error {
+	// Remove any existing non-directory at outDir so MkdirAll succeeds.
+	if info, err := os.Stat(outDir); err == nil && !info.IsDir() {
+		if err := os.Remove(outDir); err != nil {
+			return fmt.Errorf("remove stale file at output dir: %w", err)
+		}
+	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
