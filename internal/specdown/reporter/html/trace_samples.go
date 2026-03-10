@@ -191,17 +191,17 @@ func htmlSafe(s string) template.HTML {
 func buildTreeSample() TraceSample {
 	return TraceSample{
 		Name:        "Tree",
-		Description: "A hierarchical spec tree with a root branching into subsystems, each with leaf specs. No shared children.",
+		Description: "A hierarchical spec tree with an overview branching into subsystems, each with leaf specs.",
 		Graph: trace.Graph{
 			Documents: []trace.TypedDocument{
-				{Path: "platform.spec.md", Type: "spec"},
+				{Path: "platform.spec.md", Type: "guide"},
 				{Path: "api.spec.md", Type: "spec"},
 				{Path: "ui.spec.md", Type: "spec"},
 				{Path: "rest.spec.md", Type: "spec"},
 				{Path: "graphql.spec.md", Type: "spec"},
 				{Path: "dashboard.spec.md", Type: "spec"},
 				{Path: "settings.spec.md", Type: "spec"},
-				{Path: "onboarding.spec.md", Type: "spec"},
+				{Path: "onboarding.md", Type: "guide"},
 			},
 			DirectEdges: []trace.Edge{
 				{Source: "platform.spec.md", Target: "api.spec.md", EdgeName: "depends"},
@@ -210,7 +210,7 @@ func buildTreeSample() TraceSample {
 				{Source: "api.spec.md", Target: "graphql.spec.md", EdgeName: "depends"},
 				{Source: "ui.spec.md", Target: "dashboard.spec.md", EdgeName: "depends"},
 				{Source: "ui.spec.md", Target: "settings.spec.md", EdgeName: "depends"},
-				{Source: "ui.spec.md", Target: "onboarding.spec.md", EdgeName: "depends"},
+				{Source: "ui.spec.md", Target: "onboarding.md", EdgeName: "explains"},
 			},
 		},
 	}
@@ -219,13 +219,13 @@ func buildTreeSample() TraceSample {
 func buildForestSample() TraceSample {
 	return TraceSample{
 		Name:        "Forest",
-		Description: "Disconnected spec trees for independent subsystems. Auth and Payments have separate hierarchies with no cross-links.",
+		Description: "Disconnected trees for independent subsystems with no cross-links.",
 		Graph: trace.Graph{
 			Documents: []trace.TypedDocument{
 				{Path: "auth.spec.md", Type: "spec"},
 				{Path: "login.spec.md", Type: "spec"},
 				{Path: "signup.spec.md", Type: "spec"},
-				{Path: "oauth.spec.md", Type: "spec"},
+				{Path: "oauth.md", Type: "guide"},
 				{Path: "payments.spec.md", Type: "spec"},
 				{Path: "checkout.spec.md", Type: "spec"},
 				{Path: "refunds.spec.md", Type: "spec"},
@@ -233,7 +233,7 @@ func buildForestSample() TraceSample {
 			DirectEdges: []trace.Edge{
 				{Source: "auth.spec.md", Target: "login.spec.md", EdgeName: "depends"},
 				{Source: "auth.spec.md", Target: "signup.spec.md", EdgeName: "depends"},
-				{Source: "auth.spec.md", Target: "oauth.spec.md", EdgeName: "depends"},
+				{Source: "auth.spec.md", Target: "oauth.md", EdgeName: "explains"},
 				{Source: "payments.spec.md", Target: "checkout.spec.md", EdgeName: "depends"},
 				{Source: "payments.spec.md", Target: "refunds.spec.md", EdgeName: "depends"},
 			},
@@ -247,25 +247,25 @@ func buildDAGSample() TraceSample {
 		Description: "Specs with shared dependencies forming diamonds. Some nodes have multiple parents, shown as inline annotations.",
 		Graph: trace.Graph{
 			Documents: []trace.TypedDocument{
-				{Path: "config.spec.md", Type: "spec"},
+				{Path: "overview.md", Type: "guide"},
 				{Path: "auth.spec.md", Type: "spec"},
 				{Path: "database.spec.md", Type: "spec"},
 				{Path: "api.spec.md", Type: "spec"},
 				{Path: "worker.spec.md", Type: "spec"},
-				{Path: "integration.spec.md", Type: "spec"},
+				{Path: "integration.spec.md", Type: "at"},
 				{Path: "logging.spec.md", Type: "spec"},
 			},
 			DirectEdges: []trace.Edge{
-				{Source: "config.spec.md", Target: "auth.spec.md", EdgeName: "depends"},
-				{Source: "config.spec.md", Target: "database.spec.md", EdgeName: "depends"},
-				{Source: "config.spec.md", Target: "logging.spec.md", EdgeName: "depends"},
+				{Source: "overview.md", Target: "auth.spec.md", EdgeName: "covers"},
+				{Source: "overview.md", Target: "database.spec.md", EdgeName: "covers"},
+				{Source: "overview.md", Target: "logging.spec.md", EdgeName: "covers"},
 				{Source: "auth.spec.md", Target: "api.spec.md", EdgeName: "depends"},
 				{Source: "database.spec.md", Target: "api.spec.md", EdgeName: "depends"},
 				{Source: "database.spec.md", Target: "worker.spec.md", EdgeName: "depends"},
 				{Source: "logging.spec.md", Target: "api.spec.md", EdgeName: "depends"},
 				{Source: "logging.spec.md", Target: "worker.spec.md", EdgeName: "depends"},
-				{Source: "api.spec.md", Target: "integration.spec.md", EdgeName: "depends"},
-				{Source: "worker.spec.md", Target: "integration.spec.md", EdgeName: "depends"},
+				{Source: "api.spec.md", Target: "integration.spec.md", EdgeName: "tests"},
+				{Source: "worker.spec.md", Target: "integration.spec.md", EdgeName: "tests"},
 			},
 		},
 	}
@@ -273,24 +273,22 @@ func buildDAGSample() TraceSample {
 
 func buildCyclicSample() TraceSample {
 	return TraceSample{
-		Name:        "General (Cyclic)",
-		Description: "Specs with mutual dependencies forming cycles. Auth depends on Session, Session depends on Auth. Falls back to matrix layout.",
+		Name:        "Cyclic",
+		Description: "Specs with mutual dependencies forming cycles. Auth depends on Session, Session depends on Auth.",
 		Graph: trace.Graph{
 			Documents: []trace.TypedDocument{
 				{Path: "auth.spec.md", Type: "spec"},
 				{Path: "session.spec.md", Type: "spec"},
 				{Path: "permissions.spec.md", Type: "spec"},
 				{Path: "audit.spec.md", Type: "spec"},
-				{Path: "logging.spec.md", Type: "spec"},
+				{Path: "logging.md", Type: "guide"},
 			},
 			DirectEdges: []trace.Edge{
-				// Cycle: auth ↔ session
 				{Source: "auth.spec.md", Target: "session.spec.md", EdgeName: "depends"},
 				{Source: "session.spec.md", Target: "auth.spec.md", EdgeName: "depends"},
 				{Source: "auth.spec.md", Target: "permissions.spec.md", EdgeName: "depends"},
 				{Source: "permissions.spec.md", Target: "audit.spec.md", EdgeName: "depends"},
-				{Source: "audit.spec.md", Target: "logging.spec.md", EdgeName: "depends"},
-				// Another cycle: audit → session
+				{Source: "audit.spec.md", Target: "logging.md", EdgeName: "explains"},
 				{Source: "audit.spec.md", Target: "session.spec.md", EdgeName: "depends"},
 			},
 		},

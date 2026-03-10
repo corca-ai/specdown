@@ -2470,19 +2470,18 @@ code, pre, kbd, samp {
 .trace-tree {
   list-style: none;
   padding: 0;
-  margin: 0.5rem 0;
+  margin: 0;
 }
 
 .trace-tree ul {
   list-style: none;
-  padding-left: 1.5rem;
+  padding-left: 1.25rem;
   margin: 0;
 }
 
 .trace-node {
-  padding: 0.2rem 0;
   font-size: 0.9rem;
-  line-height: 1.6;
+  line-height: 1.75;
 }
 
 .trace-also {
