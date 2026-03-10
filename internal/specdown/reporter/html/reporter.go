@@ -1640,7 +1640,7 @@ main {
 
 .layout {
   display: grid;
-  grid-template-columns: 20rem minmax(0, 54rem) 20rem;
+  grid-template-columns: 20rem 1fr 20rem;
   column-gap: 2.5rem;
   align-items: start;
 }
@@ -1746,7 +1746,7 @@ main {
 .toc-item.expanded > .toc-children { display: block; }
 
 /* ── Content area ── */
-.content { min-width: 0; }
+.content { min-width: 0; max-width: 54rem; }
 
 .content-meta {
   margin-bottom: 1.5rem;
