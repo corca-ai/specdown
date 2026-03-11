@@ -15,6 +15,7 @@ const (
 	CaseKindCode         CaseKind = "code"
 	CaseKindTableRow     CaseKind = "tableRow"
 	CaseKindInlineExpect CaseKind = "inlineExpect"
+	CaseKindAlloy        CaseKind = "alloy"
 )
 
 type CaseSpec struct {
@@ -30,6 +31,10 @@ type CaseSpec struct {
 	Cells         []string
 	RowNumber     int
 	References    []string
+	// Alloy-specific fields (only set when Kind == CaseKindAlloy)
+	Model     string
+	Assertion string
+	Scope     string
 }
 
 type HookSpec struct {
@@ -45,7 +50,6 @@ type DocumentPlan struct {
 	Cases       []CaseSpec
 	Hooks       []HookSpec
 	AlloyModels []AlloyModelSpec
-	AlloyChecks []AlloyCheckSpec
 }
 
 type Plan struct {
@@ -226,12 +230,13 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 		return DocumentPlan{}, err
 	}
 
+	cases = append(cases, alloyChecks...)
+
 	return DocumentPlan{
 		Document:    doc,
 		Cases:       cases,
 		Hooks:       hooks,
 		AlloyModels: alloyModels,
-		AlloyChecks: alloyChecks,
 	}, nil
 }
 
@@ -516,6 +521,8 @@ func (c CaseSpec) TargetKey() string {
 		return c.Block.Descriptor()
 	case CaseKindInlineExpect:
 		return "expect"
+	case CaseKindAlloy:
+		return "alloy"
 	default:
 		return c.Check
 	}
@@ -527,12 +534,21 @@ func (c CaseSpec) DisplayKind() string {
 		return c.Block.Descriptor()
 	case CaseKindInlineExpect:
 		return "expect"
+	case CaseKindAlloy:
+		return "alloy:" + c.Model + "#" + c.Assertion
 	default:
 		return "check:" + c.Check
 	}
 }
 
 func (c CaseSpec) DefaultLabel() string {
+	if c.Kind == CaseKindAlloy {
+		suffix := "alloy:ref(" + c.Model + "#" + c.Assertion + ", scope=" + c.Scope + ")"
+		if len(c.ID.HeadingPath) == 0 {
+			return suffix
+		}
+		return suffix + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
+	}
 	if len(c.ID.HeadingPath) == 0 {
 		return c.DisplayKind()
 	}
@@ -541,13 +557,5 @@ func (c CaseSpec) DefaultLabel() string {
 		return c.DisplayKind() + " @ " + suffix + " row " + fmt.Sprintf("%d", c.RowNumber)
 	}
 	return c.DisplayKind() + " @ " + suffix
-}
-
-func (c AlloyCheckSpec) DefaultLabel() string {
-	suffix := "alloy:ref(" + c.Model + "#" + c.Assertion + ", scope=" + c.Scope + ")"
-	if len(c.ID.HeadingPath) == 0 {
-		return suffix
-	}
-	return suffix + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
 }
 

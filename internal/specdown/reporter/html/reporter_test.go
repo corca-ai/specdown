@@ -222,10 +222,10 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
 		Summary: core.Summary{
-			SpecsTotal:        1,
-			SpecsFailed:       1,
-			AlloyChecksTotal:  1,
-			AlloyChecksFailed: 1,
+			SpecsTotal:  1,
+			SpecsFailed: 1,
+			CasesTotal:  1,
+			CasesFailed: 1,
 		},
 		Results: []core.DocumentResult{
 			{
@@ -254,13 +254,14 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 						},
 					},
 				},
-				AlloyChecks: []core.AlloyCheckResult{
+				Cases: []core.CaseResult{
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
 							HeadingPath: []string{"Pocket Board", "Formal Rules"},
 							Ordinal:     1,
 						},
+						Kind:       core.CaseKindAlloy,
 						Model:      "board",
 						Assertion:  "cardShape",
 						Scope:      "5",
@@ -311,10 +312,10 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
 		Summary: core.Summary{
-			SpecsTotal:        1,
-			SpecsFailed:       1,
-			AlloyChecksTotal:  1,
-			AlloyChecksFailed: 1,
+			SpecsTotal:  1,
+			SpecsFailed: 1,
+			CasesTotal:  1,
+			CasesFailed: 1,
 		},
 		Results: []core.DocumentResult{
 			{
@@ -331,13 +332,14 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 						},
 					},
 				},
-				AlloyChecks: []core.AlloyCheckResult{
+				Cases: []core.CaseResult{
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
 							HeadingPath: []string{"Pocket Board"},
 							Ordinal:     1,
 						},
+						Kind:      core.CaseKindAlloy,
 						Model:     "board",
 						Assertion: "cardShape",
 						Scope:     "5",
@@ -487,10 +489,10 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
 		Summary: core.Summary{
-			SpecsTotal:        1,
-			SpecsPassed:       1,
-			AlloyChecksTotal:  1,
-			AlloyChecksPassed: 1,
+			SpecsTotal:  1,
+			SpecsPassed: 1,
+			CasesTotal:  1,
+			CasesPassed: 1,
 		},
 		Results: []core.DocumentResult{
 			{
@@ -522,13 +524,14 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 						},
 					},
 				},
-				AlloyChecks: []core.AlloyCheckResult{
+				Cases: []core.CaseResult{
 					{
 						ID: core.SpecID{
 							File:        "specs/pocket-board.spec.md",
 							HeadingPath: []string{"Pocket Board", "Formal Rules"},
 							Ordinal:     2,
 						},
+						Kind:      core.CaseKindAlloy,
 						Model:     "board",
 						Assertion: "cardShape",
 						Scope:     "5",

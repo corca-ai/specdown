@@ -104,7 +104,7 @@ func run(args []string) error {
 
 	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
 	outPath := fs.String("out", "", "Output HTML report directory")
-	filter := fs.String("filter", "", "Run only cases whose heading path contains this string")
+	filter := fs.String("filter", "", "Filter cases: heading substring, type:{code,table,expect,alloy}, block:<target>, check:<name>")
 	jobs := fs.Int("jobs", 1, "Number of spec files to run in parallel")
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
 	showBindings := fs.Bool("show-bindings", false, "Print resolved variable bindings for each case")
@@ -159,7 +159,7 @@ func run(args []string) error {
 		if report.Summary.CasesExpectedFail > 0 {
 			xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
 		}
-		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s, %d alloy check(s) in %dms\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, report.Summary.AlloyChecksFailed, elapsed.Milliseconds())
+		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, elapsed.Milliseconds())
 		if reportPath != "" {
 			fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
 		}
@@ -170,7 +170,7 @@ func run(args []string) error {
 	if report.Summary.CasesExpectedFail > 0 {
 		xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
 	}
-	fmt.Printf("PASS %d spec(s), %d case(s)%s, %d alloy check(s) in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, report.Summary.AlloyChecksTotal, elapsed.Milliseconds())
+	fmt.Printf("PASS %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, elapsed.Milliseconds())
 	if reportPath != "" {
 		fmt.Printf("report: %s\n", reportPath)
 	}
@@ -576,7 +576,6 @@ func resolvePath(baseDir string, value string) string {
 func printFailures(report core.Report) {
 	for _, doc := range report.Results {
 		printCaseFailures(doc.Cases)
-		printAlloyFailures(doc.AlloyChecks)
 	}
 }
 
@@ -592,6 +591,9 @@ func printCaseFailures(cases []core.CaseResult) {
 func printCaseFailure(c core.CaseResult) {
 	path := strings.Join(c.ID.HeadingPath, " > ")
 	kind := c.Block + c.Check
+	if c.Kind == core.CaseKindAlloy {
+		kind = "alloy:" + c.Model + "#" + c.Assertion
+	}
 	label := ""
 	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
 		label = fmt.Sprintf(" row %d", c.RowNumber)
@@ -620,19 +622,6 @@ func printCaseFailure(c core.CaseResult) {
 		fmt.Fprintf(os.Stderr, "        $ %s\n", step.Command)
 		fmt.Fprintf(os.Stderr, "        expected: %s\n", step.Expected)
 		fmt.Fprintf(os.Stderr, "        actual:   %s\n", step.Actual)
-	}
-}
-
-func printAlloyFailures(checks []core.AlloyCheckResult) {
-	for _, c := range checks {
-		if c.Status != core.StatusFailed {
-			continue
-		}
-		path := strings.Join(c.ID.HeadingPath, " > ")
-		fmt.Fprintf(os.Stderr, "  FAIL  %s  [alloy:%s#%s]\n", path, c.Model, c.Assertion)
-		if c.Message != "" {
-			fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
-		}
 	}
 }
 
@@ -674,9 +663,6 @@ func printResults(report core.Report) {
 		for _, c := range doc.Cases {
 			printCaseResult(c)
 		}
-		for _, c := range doc.AlloyChecks {
-			printAlloyResult(c)
-		}
 	}
 }
 
@@ -693,6 +679,9 @@ func caseTag(status core.Status, expectFail bool) string {
 func printCaseResult(c core.CaseResult) {
 	tag := caseTag(c.Status, c.ExpectFail)
 	kind := c.Block + c.Check
+	if c.Kind == core.CaseKindAlloy {
+		kind = "alloy:" + c.Model + "#" + c.Assertion
+	}
 	label := ""
 	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
 		label = fmt.Sprintf(" row %d", c.RowNumber)
@@ -700,28 +689,21 @@ func printCaseResult(c core.CaseResult) {
 	fmt.Printf("  %s  %s  [%s]%s  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
 }
 
-func printAlloyResult(c core.AlloyCheckResult) {
-	tag := "PASS"
-	if c.Status == core.StatusFailed {
-		tag = "FAIL"
-	}
-	fmt.Printf("  %s  %s  [alloy:%s#%s]  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), c.Model, c.Assertion, c.DurationMs)
-}
-
 func printDryRun(report core.Report) {
 	for _, doc := range report.Results {
 		fmt.Printf("spec: %s\n", doc.Document.RelativeTo)
 		for _, c := range doc.Cases {
+			if c.Kind == core.CaseKindAlloy {
+				fmt.Printf("  alloy: %s [%s#%s, scope=%s]\n", strings.Join(c.ID.HeadingPath, " > "), c.Model, c.Assertion, c.Scope)
+				continue
+			}
 			kind := c.Block
 			if c.Kind == core.CaseKindTableRow {
 				kind = "check:" + c.Check
 			}
 			fmt.Printf("  case: %s [%s]\n", strings.Join(c.ID.HeadingPath, " > "), kind)
 		}
-		for _, c := range doc.AlloyChecks {
-			fmt.Printf("  alloy: %s [%s#%s, scope=%s]\n", strings.Join(c.ID.HeadingPath, " > "), c.Model, c.Assertion, c.Scope)
-		}
 	}
-	fmt.Printf("\ntotal: %d spec(s), %d case(s), %d alloy check(s)\n",
-		report.Summary.SpecsTotal, report.Summary.CasesTotal, report.Summary.AlloyChecksTotal)
+	fmt.Printf("\ntotal: %d spec(s), %d case(s)\n",
+		report.Summary.SpecsTotal, report.Summary.CasesTotal)
 }

@@ -75,7 +75,7 @@ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true
 
 ```run:shell
 $ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | grep '^PASS' | sed 's/ in [0-9]*ms//'
-PASS 2 spec(s), 1 case(s), 0 alloy check(s)
+PASS 2 spec(s), 1 case(s)
 ```
 
 If a user adapter explicitly claims a shell block (e.g., `"blocks": ["run:shell"]`),

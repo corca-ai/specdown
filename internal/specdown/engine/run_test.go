@@ -277,13 +277,14 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 		Entry:    "specs/index.spec.md",
 		Adapters: helperAdapterConfig().Adapters,
 	}, adapterhost.Host{BaseDir: root}, fakeAlloyRunner{
-		results: map[string]core.AlloyCheckResult{
+		results: map[string]core.CaseResult{
 			"specs/pocket-board.spec.md|Pocket Board|Formal Rules|2": {
 				ID: core.SpecID{
 					File:        "specs/pocket-board.spec.md",
 					HeadingPath: []string{"Pocket Board", "Formal Rules"},
 					Ordinal:     2,
 				},
+				Kind:      core.CaseKindAlloy,
 				Model:     "board",
 				Assertion: "cardShape",
 				Scope:     "5",
@@ -296,11 +297,23 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	if report.Summary.CasesPassed != 1 || report.Summary.AlloyChecksPassed != 1 {
+	if report.Summary.CasesPassed != 2 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
 	// Results[0] is entry (no cases); Results[1] has the spec.
-	if got := report.Results[1].AlloyChecks[0].Label; got != "alloy:ref(board#cardShape, scope=5) @ Formal Rules" {
+	// Find the alloy case result.
+	var alloyResult *core.CaseResult
+	for _, c := range report.Results[1].Cases {
+		if c.Kind == core.CaseKindAlloy {
+			cr := c
+			alloyResult = &cr
+			break
+		}
+	}
+	if alloyResult == nil {
+		t.Fatal("expected alloy case result")
+	}
+	if got := alloyResult.Label; got != "alloy:ref(board#cardShape, scope=5) @ Formal Rules" {
 		t.Fatalf("unexpected alloy label %q", got)
 	}
 }
@@ -344,6 +357,146 @@ func TestFilterPlanDropsDocumentsWithNoCases(t *testing.T) {
 	}
 }
 
+func TestFilterPlanByTypeCode(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "foo"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "type:code")
+	if len(filtered.Documents) != 1 {
+		t.Fatalf("expected 1 document, got %d", len(filtered.Documents))
+	}
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Kind != core.CaseKindCode {
+		t.Fatalf("expected 1 code case, got %v", filtered.Documents[0].Cases)
+	}
+}
+
+func TestFilterPlanByTypeAlloy(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "type:alloy")
+	if len(filtered.Documents) != 1 {
+		t.Fatalf("expected 1 document, got %d", len(filtered.Documents))
+	}
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Kind != core.CaseKindAlloy {
+		t.Fatalf("expected 1 alloy case, got %v", filtered.Documents[0].Cases)
+	}
+}
+
+func TestFilterPlanByTypeTable(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "foo"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindInlineExpect},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "type:table")
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Kind != core.CaseKindTableRow {
+		t.Fatalf("expected 1 table case, got %v", filtered.Documents[0].Cases)
+	}
+}
+
+func TestFilterPlanByBlock(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "board"}},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "block:shell")
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Block.Target != "shell" {
+		t.Fatalf("expected 1 shell case, got %v", filtered.Documents[0].Cases)
+	}
+}
+
+func TestFilterPlanByCheck(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "foo"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "bar"},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "check:foo")
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Check != "foo" {
+		t.Fatalf("expected 1 foo case, got %v", filtered.Documents[0].Cases)
+	}
+}
+
+func TestFilterPlanBlockExcludesAlloy(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "block:shell")
+	alloyCount := 0
+	for _, c := range filtered.Documents[0].Cases {
+		if c.Kind == core.CaseKindAlloy {
+			alloyCount++
+		}
+	}
+	if alloyCount != 0 {
+		t.Fatalf("block: filter should exclude alloy cases, got %d", alloyCount)
+	}
+}
+
+func TestFilterPlanUnknownTypeDropsAll(t *testing.T) {
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+				},
+			},
+		},
+	}
+	filtered := filterPlan(plan, "type:unknown")
+	if len(filtered.Documents) != 0 {
+		t.Fatalf("unknown type should drop all, got %d documents", len(filtered.Documents))
+	}
+}
+
 func TestDryRunReportHasZeroStatuses(t *testing.T) {
 	plan := core.Plan{
 		Documents: []core.DocumentPlan{
@@ -351,15 +504,13 @@ func TestDryRunReportHasZeroStatuses(t *testing.T) {
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
 					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Raw: "run:shell", Kind: core.BlockKindRun, Target: "shell"}},
-				},
-				AlloyChecks: []core.AlloyCheckSpec{
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Model: "m", Assertion: "a", Scope: "5"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
 				},
 			},
 		},
 	}
 	report := dryRunReport(plan)
-	if report.Summary.CasesTotal != 1 || report.Summary.AlloyChecksTotal != 1 {
+	if report.Summary.CasesTotal != 2 {
 		t.Fatalf("unexpected totals %+v", report.Summary)
 	}
 	if report.Summary.CasesPassed != 0 || report.Summary.CasesFailed != 0 {
@@ -1046,16 +1197,23 @@ func parseHelperExists(value string) bool {
 }
 
 type fakeAlloyRunner struct {
-	results map[string]core.AlloyCheckResult
+	results map[string]core.CaseResult
 }
 
-func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, error) {
-	results := make([]core.AlloyCheckResult, 0, len(plan.AlloyChecks))
-	for _, check := range plan.AlloyChecks {
+func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
+	var alloyChecks []core.CaseSpec
+	for _, c := range plan.Cases {
+		if c.Kind == core.CaseKindAlloy {
+			alloyChecks = append(alloyChecks, c)
+		}
+	}
+	results := make([]core.CaseResult, 0, len(alloyChecks))
+	for _, check := range alloyChecks {
 		result, ok := f.results[check.ID.Key()]
 		if !ok {
-			result = core.AlloyCheckResult{
+			result = core.CaseResult{
 				ID:        check.ID,
+				Kind:      core.CaseKindAlloy,
 				Model:     check.Model,
 				Assertion: check.Assertion,
 				Scope:     check.Scope,

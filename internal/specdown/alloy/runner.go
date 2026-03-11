@@ -25,7 +25,7 @@ const (
 var alloyJarURL = "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v" + alloyVersion + "/" + alloyJarName
 
 type DocumentRunner interface {
-	RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, error)
+	RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error)
 }
 
 type Runner struct {
@@ -88,14 +88,15 @@ func (r Runner) DumpModels(plan core.DocumentPlan) ([]string, error) {
 	return paths, nil
 }
 
-func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, error) {
-	if len(plan.AlloyModels) == 0 || len(plan.AlloyChecks) == 0 {
+func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
+	alloyChecks := filterAlloyCases(plan.Cases)
+	if len(plan.AlloyModels) == 0 || len(alloyChecks) == 0 {
 		return nil, nil
 	}
 
 	javaPath, _ := exec.LookPath("java")
 	if javaPath == "" {
-		return failedChecksAll(plan.AlloyChecks, "java not found in PATH; install a JRE to run Alloy checks"), nil
+		return failedChecksAll(alloyChecks, "java not found in PATH; install a JRE to run Alloy checks"), nil
 	}
 
 	jarPath, err := r.ensureAlloyJar()
@@ -103,21 +104,31 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.AlloyCheckResult, er
 		return nil, err
 	}
 
-	resultsByKey, err := r.runAllModels(plan, javaPath, jarPath)
+	resultsByKey, err := r.runAllModels(plan, alloyChecks, javaPath, jarPath)
 	if err != nil {
 		return nil, err
 	}
 
-	return collectOrderedResults(plan.AlloyChecks, resultsByKey)
+	return collectOrderedResults(alloyChecks, resultsByKey)
 }
 
-func (r Runner) runAllModels(plan core.DocumentPlan, javaPath string, jarPath string) (map[string]core.AlloyCheckResult, error) {
-	checksByModel := make(map[string][]core.AlloyCheckSpec)
-	for _, check := range plan.AlloyChecks {
+func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
+	var result []core.CaseSpec
+	for _, c := range cases {
+		if c.Kind == core.CaseKindAlloy {
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
+func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath string, jarPath string) (map[string]core.CaseResult, error) {
+	checksByModel := make(map[string][]core.CaseSpec)
+	for _, check := range alloyChecks {
 		checksByModel[check.Model] = append(checksByModel[check.Model], check)
 	}
 
-	resultsByKey := make(map[string]core.AlloyCheckResult, len(plan.AlloyChecks))
+	resultsByKey := make(map[string]core.CaseResult, len(alloyChecks))
 	for _, model := range plan.AlloyModels {
 		checks := checksByModel[model.Name]
 		if len(checks) == 0 {
@@ -140,8 +151,8 @@ func (r Runner) runAllModels(plan core.DocumentPlan, javaPath string, jarPath st
 	return resultsByKey, nil
 }
 
-func collectOrderedResults(checks []core.AlloyCheckSpec, resultsByKey map[string]core.AlloyCheckResult) ([]core.AlloyCheckResult, error) {
-	results := make([]core.AlloyCheckResult, 0, len(checks))
+func collectOrderedResults(checks []core.CaseSpec, resultsByKey map[string]core.CaseResult) ([]core.CaseResult, error) {
+	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
 		result, ok := resultsByKey[check.ID.Key()]
 		if !ok {
@@ -152,7 +163,7 @@ func collectOrderedResults(checks []core.AlloyCheckSpec, resultsByKey map[string
 	return results, nil
 }
 
-func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, checks []core.AlloyCheckSpec) (modelBundle, error) {
+func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, checks []core.CaseSpec) (modelBundle, error) {
 	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "models", bundleFileName(documentPath, model.Name)))
 	absolutePath := filepath.Join(r.BaseDir, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
@@ -181,7 +192,7 @@ func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, chec
 	}, nil
 }
 
-func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []core.AlloyCheckSpec) (string, []string) {
+func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []core.CaseSpec) (string, []string) {
 	var (
 		lines     []string
 		lineRefs  []string
@@ -222,7 +233,7 @@ func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []
 	return strings.Join(lines, "\n") + "\n", lineRefs
 }
 
-func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, checks []core.AlloyCheckSpec) ([]core.AlloyCheckResult, error) {
+func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, checks []core.CaseSpec) ([]core.CaseResult, error) {
 	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), slug(bundle.Model)+"-output")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create alloy output dir: %w", err)
@@ -251,7 +262,7 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		return nil, err
 	}
 
-	results := make([]core.AlloyCheckResult, 0, len(checks))
+	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
 		result, err := r.evaluateCheck(check, bundle, commandResults)
 		if err != nil {
@@ -282,7 +293,7 @@ func parseReceipt(receiptPath string) (map[string]receiptCommand, error) {
 	return commandResults, nil
 }
 
-func (r Runner) evaluateCheck(check core.AlloyCheckSpec, bundle modelBundle, commandResults map[string]receiptCommand) (core.AlloyCheckResult, error) {
+func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandResults map[string]receiptCommand) (core.CaseResult, error) {
 	base := baseCheckResult(check, bundle)
 
 	commandSource := checkCommandSource(check)
@@ -300,7 +311,7 @@ func (r Runner) evaluateCheck(check core.AlloyCheckSpec, bundle modelBundle, com
 
 	counterexamplePath, err := writeCounterexample(r.BaseDir, check, command)
 	if err != nil {
-		return core.AlloyCheckResult{}, err
+		return core.CaseResult{}, err
 	}
 	summary := summarizeCounterexample(command)
 	message := "counterexample for " + strconvQuote(check.Assertion)
@@ -313,9 +324,10 @@ func (r Runner) evaluateCheck(check core.AlloyCheckSpec, bundle modelBundle, com
 	return base, nil
 }
 
-func baseCheckResult(check core.AlloyCheckSpec, bundle modelBundle) core.AlloyCheckResult {
-	return core.AlloyCheckResult{
+func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
+	return core.CaseResult{
 		ID:            check.ID,
+		Kind:          core.CaseKindAlloy,
 		Model:         check.Model,
 		Assertion:     check.Assertion,
 		Scope:         check.Scope,
@@ -326,11 +338,12 @@ func baseCheckResult(check core.AlloyCheckSpec, bundle modelBundle) core.AlloyCh
 	}
 }
 
-func failedChecksAll(checks []core.AlloyCheckSpec, message string) []core.AlloyCheckResult {
-	results := make([]core.AlloyCheckResult, 0, len(checks))
+func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
+	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
-		result := core.AlloyCheckResult{
+		result := core.CaseResult{
 			ID:        check.ID,
+			Kind:      core.CaseKindAlloy,
 			Model:     check.Model,
 			Assertion: check.Assertion,
 			Scope:     check.Scope,
@@ -343,11 +356,12 @@ func failedChecksAll(checks []core.AlloyCheckSpec, message string) []core.AlloyC
 	return results
 }
 
-func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.AlloyCheckResult {
-	results := make([]core.AlloyCheckResult, 0, len(checks))
+func failedChecks(checks []core.CaseSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.CaseResult {
+	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
-		result := core.AlloyCheckResult{
+		result := core.CaseResult{
 			ID:            check.ID,
+			Kind:          core.CaseKindAlloy,
 			Model:         check.Model,
 			Assertion:     check.Assertion,
 			Scope:         check.Scope,
@@ -367,7 +381,7 @@ func failedChecks(checks []core.AlloyCheckSpec, bundlePath string, sourceMapPath
 }
 
 
-func writeCounterexample(baseDir string, check core.AlloyCheckSpec, command receiptCommand) (string, error) {
+func writeCounterexample(baseDir string, check core.CaseSpec, command receiptCommand) (string, error) {
 	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "counterexamples", check.ID.Anchor()+".json"))
 	absolutePath := filepath.Join(baseDir, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
@@ -535,7 +549,7 @@ func bundleContainsCommand(lines []string, command string) bool {
 	return false
 }
 
-func checkCommandSource(check core.AlloyCheckSpec) string {
+func checkCommandSource(check core.CaseSpec) string {
 	return "check " + check.Assertion + " for " + check.Scope
 }
 

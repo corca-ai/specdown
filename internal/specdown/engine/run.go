@@ -175,28 +175,47 @@ func filterPlan(plan core.Plan, filter string) core.Plan {
 	for _, doc := range plan.Documents {
 		var cases []core.CaseSpec
 		for _, c := range doc.Cases {
-			path := strings.Join(c.ID.HeadingPath, " > ")
-			if strings.Contains(path, filter) {
+			if matchCase(filter, c) {
 				cases = append(cases, c)
 			}
 		}
-		var checks []core.AlloyCheckSpec
-		for _, c := range doc.AlloyChecks {
-			path := strings.Join(c.ID.HeadingPath, " > ")
-			if strings.Contains(path, filter) {
-				checks = append(checks, c)
-			}
-		}
-		if len(cases) > 0 || len(checks) > 0 {
+		if len(cases) > 0 {
 			filtered = append(filtered, core.DocumentPlan{
 				Document:    doc.Document,
 				Cases:       cases,
 				AlloyModels: doc.AlloyModels,
-				AlloyChecks: checks,
 			})
 		}
 	}
 	return core.Plan{Documents: filtered}
+}
+
+// matchCase tests whether a case matches a filter expression.
+// Supported prefixes: type:code, type:table, type:expect, type:alloy, block:<target>, check:<name>.
+// Without a prefix the filter is a heading-path substring match.
+func matchCase(filter string, c core.CaseSpec) bool {
+	if strings.HasPrefix(filter, "type:") {
+		switch filter[5:] {
+		case "code":
+			return c.Kind == core.CaseKindCode
+		case "table":
+			return c.Kind == core.CaseKindTableRow
+		case "expect":
+			return c.Kind == core.CaseKindInlineExpect
+		case "alloy":
+			return c.Kind == core.CaseKindAlloy
+		default:
+			return false
+		}
+	}
+	if strings.HasPrefix(filter, "block:") {
+		return c.Kind == core.CaseKindCode && c.Block.Target == filter[6:]
+	}
+	if strings.HasPrefix(filter, "check:") {
+		return c.Kind == core.CaseKindTableRow && c.Check == filter[6:]
+	}
+	path := strings.Join(c.ID.HeadingPath, " > ")
+	return strings.Contains(path, filter)
 }
 
 func dryRunReport(plan core.Plan) core.Report {
@@ -206,32 +225,27 @@ func dryRunReport(plan core.Plan) core.Report {
 	for _, doc := range plan.Documents {
 		cases := make([]core.CaseResult, 0, len(doc.Cases))
 		for _, c := range doc.Cases {
-			cases = append(cases, core.CaseResult{
-				ID:      c.ID,
-				Kind:    c.Kind,
-				Block:   c.Block.Descriptor(),
-				Check: c.Check,
-				Label:   dryRunLabel(c),
-				Columns: append([]string(nil), c.Columns...),
-				RowNumber: c.RowNumber,
-			})
-		}
-		alloyChecks := make([]core.AlloyCheckResult, 0, len(doc.AlloyChecks))
-		for _, c := range doc.AlloyChecks {
-			alloyChecks = append(alloyChecks, core.AlloyCheckResult{
+			cr := core.CaseResult{
 				ID:        c.ID,
-				Model:     c.Model,
-				Assertion: c.Assertion,
-				Scope:     c.Scope,
-			})
+				Kind:      c.Kind,
+				Block:     c.Block.Descriptor(),
+				Check:     c.Check,
+				Label:     dryRunLabel(c),
+				Columns:   append([]string(nil), c.Columns...),
+				RowNumber: c.RowNumber,
+			}
+			if c.Kind == core.CaseKindAlloy {
+				cr.Model = c.Model
+				cr.Assertion = c.Assertion
+				cr.Scope = c.Scope
+			}
+			cases = append(cases, cr)
 		}
 		results = append(results, core.DocumentResult{
-			Document:    doc.Document,
-			Cases:       cases,
-			AlloyChecks: alloyChecks,
+			Document: doc.Document,
+			Cases:    cases,
 		})
 		summary.CasesTotal += len(doc.Cases)
-		summary.AlloyChecksTotal += len(doc.AlloyChecks)
 	}
 
 	return core.Report{
@@ -242,6 +256,9 @@ func dryRunReport(plan core.Plan) core.Report {
 }
 
 func dryRunLabel(c core.CaseSpec) string {
+	if c.Kind == core.CaseKindAlloy {
+		return c.DefaultLabel()
+	}
 	if len(c.ID.HeadingPath) == 0 {
 		return c.DisplayKind()
 	}
@@ -303,7 +320,7 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 }
 
 func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner alloy.DocumentRunner) (core.DocumentResult, error) {
-	if len(plan.Cases) == 0 && len(plan.AlloyChecks) == 0 {
+	if len(plan.Cases) == 0 {
 		return core.DocumentResult{
 			Document: plan.Document,
 			Status:   core.StatusPassed,
@@ -326,16 +343,44 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	if err != nil {
 		return core.DocumentResult{}, err
 	}
-	if hasFailedAlloyCheck(alloyResults) {
+
+	cases, failed := mergeAlloyResults(cases, alloyResults)
+	if failed {
 		status = core.StatusFailed
 	}
 
 	return core.DocumentResult{
-		Document:    plan.Document,
-		Status:      status,
-		Cases:       cases,
-		AlloyChecks: alloyResults,
+		Document: plan.Document,
+		Status:   status,
+		Cases:    cases,
 	}, nil
+}
+
+// mergeAlloyResults replaces placeholder alloy cases with actual results
+// and reports whether any alloy check failed.
+func mergeAlloyResults(cases []core.CaseResult, alloyResults []core.CaseResult) ([]core.CaseResult, bool) {
+	if len(alloyResults) == 0 {
+		return cases, false
+	}
+	alloyByKey := make(map[string]core.CaseResult, len(alloyResults))
+	for _, r := range alloyResults {
+		alloyByKey[r.ID.Key()] = r
+	}
+	for i, c := range cases {
+		if c.Kind == core.CaseKindAlloy {
+			if ar, ok := alloyByKey[c.ID.Key()]; ok {
+				cases[i] = ar
+			}
+		}
+	}
+	failed := false
+	for _, r := range alloyResults {
+		if r.Status == core.StatusFailed {
+			failed = true
+			break
+		}
+	}
+	return cases, failed
 }
 
 func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session) ([]core.CaseResult, core.Status, error) {
@@ -353,6 +398,20 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 	var prevPath []string
 	for i, specCase := range plan.Cases {
 		currPath := specCase.ID.HeadingPath
+
+		// Alloy cases are handled by the alloy runner; produce placeholder results.
+		if specCase.Kind == core.CaseKindAlloy {
+			cases = append(cases, core.CaseResult{
+				ID:        specCase.ID,
+				Kind:      core.CaseKindAlloy,
+				Model:     specCase.Model,
+				Assertion: specCase.Assertion,
+				Scope:     specCase.Scope,
+				Label:     specCase.DefaultLabel(),
+			})
+			prevPath = currPath
+			continue
+		}
 
 		if failed := ctx.runSetupHooks(prevPath, currPath); failed {
 			status = core.StatusFailed
@@ -816,15 +875,6 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 	return result
 }
 
-func hasFailedAlloyCheck(results []core.AlloyCheckResult) bool {
-	for _, result := range results {
-		if result.Status == core.StatusFailed {
-			return true
-		}
-	}
-	return false
-}
-
 func sessionFor(sessions map[string]*adapterhost.Session, host adapterhost.Host, adapter config.AdapterConfig) (*adapterhost.Session, error) {
 	if session, ok := sessions[adapter.Name]; ok {
 		return session, nil
@@ -1087,15 +1137,6 @@ func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 			summary.CasesExpectedFail++
 		default:
 			summary.CasesFailed++
-		}
-	}
-
-	summary.AlloyChecksTotal += len(result.AlloyChecks)
-	for _, item := range result.AlloyChecks {
-		if item.Status == core.StatusPassed {
-			summary.AlloyChecksPassed++
-		} else {
-			summary.AlloyChecksFailed++
 		}
 	}
 }

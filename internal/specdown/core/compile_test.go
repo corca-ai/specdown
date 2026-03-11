@@ -140,11 +140,18 @@ func TestCompileDocumentCollectsAlloyModelsAndChecks(t *testing.T) {
 	if got := len(plan.AlloyModels[0].Fragments); got != 2 {
 		t.Fatalf("expected 2 fragments, got %d", got)
 	}
-	if len(plan.AlloyChecks) != 1 {
-		t.Fatalf("expected 1 alloy check, got %d", len(plan.AlloyChecks))
+	// Find alloy cases
+	var alloyCases []CaseSpec
+	for _, c := range plan.Cases {
+		if c.Kind == CaseKindAlloy {
+			alloyCases = append(alloyCases, c)
+		}
 	}
-	if got := plan.AlloyChecks[0]; got.Model != "board" || got.Assertion != "cardExists" || got.Scope != "5" {
-		t.Fatalf("unexpected alloy check %#v", got)
+	if len(alloyCases) != 1 {
+		t.Fatalf("expected 1 alloy case, got %d", len(alloyCases))
+	}
+	if got := alloyCases[0]; got.Model != "board" || got.Assertion != "cardExists" || got.Scope != "5" {
+		t.Fatalf("unexpected alloy case %#v", got)
 	}
 }
 

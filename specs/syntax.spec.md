@@ -49,7 +49,7 @@ printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/unrecognized-cfg.js
 
 ```run:shell
 $ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | tail -1
-total: 2 spec(s), 0 case(s), 0 alloy check(s)
+total: 2 spec(s), 0 case(s)
 ```
 
 The warnings appear on stderr:

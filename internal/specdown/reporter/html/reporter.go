@@ -407,14 +407,6 @@ func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
 			failed++
 		}
 	}
-	for _, c := range result.AlloyChecks {
-		if c.Status == core.StatusPassed {
-			passed++
-		} else {
-			failed++
-		}
-	}
-
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
 	b.WriteString(template.HTMLEscapeString(generatedAt.Format(time.RFC3339)))
@@ -468,11 +460,6 @@ func docStatusClass(result core.DocumentResult) string {
 		}
 		if c.ExpectFail {
 			hasXFail = true
-		}
-	}
-	for _, c := range result.AlloyChecks {
-		if c.Status == core.StatusFailed {
-			return "failed"
 		}
 	}
 	if hasXFail {
@@ -574,11 +561,6 @@ func collectHeadingStatuses(result core.DocumentResult) map[string]string {
 			mark(item.ID.HeadingPath, "expected-fail")
 		}
 	}
-	for _, item := range result.AlloyChecks {
-		if item.Status == core.StatusFailed {
-			mark(item.ID.HeadingPath, "failed")
-		}
-	}
 	return statuses
 }
 
@@ -587,8 +569,8 @@ func headingPathKey(path []string) string {
 }
 
 func buildMeta(report core.Report) string {
-	passed := report.Summary.CasesPassed + report.Summary.AlloyChecksPassed
-	failed := report.Summary.CasesFailed + report.Summary.AlloyChecksFailed
+	passed := report.Summary.CasesPassed
+	failed := report.Summary.CasesFailed
 	xfail := report.Summary.CasesExpectedFail
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
@@ -613,10 +595,6 @@ func renderDocument(result core.DocumentResult) (string, error) {
 	for _, item := range result.Cases {
 		caseResults[item.ID.Key()] = item
 	}
-	alloyResults := make(map[string]core.AlloyCheckResult, len(result.AlloyChecks))
-	for _, item := range result.AlloyChecks {
-		alloyResults[item.ID.Key()] = item
-	}
 
 	var out strings.Builder
 	var sectionStack []int
@@ -629,7 +607,7 @@ func renderDocument(result core.DocumentResult) (string, error) {
 		if prose, ok := node.(core.ProseNode); ok {
 			rendered, err = renderProseNode(prose, caseResults, accBindings)
 		} else {
-			rendered, err = renderNode(node, caseResults, alloyResults)
+			rendered, err = renderNode(node, caseResults)
 		}
 		if err != nil {
 			return "", err
@@ -679,7 +657,7 @@ func closeSections(out *strings.Builder, sectionStack []int, node core.Node, doc
 	return append(sectionStack, heading.Level)
 }
 
-func renderNode(node core.Node, caseResults map[string]core.CaseResult, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+func renderNode(node core.Node, caseResults map[string]core.CaseResult) (string, error) {
 	switch current := node.(type) {
 	case core.HeadingNode:
 		return renderHeading(current)
@@ -688,9 +666,9 @@ func renderNode(node core.Node, caseResults map[string]core.CaseResult, alloyRes
 	case core.CodeBlockNode:
 		return renderCodeBlock(current, caseResults)
 	case core.AlloyModelNode:
-		return renderAlloyModel(current, alloyResults), nil
+		return renderAlloyModel(current, caseResults), nil
 	case core.AlloyRefNode:
-		return renderAlloyRef(current, alloyResults)
+		return renderAlloyRef(current, caseResults)
 	case core.TableNode:
 		return renderTable(current, caseResults)
 	case core.HookNode:
@@ -964,12 +942,12 @@ func renderFailureDiff(out *strings.Builder, message, expected, actual string) {
 	out.WriteString(`</dl>`)
 }
 
-func renderAlloyModel(node core.AlloyModelNode, alloyResults map[string]core.AlloyCheckResult) string {
+func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.CaseResult) string {
 	// Find checks targeting this model
-	var failedResult *core.AlloyCheckResult
+	var failedResult *core.CaseResult
 	hasCheck := false
-	for _, r := range alloyResults {
-		if r.Model != node.Model {
+	for _, r := range caseResults {
+		if r.Kind != core.CaseKindAlloy || r.Model != node.Model {
 			continue
 		}
 		hasCheck = true
@@ -1088,7 +1066,7 @@ func renderCheckCall(node core.CheckCallNode, caseResults map[string]core.CaseRe
 	return out.String()
 }
 
-func renderAlloyRef(node core.AlloyRefNode, alloyResults map[string]core.AlloyCheckResult) (string, error) {
+func renderAlloyRef(node core.AlloyRefNode, caseResults map[string]core.CaseResult) (string, error) {
 	// Alloy failures are now shown inline in the model block.
 	return "", nil
 }

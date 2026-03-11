@@ -34,6 +34,55 @@ The value of specdown is that model and implementation verification live togethe
 
 Neither replaces the other. The power is in combining them in the same document.
 
+## What Alloy Provides
+
+Alloy's value comes from exhaustive exploration within a bounded scope.
+The solver finds valid instances, counterexamples, and logical
+relationships that are invisible to example-based testing alone.
+
+### Verification
+
+- **Valid instances** — `run` generates concrete instances satisfying the
+  model's constraints, confirming the model is consistent (not vacuously
+  true). A `run sanityCheck {}` should accompany every model.
+- **Counterexample search** — `check` automatically finds assertion
+  violations. Counterexamples are saved as artifacts for debugging.
+- **Exhaustive coverage within scope** — executable blocks test selected
+  examples; Alloy proves properties for every combination of atoms up to
+  the given scope.
+
+### Logical Relationship Discovery
+
+- **Equivalence** — proving two models equivalent lets you reuse existing
+  tests after a refactor (see [Equivalence Shield](#8-equivalence-shield)).
+- **Implication** — proving a strong invariant implies weaker properties
+  eliminates the need to test those weaker properties separately
+  (see [Invariant Leverage](#4-invariant-leverage)).
+- **Vacuous satisfaction detection** — if facts are contradictory, every
+  assertion passes trivially. Alloy's instance finder exposes this trap.
+
+### Document Quality
+
+- **Design intent made precise** — an Alloy model forces prose claims
+  into formal statements. Ambiguous prose becomes a concrete predicate.
+- **Prose errors surfaced** — when a property claimed in prose fails in
+  the model, the counterexample reveals the inconsistency immediately.
+- **Missing constraints discovered** — when an executable block finds a
+  bug, adding the missing constraint to the model lets Alloy search for
+  further violations (see [Failure-Driven Modeling](#7-failure-driven-modeling)).
+
+### Test Optimization
+
+- **Exhaustive classification** — proving a case partition is complete
+  and mutually exclusive means one representative per case suffices
+  (see [Exhaustive Classification](#3-exhaustive-classification)).
+- **Impossible transitions proved** — modeling state machines lets Alloy
+  prove which transitions cannot occur, reducing the invalid-path tests
+  needed (see [Transition Safety Net](#5-transition-safety-net)).
+- **Composition coverage** — individual modules are tested with
+  executable blocks; Alloy covers the combinatorial space of their
+  interaction (see [Composition Safety](#6-composition-safety)).
+
 ## Patterns
 
 ### 1. Property and Implementation Side by Side

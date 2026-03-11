@@ -17,13 +17,6 @@ type AlloyModelSpec struct {
 	Fragments []AlloyFragmentSpec
 }
 
-type AlloyCheckSpec struct {
-	ID        SpecID
-	Model     string
-	Assertion string
-	Scope     string
-}
-
 var moduleDeclPattern = regexp.MustCompile(`(?m)^\s*module\b`)
 var alloyCheckPattern = regexp.MustCompile(`(?m)^\s*check\s+([A-Za-z_][A-Za-z0-9_]*)\s+for\s+(.+?)\s*$`)
 
@@ -45,7 +38,7 @@ func parseCheckStatements(source string) []parsedCheck {
 }
 
 //nolint:gocognit // alloy compilation is inherently complex
-func compileAlloy(doc Document, maxOrdinal int) ([]AlloyModelSpec, []AlloyCheckSpec, error) {
+func compileAlloy(doc Document, maxOrdinal int) ([]AlloyModelSpec, []CaseSpec, error) {
 	models, checks, explicitRefs, err := collectAlloyNodes(doc)
 	if err != nil {
 		return nil, nil, err
@@ -60,10 +53,10 @@ func compileAlloy(doc Document, maxOrdinal int) ([]AlloyModelSpec, []AlloyCheckS
 	return models, checks, nil
 }
 
-func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []AlloyCheckSpec, map[string]struct{}, error) {
+func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []CaseSpec, map[string]struct{}, error) {
 	modelsByName := make(map[string]int)
 	models := make([]AlloyModelSpec, 0)
-	checks := make([]AlloyCheckSpec, 0)
+	checks := make([]CaseSpec, 0)
 	explicitRefs := make(map[string]struct{})
 
 	for _, node := range doc.Nodes {
@@ -88,8 +81,9 @@ func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []AlloyCheckSpec, map[st
 				return nil, nil, nil, fmt.Errorf("%s: alloy reference is missing an id", doc.RelativeTo)
 			}
 			explicitRefs[current.Model+"#"+current.Assertion] = struct{}{}
-			checks = append(checks, AlloyCheckSpec{
+			checks = append(checks, CaseSpec{
 				ID:        *current.ID,
+				Kind:      CaseKindAlloy,
 				Model:     current.Model,
 				Assertion: current.Assertion,
 				Scope:     strings.TrimSpace(current.Scope),
@@ -100,7 +94,7 @@ func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []AlloyCheckSpec, map[st
 	return models, checks, explicitRefs, nil
 }
 
-func appendImplicitChecks(file string, models []AlloyModelSpec, checks []AlloyCheckSpec, seen map[string]struct{}, ordinal int) []AlloyCheckSpec {
+func appendImplicitChecks(file string, models []AlloyModelSpec, checks []CaseSpec, seen map[string]struct{}, ordinal int) []CaseSpec {
 	for _, model := range models {
 		for _, fragment := range model.Fragments {
 			for _, pc := range parseCheckStatements(fragment.Source) {
@@ -110,12 +104,13 @@ func appendImplicitChecks(file string, models []AlloyModelSpec, checks []AlloyCh
 				}
 				seen[key] = struct{}{}
 				ordinal++
-				checks = append(checks, AlloyCheckSpec{
+				checks = append(checks, CaseSpec{
 					ID: SpecID{
 						File:        file,
 						HeadingPath: append([]string(nil), fragment.HeadingPath...),
 						Ordinal:     ordinal,
 					},
+					Kind:      CaseKindAlloy,
 					Model:     model.Name,
 					Assertion: pc.assertion,
 					Scope:     pc.scope,
@@ -126,12 +121,15 @@ func appendImplicitChecks(file string, models []AlloyModelSpec, checks []AlloyCh
 	return checks
 }
 
-func validateAlloyModelRefs(file string, models []AlloyModelSpec, checks []AlloyCheckSpec) error {
+func validateAlloyModelRefs(file string, models []AlloyModelSpec, checks []CaseSpec) error {
 	knownModels := make(map[string]struct{}, len(models))
 	for _, model := range models {
 		knownModels[model.Name] = struct{}{}
 	}
 	for _, check := range checks {
+		if check.Kind != CaseKindAlloy {
+			continue
+		}
 		if _, ok := knownModels[check.Model]; !ok {
 			return fmt.Errorf("%s: alloy reference %q targets unknown model %q", file, check.ID.Key(), check.Model)
 		}

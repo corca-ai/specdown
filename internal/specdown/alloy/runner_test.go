@@ -25,13 +25,14 @@ func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {
 				Source:      "assert cardShape { some Card }",
 			},
 		},
-	}, []core.AlloyCheckSpec{
+	}, []core.CaseSpec{
 		{
 			ID: core.SpecID{
 				File:        "specs/pocket-board.spec.md",
 				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Ordinal:     1,
 			},
+			Kind:      core.CaseKindAlloy,
 			Model:     "board",
 			Assertion: "cardShape",
 			Scope:     "5",
@@ -114,13 +115,14 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 				Source:      "module board\n\nsig Card {}",
 			},
 		},
-	}, []core.AlloyCheckSpec{
+	}, []core.CaseSpec{
 		{
 			ID: core.SpecID{
 				File:        "specs/pocket-board.spec.md",
 				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Ordinal:     1,
 			},
+			Kind:      core.CaseKindAlloy,
 			Model:     "board",
 			Assertion: "cardShape",
 			Scope:     "5",

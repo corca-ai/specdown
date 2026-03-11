@@ -117,16 +117,47 @@ echo "$help" | grep -q "alloy dump"
 |------|---------|-------------|
 | `-config` | `specdown.json` | Config file path |
 | `-out` | (per config file) | HTML report output path |
-| `-filter` | (none) | Heading path substring filter |
+| `-filter` | (none) | Case filter (heading substring or `type:`, `block:`, `check:` prefix) |
 | `-jobs` | `1` | Number of spec files to run in parallel |
 | `-dry-run` | `false` | Parse and validate only |
 | `-show-bindings` | `false` | Print resolved variable bindings for each case |
 
 ## Filter
 
-The `-filter` flag runs only cases whose heading path contains the given string.
+The `-filter` flag selects which cases to run. Without a prefix it
+matches heading paths by substring, preserving backward compatibility.
 
 ```run:shell
 $ specdown run -dry-run -filter "Filter" 2>&1 | head -1
 ...
 ```
+
+### Type Filter
+
+A `type:` prefix selects cases by kind.
+
+| Filter | Matches |
+|--------|---------|
+| `type:code` | Code blocks (`run:*`) |
+| `type:table` | Check table rows and inline checks |
+| `type:expect` | Inline expect assertions |
+| `type:alloy` | Alloy model checks only |
+
+```run:shell
+# type:alloy keeps only alloy checks; block:shell keeps only code blocks
+mkdir -p .tmp-test
+printf '%s\n' '# Typed' '' '## Code' '' '```run:shell' 'echo hello' '```' '' '## Model' '' '```alloy:model(tf)' 'module tf' 'sig A {}' 'assert noEmpty { some A }' 'check noEmpty for 3' '```' > .tmp-test/typed-filter.spec.md
+printf '# T\n\n- [Typed](typed-filter.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/typed-filter-cfg.json
+alloy_dry=$(specdown run -config .tmp-test/typed-filter-cfg.json -dry-run -filter "type:alloy" 2>&1)
+echo "$alloy_dry" | grep -q 'alloy:'
+! echo "$alloy_dry" | grep -q '\[run:shell\]'
+block_dry=$(specdown run -config .tmp-test/typed-filter-cfg.json -dry-run -filter "block:shell" 2>&1)
+echo "$block_dry" | grep -q '\[run:shell\]'
+! echo "$block_dry" | grep -q 'alloy:'
+```
+
+### Block and Check Filters
+
+A `block:` prefix matches code blocks by adapter target.
+A `check:` prefix matches check table rows by check name.

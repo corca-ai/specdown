@@ -54,17 +54,10 @@ type CaseResult struct {
 	DurationMs     int            `json:"durationMs,omitempty"`
 	Steps          []DoctestStep  `json:"steps,omitempty"`
 	Events         []Event        `json:"events,omitempty"`
-}
-
-type AlloyCheckResult struct {
-	ID                 SpecID `json:"id"`
-	Model              string `json:"model"`
-	Assertion          string `json:"assertion"`
-	Scope              string `json:"scope"`
-	Label              string `json:"label"`
-	Status             Status `json:"status"`
-	DurationMs         int    `json:"durationMs,omitempty"`
-	Message            string `json:"message,omitempty"`
+	// Alloy-specific fields (only set when Kind == CaseKindAlloy)
+	Model              string `json:"model,omitempty"`
+	Assertion          string `json:"assertion,omitempty"`
+	Scope              string `json:"scope,omitempty"`
 	BundlePath         string `json:"bundlePath,omitempty"`
 	SourceMapPath      string `json:"sourceMapPath,omitempty"`
 	BundleLine         int    `json:"bundleLine,omitempty"`
@@ -76,7 +69,6 @@ type DocumentResult struct {
 	Document    Document            `json:"document"`
 	Status      Status              `json:"status"`
 	Cases       []CaseResult        `json:"cases,omitempty"`
-	AlloyChecks []AlloyCheckResult  `json:"alloyChecks,omitempty"`
 }
 
 type Summary struct {
@@ -87,9 +79,6 @@ type Summary struct {
 	CasesPassed          int `json:"casesPassed"`
 	CasesFailed          int `json:"casesFailed"`
 	CasesExpectedFail    int `json:"casesExpectedFail"`
-	AlloyChecksTotal     int `json:"alloyChecksTotal"`
-	AlloyChecksPassed    int `json:"alloyChecksPassed"`
-	AlloyChecksFailed    int `json:"alloyChecksFailed"`
 	TraceErrorCount      int `json:"traceErrorCount,omitempty"`
 }
 

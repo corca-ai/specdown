@@ -17,12 +17,10 @@ func TestWriteEncodesReportJSON(t *testing.T) {
 	report := core.Report{
 		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
 		Summary: core.Summary{
-			SpecsTotal:        1,
-			SpecsPassed:       1,
-			CasesTotal:        2,
-			CasesPassed:       2,
-			AlloyChecksTotal:  1,
-			AlloyChecksPassed: 1,
+			SpecsTotal:  1,
+			SpecsPassed: 1,
+			CasesTotal:  3,
+			CasesPassed: 3,
 		},
 	}
 
@@ -36,8 +34,8 @@ func TestWriteEncodesReportJSON(t *testing.T) {
 	}
 
 	text := string(body)
-	if !strings.Contains(text, `"alloyChecksPassed": 1`) {
-		t.Fatalf("expected alloy summary, got %q", text)
+	if !strings.Contains(text, `"casesPassed": 3`) {
+		t.Fatalf("expected cases summary, got %q", text)
 	}
 	if !strings.Contains(text, `"specsPassed": 1`) {
 		t.Fatalf("expected spec summary, got %q", text)
