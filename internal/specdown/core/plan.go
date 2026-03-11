@@ -40,7 +40,7 @@ type CaseSpec struct {
 type HookSpec struct {
 	Kind        HookKind
 	Each        bool
-	HeadingPath []string
+	HeadingPath HeadingPath
 	Block       BlockSpec
 	Source      string
 }
@@ -280,39 +280,25 @@ func checkProseRefs(file string, prose ProseNode, bindings []bindingDefinition) 
 
 type bindingDefinition struct {
 	Name        string
-	HeadingPath []string
+	HeadingPath HeadingPath
 }
 
-func bindingVisible(bindings []bindingDefinition, name string, currentPath []string) bool {
+func bindingVisible(bindings []bindingDefinition, name string, currentPath HeadingPath) bool {
 	for i := len(bindings) - 1; i >= 0; i-- {
 		if bindings[i].Name != name {
 			continue
 		}
 		bp := bindings[i].HeadingPath
 		// Visible if binding path is a prefix of current path (ancestor or self)
-		if headingPathPrefix(bp, currentPath) {
+		if bp.IsPrefix(currentPath) {
 			return true
 		}
 		// Visible if binding is a sibling: same parent, defined earlier in document order
-		if len(bp) > 0 && len(currentPath) > 0 &&
-			len(bp) == len(currentPath) &&
-			headingPathPrefix(bp[:len(bp)-1], currentPath[:len(currentPath)-1]) {
+		if bp.IsSiblingOf(currentPath) {
 			return true
 		}
 	}
 	return false
-}
-
-func headingPathPrefix(prefix []string, current []string) bool {
-	if len(prefix) > len(current) {
-		return false
-	}
-	for i := range prefix {
-		if prefix[i] != current[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func documentMaxOrdinal(doc Document) int {

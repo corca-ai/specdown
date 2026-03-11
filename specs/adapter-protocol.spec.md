@@ -19,6 +19,10 @@ This allows each project to build adapters with minimal effort in any language.
 3. The adapter responds to each message, echoing the `id`
 4. When the spec run finishes, specdown closes stdin and waits for the process to exit
 
+Sessions are scoped per-document. Each adapter session is started on first
+use and closed after all cases in that document complete. With `--jobs N`,
+each document gets its own independent sessions.
+
 A single adapter process handles multiple requests during one spec run.
 The adapter can maintain process-local state across requests.
 Use this to cache data: for example, when a check table has many rows

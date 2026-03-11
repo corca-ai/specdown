@@ -9,7 +9,7 @@ import (
 type AlloyFragmentSpec struct {
 	Model       string
 	Source      string
-	HeadingPath []string
+	HeadingPath HeadingPath
 }
 
 type AlloyModelSpec struct {

@@ -138,6 +138,9 @@ printf 'from-parent'
 test "${parentVar}" = "from-parent"
 ```
 
+When output has fewer lines than capture names, excess captures receive
+empty string.
+
 ### Variable escaping
 
 To output a literal `${...}`, escape it with a backslash: `\${literal}`.
@@ -202,8 +205,9 @@ $ test -f /tmp/specdown-test/file.txt
 ### Wildcard Matching
 
 A line containing exactly `...` in the expected output matches zero or more
-lines in the actual output. This is useful when output contains timestamps,
-PIDs, temporary paths, or other values that change between runs.
+lines in the actual output. There is no escape for literal `...`. This is
+useful when output contains timestamps, PIDs, temporary paths, or other
+values that change between runs.
 
 ```run:shell
 $ echo hello && date && echo goodbye
@@ -306,6 +310,9 @@ $ printf 'alpha\nbeta'
 alpha
 gamma
 ```
+
+When a case fails, remaining cases continue. Bindings from failed cases
+are discarded.
 
 ## Check Tables
 

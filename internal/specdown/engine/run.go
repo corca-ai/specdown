@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,12 +31,6 @@ type RunOptions struct {
 type adapterRegistry struct {
 	blocks   map[string]adapterEntry
 	checks map[string]adapterEntry
-}
-
-type scopedBinding struct {
-	Binding     core.Binding
-	HeadingPath []string
-	Order       int
 }
 
 func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
@@ -171,11 +164,12 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 }
 
 func filterPlan(plan core.Plan, filter string) core.Plan {
+	f := parseFilter(filter)
 	var filtered []core.DocumentPlan
 	for _, doc := range plan.Documents {
 		var cases []core.CaseSpec
 		for _, c := range doc.Cases {
-			if matchCase(filter, c) {
+			if f.matches(c) {
 				cases = append(cases, c)
 			}
 		}
@@ -188,34 +182,6 @@ func filterPlan(plan core.Plan, filter string) core.Plan {
 		}
 	}
 	return core.Plan{Documents: filtered}
-}
-
-// matchCase tests whether a case matches a filter expression.
-// Supported prefixes: type:code, type:table, type:expect, type:alloy, block:<target>, check:<name>.
-// Without a prefix the filter is a heading-path substring match.
-func matchCase(filter string, c core.CaseSpec) bool {
-	if strings.HasPrefix(filter, "type:") {
-		switch filter[5:] {
-		case "code":
-			return c.Kind == core.CaseKindCode
-		case "table":
-			return c.Kind == core.CaseKindTableRow
-		case "expect":
-			return c.Kind == core.CaseKindInlineExpect
-		case "alloy":
-			return c.Kind == core.CaseKindAlloy
-		default:
-			return false
-		}
-	}
-	if strings.HasPrefix(filter, "block:") {
-		return c.Kind == core.CaseKindCode && c.Block.Target == filter[6:]
-	}
-	if strings.HasPrefix(filter, "check:") {
-		return c.Kind == core.CaseKindTableRow && c.Check == filter[6:]
-	}
-	path := strings.Join(c.ID.HeadingPath, " > ")
-	return strings.Contains(path, filter)
 }
 
 func dryRunReport(plan core.Plan) core.Report {
@@ -327,15 +293,15 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		}, nil
 	}
 
-	sessions := make(map[string]*adapterhost.Session)
-	defer func() { _ = closeSessions(sessions) }()
+	sm := newSessionManager(host)
+	defer func() { _ = sm.CloseAll() }()
 
-	cases, status, err := runDocumentCases(plan, registry, host, sessions)
+	cases, status, err := runDocumentCases(plan, registry, sm)
 	if err != nil {
 		return core.DocumentResult{}, err
 	}
 
-	if err := closeSessions(sessions); err != nil {
+	if err := sm.CloseAll(); err != nil {
 		return core.DocumentResult{}, err
 	}
 
@@ -383,19 +349,18 @@ func mergeAlloyResults(cases []core.CaseResult, alloyResults []core.CaseResult) 
 	return cases, failed
 }
 
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session) ([]core.CaseResult, core.Status, error) {
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager) ([]core.CaseResult, core.Status, error) {
 	ctx := &caseRunContext{
 		registry:  registry,
-		host:      host,
-		sessions:  sessions,
-		bindings:  make([]scopedBinding, 0),
+		sessions:  sm,
+		bindings:  newBindingsManager(),
 		timeoutMs: plan.Document.Frontmatter.Timeout,
 		hooks:     plan.Hooks,
 	}
 	cases := make([]core.CaseResult, 0, len(plan.Cases))
 	status := core.StatusPassed
 
-	var prevPath []string
+	var prevPath core.HeadingPath
 	for i, specCase := range plan.Cases {
 		currPath := specCase.ID.HeadingPath
 
@@ -417,7 +382,7 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 			status = core.StatusFailed
 		}
 
-		result, err := runSingleCase(specCase, ctx.registry, ctx.host, ctx.sessions, ctx.bindings, ctx.timeoutMs)
+		result, err := runSingleCase(specCase, ctx.registry, ctx.sessions, ctx.bindings.VisibleAt(specCase.ID.HeadingPath), ctx.timeoutMs)
 		if err != nil {
 			return nil, "", err
 		}
@@ -425,10 +390,10 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 		if result.Status == core.StatusFailed && !result.ExpectFail {
 			status = core.StatusFailed
 		} else if result.Status != core.StatusFailed {
-			ctx.addBindings(result.Bindings, specCase.ID.HeadingPath)
+			ctx.bindings.Add(result.Bindings, specCase.ID.HeadingPath)
 		}
 
-		var nextPath []string
+		var nextPath core.HeadingPath
 		if i+1 < len(plan.Cases) {
 			nextPath = plan.Cases[i+1].ID.HeadingPath
 		}
@@ -443,84 +408,75 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, host ada
 
 type caseRunContext struct {
 	registry  adapterRegistry
-	host      adapterhost.Host
-	sessions  map[string]*adapterhost.Session
-	bindings  []scopedBinding
+	sessions  *sessionManager
+	bindings  *bindingsManager
 	timeoutMs int
 	hooks     []core.HookSpec
 }
 
-func (c *caseRunContext) addBindings(newBindings []core.Binding, headingPath []string) {
-	for _, b := range newBindings {
-		c.bindings = append(c.bindings, scopedBinding{
-			Binding:     b,
-			HeadingPath: append([]string(nil), headingPath...),
-			Order:       len(c.bindings),
-		})
-	}
-}
-
-func (c *caseRunContext) runSetupHooks(prevPath, currPath []string) bool {
+func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) bool {
 	failed := false
 	for _, hook := range c.hooks {
 		if hook.Kind != core.HookSetup || !shouldRunHook(hook, prevPath, currPath) {
 			continue
 		}
-		if err := runHook(hook, c.registry, c.host, c.sessions, c.bindings, c.timeoutMs); err != nil {
+		visible := c.bindings.VisibleAt(hook.HeadingPath)
+		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
 			failed = true
 		}
 	}
 	return failed
 }
 
-func (c *caseRunContext) runTeardownHooks(currPath, nextPath []string) bool {
+func (c *caseRunContext) runTeardownHooks(currPath, nextPath core.HeadingPath) bool {
 	failed := false
 	for _, hook := range c.hooks {
 		if hook.Kind != core.HookTeardown || !shouldRunTeardownHook(hook, currPath, nextPath) {
 			continue
 		}
-		if err := runHook(hook, c.registry, c.host, c.sessions, c.bindings, c.timeoutMs); err != nil {
+		visible := c.bindings.VisibleAt(hook.HeadingPath)
+		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
 			failed = true
 		}
 	}
 	return failed
 }
 
-func shouldRunHook(hook core.HookSpec, prevPath, currPath []string) bool {
-	if !headingPathPrefix(hook.HeadingPath, currPath) {
+func shouldRunHook(hook core.HookSpec, prevPath, currPath core.HeadingPath) bool {
+	if !hook.HeadingPath.IsPrefix(currPath) {
 		return false
 	}
 	if !hook.Each {
-		return !headingPathPrefix(hook.HeadingPath, prevPath)
+		return !hook.HeadingPath.IsPrefix(prevPath)
 	}
 	depth := len(hook.HeadingPath)
 	if len(currPath) <= depth {
 		return false
 	}
-	if !headingPathPrefix(hook.HeadingPath, prevPath) || len(prevPath) <= depth {
+	if !hook.HeadingPath.IsPrefix(prevPath) || len(prevPath) <= depth {
 		return true
 	}
 	return currPath[depth] != prevPath[depth]
 }
 
-func shouldRunTeardownHook(hook core.HookSpec, currPath, nextPath []string) bool {
-	if !headingPathPrefix(hook.HeadingPath, currPath) {
+func shouldRunTeardownHook(hook core.HookSpec, currPath, nextPath core.HeadingPath) bool {
+	if !hook.HeadingPath.IsPrefix(currPath) {
 		return false
 	}
 	if !hook.Each {
-		return !headingPathPrefix(hook.HeadingPath, nextPath)
+		return !hook.HeadingPath.IsPrefix(nextPath)
 	}
 	depth := len(hook.HeadingPath)
 	if len(currPath) <= depth {
 		return false
 	}
-	if !headingPathPrefix(hook.HeadingPath, nextPath) || len(nextPath) <= depth {
+	if !hook.HeadingPath.IsPrefix(nextPath) || len(nextPath) <= depth {
 		return true
 	}
 	return currPath[depth] != nextPath[depth]
 }
 
-func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, bindings []scopedBinding, timeoutMs int) error {
+func runHook(hook core.HookSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) error {
 	synthetic := core.CaseSpec{
 		ID: core.SpecID{
 			File:        "_hook",
@@ -536,13 +492,12 @@ func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host
 		return err
 	}
 
-	visible := visibleBindings(bindings, hook.HeadingPath)
 	prepared, err := prepareCase(synthetic, visible)
 	if err != nil {
 		return err
 	}
 
-	session, err := sessionFor(sessions, host, adapter.Config)
+	session, err := sm.For(adapter.Config)
 	if err != nil {
 		return err
 	}
@@ -557,11 +512,10 @@ func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host
 	return nil
 }
 
-func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {
+func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) (core.CaseResult, error) {
 	start := time.Now()
 
 	if specCase.Kind == core.CaseKindInlineExpect {
-		visible := visibleBindings(bindings, specCase.ID.HeadingPath)
 		prepared, err := prepareCase(specCase, visible)
 		if err != nil {
 			return variableFailure(specCase, err), nil
@@ -579,13 +533,12 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 		return core.CaseResult{}, err
 	}
 
-	visible := visibleBindings(bindings, specCase.ID.HeadingPath)
 	prepared, err := prepareCase(specCase, visible)
 	if err != nil {
 		return variableFailure(specCase, err), nil
 	}
 
-	session, err := sessionFor(sessions, host, adapter.Config)
+	session, err := sm.For(adapter.Config)
 	if err != nil {
 		return core.CaseResult{}, err
 	}
@@ -875,87 +828,6 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 	return result
 }
 
-func sessionFor(sessions map[string]*adapterhost.Session, host adapterhost.Host, adapter config.AdapterConfig) (*adapterhost.Session, error) {
-	if session, ok := sessions[adapter.Name]; ok {
-		return session, nil
-	}
-	var session *adapterhost.Session
-	var err error
-	if adapter.BuiltinShell {
-		session, err = host.StartBuiltinShellSession(adapter)
-	} else {
-		session, err = host.StartSession(adapter)
-	}
-	if err != nil {
-		return nil, err
-	}
-	sessions[adapter.Name] = session
-	return session, nil
-}
-
-func closeSessions(sessions map[string]*adapterhost.Session) error {
-	var firstErr error
-	for name, session := range sessions {
-		if session == nil {
-			continue
-		}
-		if err := session.Close(); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("close adapter session %q: %w", name, err)
-		}
-		delete(sessions, name)
-	}
-	return firstErr
-}
-
-func bindingReachable(bp []string, current []string) bool {
-	// Ancestor or self
-	if headingPathPrefix(bp, current) {
-		return true
-	}
-	// Sibling: same depth, same parent
-	if len(bp) > 0 && len(current) > 0 &&
-		len(bp) == len(current) &&
-		headingPathPrefix(bp[:len(bp)-1], current[:len(current)-1]) {
-		return true
-	}
-	return false
-}
-
-func visibleBindings(bindings []scopedBinding, headingPath []string) []core.Binding {
-	selected := make(map[string]scopedBinding)
-	for _, binding := range bindings {
-		if !bindingReachable(binding.HeadingPath, headingPath) {
-			continue
-		}
-		current, ok := selected[binding.Binding.Name]
-		if !ok || binding.Order >= current.Order {
-			selected[binding.Binding.Name] = binding
-		}
-	}
-
-	items := make([]core.Binding, 0, len(selected))
-	names := make([]string, 0, len(selected))
-	for name := range selected {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		items = append(items, selected[name].Binding)
-	}
-	return items
-}
-
-func headingPathPrefix(prefix []string, current []string) bool {
-	if len(prefix) > len(current) {
-		return false
-	}
-	for i := range prefix {
-		if prefix[i] != current[i] {
-			return false
-		}
-	}
-	return true
-}
 
 var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 

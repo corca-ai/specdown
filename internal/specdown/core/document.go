@@ -14,9 +14,9 @@ const (
 )
 
 type SpecID struct {
-	File        string   `json:"file"`
-	HeadingPath []string `json:"headingPath"`
-	Ordinal     int      `json:"ordinal"`
+	File        string      `json:"file"`
+	HeadingPath HeadingPath `json:"headingPath"`
+	Ordinal     int         `json:"ordinal"`
 }
 
 func (id SpecID) Key() string {
@@ -35,7 +35,7 @@ func (id SpecID) Anchor() string {
 	return "case-" + slug(strings.Join(parts, "-"))
 }
 
-func HeadingAnchor(file string, headingPath []string) string {
+func HeadingAnchor(file string, headingPath HeadingPath) string {
 	parts := append([]string{file}, headingPath...)
 	return "section-" + slug(strings.Join(parts, "-"))
 }
@@ -46,10 +46,10 @@ type Node interface {
 }
 
 type HeadingNode struct {
-	Level       int      `json:"level"`
-	Text        string   `json:"text"`
-	Raw         string   `json:"raw"`
-	HeadingPath []string `json:"headingPath,omitempty"`
+	Level       int         `json:"level"`
+	Text        string      `json:"text"`
+	Raw         string      `json:"raw"`
+	HeadingPath HeadingPath `json:"headingPath,omitempty"`
 }
 
 func (HeadingNode) isNode() {}
@@ -79,7 +79,7 @@ type InlineElement struct {
 type ProseNode struct {
 	Raw         string          `json:"raw"`
 	Inlines     []InlineElement `json:"inlines,omitempty"`
-	HeadingPath []string        `json:"headingPath,omitempty"`
+	HeadingPath HeadingPath     `json:"headingPath,omitempty"`
 }
 
 func (ProseNode) isNode() {}
@@ -103,10 +103,10 @@ func (n CodeBlockNode) Markdown() string {
 }
 
 type AlloyModelNode struct {
-	Model       string   `json:"model"`
-	Source      string   `json:"source"`
-	Raw         string   `json:"raw"`
-	HeadingPath []string `json:"headingPath,omitempty"`
+	Model       string      `json:"model"`
+	Source      string      `json:"source"`
+	Raw         string      `json:"raw"`
+	HeadingPath HeadingPath `json:"headingPath,omitempty"`
 }
 
 func (AlloyModelNode) isNode() {}
@@ -116,12 +116,12 @@ func (n AlloyModelNode) Markdown() string {
 }
 
 type AlloyRefNode struct {
-	Model       string   `json:"model"`
-	Assertion   string   `json:"assertion"`
-	Scope       string   `json:"scope"`
-	Raw         string   `json:"raw"`
-	HeadingPath []string `json:"headingPath,omitempty"`
-	ID          *SpecID  `json:"id,omitempty"`
+	Model       string      `json:"model"`
+	Assertion   string      `json:"assertion"`
+	Scope       string      `json:"scope"`
+	Raw         string      `json:"raw"`
+	HeadingPath HeadingPath `json:"headingPath,omitempty"`
+	ID          *SpecID     `json:"id,omitempty"`
 }
 
 func (AlloyRefNode) isNode() {}
@@ -158,13 +158,13 @@ const (
 )
 
 type HookNode struct {
-	Hook        HookKind  `json:"hook"`
-	Each        bool      `json:"each"`
-	Block       BlockSpec `json:"block"`
-	Source      string    `json:"source"`
-	Raw         string    `json:"raw"`
-	Summary     string    `json:"summary,omitempty"`
-	HeadingPath []string  `json:"headingPath,omitempty"`
+	Hook        HookKind    `json:"hook"`
+	Each        bool        `json:"each"`
+	Block       BlockSpec   `json:"block"`
+	Source      string      `json:"source"`
+	Raw         string      `json:"raw"`
+	Summary     string      `json:"summary,omitempty"`
+	HeadingPath HeadingPath `json:"headingPath,omitempty"`
 }
 
 func (HookNode) isNode()            {}
@@ -174,7 +174,7 @@ type CheckCallNode struct {
 	Check       string            `json:"check"`
 	CheckParams map[string]string `json:"checkParams"`
 	Raw         string            `json:"raw"`
-	HeadingPath []string          `json:"headingPath,omitempty"`
+	HeadingPath HeadingPath       `json:"headingPath,omitempty"`
 	ID          *SpecID           `json:"id,omitempty"`
 }
 
