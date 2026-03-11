@@ -77,7 +77,7 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 			typeHue(t), template.HTMLEscapeString(t))
 	}
 
-	// Parents: each with arrow pointing into current.
+	// Parents: "[tag] Title *edge*" on a single line, linking into current.
 	for _, l := range incoming {
 		b.WriteString(`<div class="trace-ctx-parent">`)
 		b.WriteString(`<a href="`)
@@ -86,7 +86,7 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 		writeTag(l.docType)
 		b.WriteString(template.HTMLEscapeString(titleFromPath(l.doc)))
 		b.WriteString(`</a>`)
-		fmt.Fprintf(&b, `<span class="trace-ctx-arrow">%s</span>`,
+		fmt.Fprintf(&b, ` <span class="trace-ctx-edge">%s</span>`,
 			template.HTMLEscapeString(l.edge))
 		b.WriteString(`</div>`)
 	}
@@ -105,14 +105,14 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 	b.WriteString(template.HTMLEscapeString(curTitle))
 	b.WriteString(`</div>`)
 
-	// Children: arrow then linked child.
+	// Children: "*edge* [tag] Title" on a single line.
 	childClass := "trace-ctx-child"
 	if len(incoming) == 0 {
 		childClass = "trace-ctx-child trace-ctx-child-root"
 	}
 	for _, l := range outgoing {
 		fmt.Fprintf(&b, `<div class="%s">`, childClass)
-		fmt.Fprintf(&b, `<span class="trace-ctx-arrow">%s</span>`,
+		fmt.Fprintf(&b, `<span class="trace-ctx-edge">%s</span> `,
 			template.HTMLEscapeString(l.edge))
 		b.WriteString(`<a href="`)
 		b.WriteString(template.HTMLEscapeString(l.href))

@@ -205,8 +205,8 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	})
 
 	t.Run("summary_and_results", func(t *testing.T) {
-		assertContains(t, html, "pass 3", "pass summary")
-		assertContains(t, html, "fail 1", "fail summary")
+		assertContains(t, html, "3 passed", "pass summary")
+		assertContains(t, html, "1 failed", "fail summary")
 		assertContains(t, html, "boardName=board-1", "binding note")
 		assertContains(t, html, "check:board-exists", "check label")
 		assertContains(t, html, "board-1-archive", "resolved table cell")
@@ -286,7 +286,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	}
 
 	html := string(body)
-	if !strings.Contains(html, "pass 0") || !strings.Contains(html, "fail 1") {
+	if !strings.Contains(html, "0 passed") || !strings.Contains(html, "1 failed") {
 		t.Fatalf("expected compact summary, got %q", html)
 	}
 	if !strings.Contains(html, "alloy:model(board)") {

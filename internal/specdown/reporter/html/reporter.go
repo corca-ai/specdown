@@ -193,6 +193,14 @@ func computeAssetRoot(pageDir string) string {
 	return strings.Join(parts, "/")
 }
 
+func writePills(b *strings.Builder, passed, failed, xfail int) {
+	fmt.Fprintf(b, `<span class="pill pass">%d passed</span>`, passed)
+	fmt.Fprintf(b, `<span class="pill fail">%d failed</span>`, failed)
+	if xfail > 0 {
+		fmt.Fprintf(b, `<span class="pill xfail">%d expected</span>`, xfail)
+	}
+}
+
 func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
 	passed := 0
 	failed := 0
@@ -209,18 +217,9 @@ func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
 	}
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
-	b.WriteString(template.HTMLEscapeString(generatedAt.Format(time.RFC3339)))
-	b.WriteString(`<span class="pill pass">pass `)
-	fmt.Fprintf(&b, "%d", passed)
-	b.WriteString(`</span>`)
-	b.WriteString(`<span class="pill fail">fail `)
-	fmt.Fprintf(&b, "%d", failed)
-	b.WriteString(`</span>`)
-	if xfail > 0 {
-		b.WriteString(`<span class="pill xfail">xfail `)
-		fmt.Fprintf(&b, "%d", xfail)
-		b.WriteString(`</span>`)
-	}
+	writePills(&b, passed, failed, xfail)
+	fmt.Fprintf(&b, `<span class="meta-date">%s</span>`,
+		template.HTMLEscapeString(generatedAt.Format("2 Jan 2006 15:04")))
 	b.WriteString(`</p>`)
 	return b.String()
 }
@@ -231,18 +230,9 @@ func buildMeta(report core.Report) string {
 	xfail := report.Summary.CasesExpectedFail
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
-	b.WriteString(template.HTMLEscapeString(report.GeneratedAt.Format(time.RFC3339)))
-	b.WriteString(`<span class="pill pass">pass `)
-	fmt.Fprintf(&b, "%d", passed)
-	b.WriteString(`</span>`)
-	b.WriteString(`<span class="pill fail">fail `)
-	fmt.Fprintf(&b, "%d", failed)
-	b.WriteString(`</span>`)
-	if xfail > 0 {
-		b.WriteString(`<span class="pill xfail">xfail `)
-		fmt.Fprintf(&b, "%d", xfail)
-		b.WriteString(`</span>`)
-	}
+	writePills(&b, passed, failed, xfail)
+	fmt.Fprintf(&b, `<span class="meta-date">%s</span>`,
+		template.HTMLEscapeString(report.GeneratedAt.Format("2 Jan 2006 15:04")))
 	b.WriteString(`</p>`)
 	return b.String()
 }
