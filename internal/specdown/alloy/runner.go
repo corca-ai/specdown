@@ -24,10 +24,6 @@ const (
 
 var alloyJarURL = "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v" + alloyVersion + "/" + alloyJarName
 
-type DocumentRunner interface {
-	RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error)
-}
-
 type Runner struct {
 	BaseDir    string
 	HTTPClient *http.Client

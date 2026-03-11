@@ -10,7 +10,6 @@ import (
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
-	"github.com/corca-ai/specdown/internal/specdown/alloy"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
@@ -33,13 +32,13 @@ type adapterRegistry struct {
 	checks map[string]adapterEntry
 }
 
-func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
+func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
 	title, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return core.Report{}, err
 	}
 	host := adapterhost.Host{BaseDir: baseDir}
-	report, err := runWithDocs(title, docs, cfg, host, alloy.Runner{BaseDir: baseDir}, opts)
+	report, err := runWithDocs(title, docs, cfg, host, modelRunner, opts)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -60,7 +59,12 @@ func Run(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error
 	return report, nil
 }
 
-func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
+// ModelDumper can write model artifacts without running verification.
+type ModelDumper interface {
+	DumpModels(plan core.DocumentPlan) ([]string, error)
+}
+
+func DumpModels(baseDir string, cfg config.Config, dumper ModelDumper) ([]string, error) {
 	_, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return nil, err
@@ -71,10 +75,9 @@ func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
 		return nil, err
 	}
 
-	runner := alloy.Runner{BaseDir: baseDir}
 	var paths []string
 	for _, docPlan := range plan.Documents {
-		dumped, err := runner.DumpModels(docPlan)
+		dumped, err := dumper.DumpModels(docPlan)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +86,7 @@ func DumpAlloyModels(baseDir string, cfg config.Config) ([]string, error) {
 	return paths, nil
 }
 
-func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner alloy.DocumentRunner, opts RunOptions) (core.Report, error) {
+func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
 	plan, err := core.CompileDocuments(docs)
 	if err != nil {
 		return core.Report{}, err
@@ -127,7 +130,7 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	}, nil
 }
 
-func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner alloy.DocumentRunner) ([]core.DocumentResult, error) {
+func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
 	if jobs == 1 {
 		for i, docPlan := range documents {
@@ -285,7 +288,7 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 	}
 }
 
-func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner alloy.DocumentRunner) (core.DocumentResult, error) {
+func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner) (core.DocumentResult, error) {
 	if len(plan.Cases) == 0 {
 		return core.DocumentResult{
 			Document: plan.Document,

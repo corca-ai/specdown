@@ -13,6 +13,7 @@ import (
 	_ "embed"
 
 	specdown "github.com/corca-ai/specdown"
+	"github.com/corca-ai/specdown/internal/specdown/alloy"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/engine"
@@ -128,7 +129,7 @@ func run(args []string) error {
 	}
 
 	runStart := time.Now()
-	report, err := engine.Run(configDir, cfg, opts)
+	report, err := engine.Run(configDir, cfg, alloy.Runner{BaseDir: configDir}, opts)
 	elapsed := time.Since(runStart)
 	if err != nil {
 		return err
@@ -408,7 +409,7 @@ func alloyDump(args []string) error {
 		return err
 	}
 
-	paths, err := engine.DumpAlloyModels(configDir, cfg)
+	paths, err := engine.DumpModels(configDir, cfg, alloy.Runner{BaseDir: configDir})
 	if err != nil {
 		return err
 	}

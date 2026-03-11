@@ -15,6 +15,11 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
+// noopModelRunner satisfies core.ModelRunner but never returns results.
+type noopModelRunner struct{}
+
+func (noopModelRunner) RunDocument(core.DocumentPlan) ([]core.CaseResult, error) { return nil, nil }
+
 func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 	root := t.TempDir()
 	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
@@ -81,7 +86,7 @@ func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -142,7 +147,7 @@ func TestRunFailsWhenCardColumnCheckMismatches(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -192,7 +197,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -228,7 +233,7 @@ func TestRunFailsWhenNoAdapterSupportsCheck(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	_, err := Run(root, helperAdapterConfig(), RunOptions{})
+	_, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -570,7 +575,7 @@ func TestRunWithFrontmatterTimeout(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	writeEntryFile(t, root, specPath)
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -591,7 +596,7 @@ func TestRunDryRunSkipsExecution(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 	// DryRun should not launch any adapter — even with no adapter config
-	report, err := Run(root, config.Config{Entry: "specs/index.spec.md"}, RunOptions{DryRun: true})
+	report, err := Run(root, config.Config{Entry: "specs/index.spec.md"}, noopModelRunner{}, RunOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -629,7 +634,7 @@ func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	writeEntryFile(t, root, specPath)
-	report, err := Run(root, helperAdapterConfig(), RunOptions{Filter: "Alpha"})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{Filter: "Alpha"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -675,7 +680,7 @@ func TestRunExecutesSetupEachHooksAtSectionBoundaries(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -721,7 +726,7 @@ func TestRunExecutesSetupOnceHook(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -756,7 +761,7 @@ func TestRunCheckCallWithParams(t *testing.T) {
 	}
 	writeEntryFile(t, root, specPath)
 
-	report, err := Run(root, helperAdapterConfig(), RunOptions{})
+	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

@@ -102,6 +102,11 @@ type TraceEdge struct {
 	EdgeName string `json:"edgeName"`
 }
 
+// ModelRunner runs model verification cases for a document plan.
+type ModelRunner interface {
+	RunDocument(plan DocumentPlan) ([]CaseResult, error)
+}
+
 type Report struct {
 	Title       string           `json:"title"`
 	GeneratedAt time.Time        `json:"generatedAt"`
