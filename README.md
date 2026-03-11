@@ -22,6 +22,12 @@ Or download directly from [Releases](https://github.com/corca-ai/specdown/releas
 go install github.com/corca-ai/specdown/cmd/specdown@latest
 ```
 
+### Homebrew
+
+```sh
+brew install corca-ai/tap/specdown
+```
+
 ### From source
 
 ```sh
@@ -30,9 +36,9 @@ go build -o bin/specdown ./cmd/specdown
 
 ## Documentation
 
-- [Self-Spec](selfspecs/index.spec.md) — the executable reference (start here)
+- [Self-Spec](specs/index.spec.md) — the executable reference (start here)
 - [Live Report](https://corca-ai.github.io/specdown/) — self-spec execution results
-- [Best Practices](selfspecs/best-practices.spec.md) — patterns, pitfalls, and anti-patterns
+- [Best Practices](specs/best-practices.spec.md) — patterns, pitfalls, and anti-patterns
 - [Build & Run](docs/build.md) — building from source
 - [Agent Guide](AGENTS.md) — project layout, working rules, and conventions
 
