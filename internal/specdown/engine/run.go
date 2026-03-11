@@ -499,6 +499,8 @@ func runHook(hook core.HookSpec, registry adapterRegistry, host adapterhost.Host
 }
 
 func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapterhost.Host, sessions map[string]*adapterhost.Session, bindings []scopedBinding, timeoutMs int) (core.CaseResult, error) {
+	start := time.Now()
+
 	if specCase.Kind == core.CaseKindInlineExpect {
 		visible := visibleBindings(bindings, specCase.ID.HeadingPath)
 		prepared, err := prepareCase(specCase, visible)
@@ -509,6 +511,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 		if specCase.ExpectFail {
 			result = applyExpectFail(result)
 		}
+		result.DurationMs = int(time.Since(start).Milliseconds())
 		return result, nil
 	}
 
@@ -546,6 +549,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, host adapte
 		result = applyExpectFail(result)
 	}
 
+	result.DurationMs = int(time.Since(start).Milliseconds())
 	return result, nil
 }
 

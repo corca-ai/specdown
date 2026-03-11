@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
@@ -229,14 +230,20 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 
 	cmd := exec.Command(javaPath, "-jar", jarPath, "exec", "-f", "-o", outputDir, bundle.AbsolutePath)
 	cmd.Dir = r.BaseDir
+	start := time.Now()
 	output, err := cmd.CombinedOutput()
+	durationMs := int(time.Since(start).Milliseconds())
 	if err != nil {
 		message := strings.TrimSpace(string(output))
 		if message == "" {
 			message = err.Error()
 		}
 		location, ok := locateAlloyFailure(bundle.LineRefs, message)
-		return failedChecks(checks, bundle.AbsolutePath, bundle.SourceMapAbsolutePath, annotateAlloyFailure(message, location, ok), location, ok), nil
+		failed := failedChecks(checks, bundle.AbsolutePath, bundle.SourceMapAbsolutePath, annotateAlloyFailure(message, location, ok), location, ok)
+		for i := range failed {
+			failed[i].DurationMs = durationMs
+		}
+		return failed, nil
 	}
 
 	commandResults, err := parseReceipt(filepath.Join(outputDir, "receipt.json"))
@@ -250,6 +257,7 @@ func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, ch
 		if err != nil {
 			return nil, err
 		}
+		result.DurationMs = durationMs
 		results = append(results, result)
 	}
 

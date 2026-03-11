@@ -5,6 +5,7 @@
 .envrc
 mise.toml
 .tmp-test/
+.tmp-bin/
 .board-state.json
 .playwright-cli/
 .claude/skills/specdown/

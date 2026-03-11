@@ -51,6 +51,7 @@ type CaseResult struct {
 	Actual         string    `json:"actual,omitempty"`
 	Bindings       []Binding      `json:"bindings,omitempty"`
 	VisibleBindings []Binding     `json:"visibleBindings,omitempty"`
+	DurationMs     int            `json:"durationMs,omitempty"`
 	Steps          []DoctestStep  `json:"steps,omitempty"`
 	Events         []Event        `json:"events,omitempty"`
 }
@@ -62,6 +63,7 @@ type AlloyCheckResult struct {
 	Scope              string `json:"scope"`
 	Label              string `json:"label"`
 	Status             Status `json:"status"`
+	DurationMs         int    `json:"durationMs,omitempty"`
 	Message            string `json:"message,omitempty"`
 	BundlePath         string `json:"bundlePath,omitempty"`
 	SourceMapPath      string `json:"sourceMapPath,omitempty"`

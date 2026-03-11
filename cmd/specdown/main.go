@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "embed"
 
@@ -126,7 +127,9 @@ func run(args []string) error {
 		DryRun: *dryRun,
 	}
 
+	runStart := time.Now()
 	report, err := engine.Run(configDir, cfg, opts)
+	elapsed := time.Since(runStart)
 	if err != nil {
 		return err
 	}
@@ -138,6 +141,8 @@ func run(args []string) error {
 		printDryRun(report)
 		return nil
 	}
+
+	printResults(report)
 
 	if *showBindings {
 		printBindings(report)
@@ -154,7 +159,7 @@ func run(args []string) error {
 		if report.Summary.CasesExpectedFail > 0 {
 			xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
 		}
-		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s, %d alloy check(s)\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, report.Summary.AlloyChecksFailed)
+		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s, %d alloy check(s) in %dms\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, report.Summary.AlloyChecksFailed, elapsed.Milliseconds())
 		if reportPath != "" {
 			fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
 		}
@@ -165,7 +170,7 @@ func run(args []string) error {
 	if report.Summary.CasesExpectedFail > 0 {
 		xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
 	}
-	fmt.Printf("PASS %d spec(s), %d case(s)%s, %d alloy check(s)\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, report.Summary.AlloyChecksTotal)
+	fmt.Printf("PASS %d spec(s), %d case(s)%s, %d alloy check(s) in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, report.Summary.AlloyChecksTotal, elapsed.Milliseconds())
 	if reportPath != "" {
 		fmt.Printf("report: %s\n", reportPath)
 	}
@@ -662,6 +667,46 @@ func printWarnings(report core.Report) {
 	}
 }
 
+
+func printResults(report core.Report) {
+	for _, doc := range report.Results {
+		fmt.Printf("spec: %s\n", doc.Document.RelativeTo)
+		for _, c := range doc.Cases {
+			printCaseResult(c)
+		}
+		for _, c := range doc.AlloyChecks {
+			printAlloyResult(c)
+		}
+	}
+}
+
+func caseTag(status core.Status, expectFail bool) string {
+	if status == core.StatusFailed {
+		if expectFail {
+			return "XFAIL"
+		}
+		return "FAIL"
+	}
+	return "PASS"
+}
+
+func printCaseResult(c core.CaseResult) {
+	tag := caseTag(c.Status, c.ExpectFail)
+	kind := c.Block + c.Check
+	label := ""
+	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
+		label = fmt.Sprintf(" row %d", c.RowNumber)
+	}
+	fmt.Printf("  %s  %s  [%s]%s  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
+}
+
+func printAlloyResult(c core.AlloyCheckResult) {
+	tag := "PASS"
+	if c.Status == core.StatusFailed {
+		tag = "FAIL"
+	}
+	fmt.Printf("  %s  %s  [alloy:%s#%s]  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), c.Model, c.Assertion, c.DurationMs)
+}
 
 func printDryRun(report core.Report) {
 	for _, doc := range report.Results {
