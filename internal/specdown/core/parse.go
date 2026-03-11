@@ -53,314 +53,43 @@ func parseFrontmatter(markdown string) (Frontmatter, string) {
 	return fm, rest
 }
 
-//nolint:gocognit // parser walk is inherently complex
+// documentParser holds mutable state for a single document parse.
+type documentParser struct {
+	file            string
+	lines           []string
+	ignorePrefixSet map[string]bool
+	nodes           []Node
+	headingPath     []string
+	title           string
+	ordinal         int
+	check           string
+	checkParams     map[string]string
+	checkRaw        string
+	hookKind        HookKind
+	hookEach        bool
+	hookRaw         string
+	warnings        []string
+}
+
 func ParseDocument(relativePath string, markdown string, ignorePrefixes []string) (Document, error) {
 	fm, content := parseFrontmatter(markdown)
-	lines := splitLines(content)
 
 	ignorePrefixSet := make(map[string]bool, len(ignorePrefixes))
 	for _, p := range ignorePrefixes {
 		ignorePrefixSet[p] = true
 	}
 
-	var (
-		nodes         []Node
-		headingPath   []string
-		title         string
-		ordinal       int
-		check       string
-		checkParams map[string]string
-		checkRaw    string
-		hookKind      HookKind
-		hookEach      bool
-		hookRaw       string
-		warnings      []string
-	)
-
-	for i := 0; i < len(lines); {
-		line := lines[i]
-
-		if ref, ok, err := parseAlloyRefDirective(line); err != nil {
-			return Document{}, fmt.Errorf("%s: %w", relativePath, err)
-		} else if ok {
-			if hookKind != "" {
-				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-			}
-			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
-				return Document{}, err
-			} else if flushed {
-				nodes = append(nodes, node)
-				check = ""
-				checkParams = nil
-				checkRaw = ""
-			}
-			ordinal++
-			ref.Raw = line
-			ref.HeadingPath = append([]string(nil), headingPath...)
-			ref.ID = &SpecID{
-				File:        relativePath,
-				HeadingPath: append([]string(nil), headingPath...),
-				Ordinal:     ordinal,
-			}
-			nodes = append(nodes, ref)
-			i++
-			continue
-		}
-
-		if hk, he, ok := parseHookDirective(line); ok {
-			if hookKind != "" {
-				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-			}
-			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
-				return Document{}, err
-			} else if flushed {
-				nodes = append(nodes, node)
-				check = ""
-				checkParams = nil
-				checkRaw = ""
-			}
-			hookKind = hk
-			hookEach = he
-			hookRaw = line
-			i++
-			continue
-		}
-
-		if nextCheck, nextParams, ok := parseCheckDirective(line); ok {
-			if hookKind != "" {
-				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-			}
-			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
-				return Document{}, err
-			} else if flushed {
-				nodes = append(nodes, node)
-			}
-			check = nextCheck
-			checkParams = nextParams
-			checkRaw = line
-			i++
-			continue
-		}
-
-		if isFenceStart(line) {
-			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
-				return Document{}, err
-			} else if flushed {
-				nodes = append(nodes, node)
-				check = ""
-				checkParams = nil
-				checkRaw = ""
-			}
-			info := parseFenceInfo(line)
-
-			if hookKind != "" {
-				if modelName, ok := parseAlloyModelInfo(info); ok {
-					_ = modelName
-					return Document{}, fmt.Errorf("%s: %s directive must be followed by an executable code block", relativePath, hookKind)
-				}
-				block, err := parseBlockSpec(info)
-				if err != nil {
-					return Document{}, fmt.Errorf("%s: %w", relativePath, err)
-				}
-				if !block.Executable() {
-					return Document{}, fmt.Errorf("%s: %s directive must be followed by an executable code block", relativePath, hookKind)
-				}
-				end := -1
-				for j := i + 1; j < len(lines); j++ {
-					if isFenceEnd(lines[j]) {
-						end = j
-						break
-					}
-				}
-				if end == -1 {
-					return Document{}, fmt.Errorf("%s: unclosed fenced code block", relativePath)
-				}
-				raw := hookRaw + strings.Join(lines[i:end+1], "")
-				source := strings.Join(lines[i+1:end], "")
-				trimmedSource := strings.TrimSuffix(source, "\n")
-				hookSummary := extractSummary(trimmedSource)
-				nodes = append(nodes, HookNode{
-					Hook:        hookKind,
-					Each:        hookEach,
-					Block:       block,
-					Source:      trimmedSource,
-					Raw:         raw,
-					Summary:     hookSummary,
-					HeadingPath: append([]string(nil), headingPath...),
-				})
-				hookKind = ""
-				hookEach = false
-				hookRaw = ""
-				i = end + 1
-				continue
-			}
-
-			if modelName, ok := parseAlloyModelInfo(info); ok {
-				end := -1
-				for j := i + 1; j < len(lines); j++ {
-					if isFenceEnd(lines[j]) {
-						end = j
-						break
-					}
-				}
-				if end == -1 {
-					return Document{}, fmt.Errorf("%s: unclosed fenced code block", relativePath)
-				}
-
-				raw := strings.Join(lines[i:end+1], "")
-				source := strings.Join(lines[i+1:end], "")
-				nodes = append(nodes, AlloyModelNode{
-					Model:       modelName,
-					Source:      strings.TrimSuffix(source, "\n"),
-					Raw:         raw,
-					HeadingPath: append([]string(nil), headingPath...),
-				})
-				i = end + 1
-				continue
-			}
-
-			block, err := parseBlockSpec(info)
-			if err != nil {
-				return Document{}, fmt.Errorf("%s: %w", relativePath, err)
-			}
-
-			if !block.Executable() {
-				if prefix := unknownBlockPrefix(info); prefix != "" && !ignorePrefixSet[prefix] {
-					warnings = append(warnings, fmt.Sprintf("%s: unknown block prefix %q in code block %q (not executable)", relativePath, prefix, strings.TrimSpace(info)))
-				}
-			}
-
-			end := -1
-			for j := i + 1; j < len(lines); j++ {
-				if isFenceEnd(lines[j]) {
-					end = j
-					break
-				}
-			}
-			if end == -1 {
-				return Document{}, fmt.Errorf("%s: unclosed fenced code block", relativePath)
-			}
-
-			raw := strings.Join(lines[i:end+1], "")
-			source := strings.Join(lines[i+1:end], "")
-			trimmedSource := strings.TrimSuffix(source, "\n")
-			node := CodeBlockNode{
-				Block:  block,
-				Source: trimmedSource,
-				Raw:    raw,
-			}
-			if block.Executable() && !isDoctestContent(trimmedSource) {
-				node.Summary = extractSummary(trimmedSource)
-			}
-			if block.Executable() {
-				ordinal++
-				node.ID = &SpecID{
-					File:        relativePath,
-					HeadingPath: append([]string(nil), headingPath...),
-					Ordinal:     ordinal,
-				}
-			}
-			nodes = append(nodes, node)
-			i = end + 1
-			continue
-		}
-
-		if isTableStart(lines, i) {
-			if hookKind != "" {
-				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-			}
-			table, next, err := parseTableNode(relativePath, lines, i, check, checkParams, &ordinal, headingPath)
-			if err != nil {
-				return Document{}, err
-			}
-			nodes = append(nodes, table)
-			check = ""
-			checkParams = nil
-			checkRaw = ""
-			i = next
-			continue
-		}
-
-		if level, text, ok := parseHeading(line); ok {
-			if hookKind != "" {
-				return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-			}
-			if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
-				return Document{}, err
-			} else if flushed {
-				nodes = append(nodes, node)
-				check = ""
-				checkParams = nil
-				checkRaw = ""
-			}
-			if title == "" {
-				title = text
-			}
-			headingPath = nextHeadingPath(headingPath, level, text)
-			nodes = append(nodes, HeadingNode{
-				Level:       level,
-				Text:        text,
-				Raw:         line,
-				HeadingPath: append([]string(nil), headingPath...),
-			})
-			i++
-			continue
-		}
-
-		start := i
-		for i < len(lines) && !isFenceStart(lines[i]) {
-			if _, _, ok := parseHeading(lines[i]); ok {
-				break
-			}
-			if _, ok, err := parseAlloyRefDirective(lines[i]); err != nil {
-				return Document{}, fmt.Errorf("%s: %w", relativePath, err)
-			} else if ok {
-				break
-			}
-			if _, _, ok := parseHookDirective(lines[i]); ok {
-				break
-			}
-			if _, _, ok := parseCheckDirective(lines[i]); ok {
-				break
-			}
-			if isTableStart(lines, i) {
-				break
-			}
-			i++
-		}
-
-		raw := strings.Join(lines[start:i], "")
-		if strings.TrimSpace(raw) == "" {
-			continue
-		}
-		if hookKind != "" {
-			return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-		}
-		if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
-			return Document{}, err
-		} else if flushed {
-			nodes = append(nodes, node)
-			check = ""
-			checkParams = nil
-			checkRaw = ""
-		}
-		proseNode := ProseNode{
-			Raw:         raw,
-			HeadingPath: append([]string(nil), headingPath...),
-		}
-		proseNode.Inlines = parseInlineElements(raw, relativePath, &ordinal, headingPath)
-		nodes = append(nodes, proseNode)
+	p := &documentParser{
+		file:            relativePath,
+		lines:           splitLines(content),
+		ignorePrefixSet: ignorePrefixSet,
 	}
 
-	if hookKind != "" {
-		return Document{}, fmt.Errorf("%s: %s directive must be followed by a code block", relativePath, hookKind)
-	}
-	if node, flushed, err := tryFlushCheck(check, checkParams, checkRaw, relativePath, &ordinal, headingPath); err != nil {
+	if err := p.parse(); err != nil {
 		return Document{}, err
-	} else if flushed {
-		nodes = append(nodes, node)
 	}
 
+	title := p.title
 	if title == "" {
 		title = relativePath
 	}
@@ -369,10 +98,332 @@ func ParseDocument(relativePath string, markdown string, ignorePrefixes []string
 		RelativeTo:  relativePath,
 		Title:       title,
 		Markdown:    markdown,
-		Nodes:       nodes,
+		Nodes:       p.nodes,
 		Frontmatter: fm,
-		Warnings:    warnings,
+		Warnings:    p.warnings,
 	}, nil
+}
+
+func (p *documentParser) parse() error {
+	for i := 0; i < len(p.lines); {
+		next, err := p.parseLine(i)
+		if err != nil {
+			return err
+		}
+		i = next
+	}
+
+	if p.hookKind != "" {
+		return fmt.Errorf("%s: %s directive must be followed by a code block", p.file, p.hookKind)
+	}
+	return p.flushCheck()
+}
+
+func (p *documentParser) parseLine(i int) (int, error) {
+	line := p.lines[i]
+
+	if ref, ok, err := parseAlloyRefDirective(line); err != nil {
+		return 0, fmt.Errorf("%s: %w", p.file, err)
+	} else if ok {
+		return p.handleAlloyRef(i, ref)
+	}
+
+	if hk, he, ok := parseHookDirective(line); ok {
+		return p.handleHookDirective(i, hk, he)
+	}
+
+	if nextCheck, nextParams, ok := parseCheckDirective(line); ok {
+		return p.handleCheckDirective(i, nextCheck, nextParams)
+	}
+
+	if isFenceStart(line) {
+		return p.handleFence(i)
+	}
+
+	if isTableStart(p.lines, i) {
+		return p.handleTable(i)
+	}
+
+	if level, text, ok := parseHeading(line); ok {
+		return p.handleHeading(i, level, text)
+	}
+
+	return p.handleProse(i)
+}
+
+func (p *documentParser) requireNoHook() error {
+	if p.hookKind != "" {
+		return fmt.Errorf("%s: %s directive must be followed by a code block", p.file, p.hookKind)
+	}
+	return nil
+}
+
+func (p *documentParser) flushCheck() error {
+	if p.check == "" {
+		return nil
+	}
+	node, flushed, err := tryFlushCheck(p.check, p.checkParams, p.checkRaw, p.file, &p.ordinal, p.headingPath)
+	if err != nil {
+		return err
+	}
+	if flushed {
+		p.nodes = append(p.nodes, node)
+	}
+	p.check = ""
+	p.checkParams = nil
+	p.checkRaw = ""
+	return nil
+}
+
+func (p *documentParser) handleAlloyRef(i int, ref AlloyRefNode) (int, error) {
+	if err := p.requireNoHook(); err != nil {
+		return 0, err
+	}
+	if err := p.flushCheck(); err != nil {
+		return 0, err
+	}
+	p.ordinal++
+	ref.Raw = p.lines[i]
+	ref.HeadingPath = append([]string(nil), p.headingPath...)
+	ref.ID = &SpecID{
+		File:        p.file,
+		HeadingPath: append([]string(nil), p.headingPath...),
+		Ordinal:     p.ordinal,
+	}
+	p.nodes = append(p.nodes, ref)
+	return i + 1, nil
+}
+
+func (p *documentParser) handleHookDirective(i int, hk HookKind, he bool) (int, error) {
+	if err := p.requireNoHook(); err != nil {
+		return 0, err
+	}
+	if err := p.flushCheck(); err != nil {
+		return 0, err
+	}
+	p.hookKind = hk
+	p.hookEach = he
+	p.hookRaw = p.lines[i]
+	return i + 1, nil
+}
+
+func (p *documentParser) handleCheckDirective(i int, check string, params map[string]string) (int, error) {
+	if err := p.requireNoHook(); err != nil {
+		return 0, err
+	}
+	if err := p.flushCheck(); err != nil {
+		return 0, err
+	}
+	p.check = check
+	p.checkParams = params
+	p.checkRaw = p.lines[i]
+	return i + 1, nil
+}
+
+func (p *documentParser) handleFence(i int) (int, error) {
+	if err := p.flushCheck(); err != nil {
+		return 0, err
+	}
+	info := parseFenceInfo(p.lines[i])
+
+	if p.hookKind != "" {
+		return p.parseHookBlock(i, info)
+	}
+
+	if modelName, ok := parseAlloyModelInfo(info); ok {
+		return p.parseAlloyModelBlock(i, modelName)
+	}
+
+	return p.parseCodeBlock(i, info)
+}
+
+func (p *documentParser) findFenceEnd(start int) (int, error) {
+	for j := start + 1; j < len(p.lines); j++ {
+		if isFenceEnd(p.lines[j]) {
+			return j, nil
+		}
+	}
+	return 0, fmt.Errorf("%s: unclosed fenced code block", p.file)
+}
+
+func (p *documentParser) fenceContent(start, end int) (raw string, source string) {
+	raw = strings.Join(p.lines[start:end+1], "")
+	source = strings.TrimSuffix(strings.Join(p.lines[start+1:end], ""), "\n")
+	return
+}
+
+func (p *documentParser) parseHookBlock(i int, info string) (int, error) {
+	if _, ok := parseAlloyModelInfo(info); ok {
+		return 0, fmt.Errorf("%s: %s directive must be followed by an executable code block", p.file, p.hookKind)
+	}
+	block, err := parseBlockSpec(info)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", p.file, err)
+	}
+	if !block.Executable() {
+		return 0, fmt.Errorf("%s: %s directive must be followed by an executable code block", p.file, p.hookKind)
+	}
+	end, err := p.findFenceEnd(i)
+	if err != nil {
+		return 0, err
+	}
+	_, source := p.fenceContent(i, end)
+	hookSummary := extractSummary(source)
+	p.nodes = append(p.nodes, HookNode{
+		Hook:        p.hookKind,
+		Each:        p.hookEach,
+		Block:       block,
+		Source:      source,
+		Raw:         p.hookRaw + strings.Join(p.lines[i:end+1], ""),
+		Summary:     hookSummary,
+		HeadingPath: append([]string(nil), p.headingPath...),
+	})
+	p.hookKind = ""
+	p.hookEach = false
+	p.hookRaw = ""
+	return end + 1, nil
+}
+
+func (p *documentParser) parseAlloyModelBlock(i int, modelName string) (int, error) {
+	end, err := p.findFenceEnd(i)
+	if err != nil {
+		return 0, err
+	}
+	raw, source := p.fenceContent(i, end)
+	p.nodes = append(p.nodes, AlloyModelNode{
+		Model:       modelName,
+		Source:      source,
+		Raw:         raw,
+		HeadingPath: append([]string(nil), p.headingPath...),
+	})
+	return end + 1, nil
+}
+
+func (p *documentParser) parseCodeBlock(i int, info string) (int, error) {
+	block, err := parseBlockSpec(info)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", p.file, err)
+	}
+
+	if !block.Executable() {
+		if prefix := unknownBlockPrefix(info); prefix != "" && !p.ignorePrefixSet[prefix] {
+			p.warnings = append(p.warnings, fmt.Sprintf("%s: unknown block prefix %q in code block %q (not executable)", p.file, prefix, strings.TrimSpace(info)))
+		}
+	}
+
+	end, err := p.findFenceEnd(i)
+	if err != nil {
+		return 0, err
+	}
+	raw, source := p.fenceContent(i, end)
+	node := CodeBlockNode{
+		Block:  block,
+		Source: source,
+		Raw:    raw,
+	}
+	if block.Executable() && !isDoctestContent(source) {
+		node.Summary = extractSummary(source)
+	}
+	if block.Executable() {
+		p.ordinal++
+		node.ID = &SpecID{
+			File:        p.file,
+			HeadingPath: append([]string(nil), p.headingPath...),
+			Ordinal:     p.ordinal,
+		}
+	}
+	p.nodes = append(p.nodes, node)
+	return end + 1, nil
+}
+
+func (p *documentParser) handleTable(i int) (int, error) {
+	if err := p.requireNoHook(); err != nil {
+		return 0, err
+	}
+	table, next, err := parseTableNode(p.file, p.lines, i, p.check, p.checkParams, &p.ordinal, p.headingPath)
+	if err != nil {
+		return 0, err
+	}
+	p.nodes = append(p.nodes, table)
+	p.check = ""
+	p.checkParams = nil
+	p.checkRaw = ""
+	return next, nil
+}
+
+func (p *documentParser) handleHeading(i int, level int, text string) (int, error) {
+	if err := p.requireNoHook(); err != nil {
+		return 0, err
+	}
+	if err := p.flushCheck(); err != nil {
+		return 0, err
+	}
+	if p.title == "" {
+		p.title = text
+	}
+	p.headingPath = nextHeadingPath(p.headingPath, level, text)
+	p.nodes = append(p.nodes, HeadingNode{
+		Level:       level,
+		Text:        text,
+		Raw:         p.lines[i],
+		HeadingPath: append([]string(nil), p.headingPath...),
+	})
+	return i + 1, nil
+}
+
+func (p *documentParser) handleProse(i int) (int, error) {
+	start := i
+	for i < len(p.lines) {
+		isBreak, err := p.isStructuralLine(i)
+		if err != nil {
+			return 0, err
+		}
+		if isBreak {
+			break
+		}
+		i++
+	}
+
+	raw := strings.Join(p.lines[start:i], "")
+	if strings.TrimSpace(raw) == "" {
+		return i, nil
+	}
+	if err := p.requireNoHook(); err != nil {
+		return 0, err
+	}
+	if err := p.flushCheck(); err != nil {
+		return 0, err
+	}
+	proseNode := ProseNode{
+		Raw:         raw,
+		HeadingPath: append([]string(nil), p.headingPath...),
+	}
+	proseNode.Inlines = parseInlineElements(raw, p.file, &p.ordinal, p.headingPath)
+	p.nodes = append(p.nodes, proseNode)
+	return i, nil
+}
+
+// isStructuralLine returns true if the line at index starts a new structural element.
+func (p *documentParser) isStructuralLine(i int) (bool, error) {
+	line := p.lines[i]
+	if isFenceStart(line) {
+		return true, nil
+	}
+	if _, _, ok := parseHeading(line); ok {
+		return true, nil
+	}
+	if _, ok, err := parseAlloyRefDirective(line); err != nil {
+		return false, fmt.Errorf("%s: %w", p.file, err)
+	} else if ok {
+		return true, nil
+	}
+	if _, _, ok := parseHookDirective(line); ok {
+		return true, nil
+	}
+	if _, _, ok := parseCheckDirective(line); ok {
+		return true, nil
+	}
+	return isTableStart(p.lines, i), nil
 }
 
 func splitLines(markdown string) []string {

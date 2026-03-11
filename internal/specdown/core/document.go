@@ -32,12 +32,12 @@ func (id SpecID) Anchor() string {
 	parts = append(parts, id.File)
 	parts = append(parts, id.HeadingPath...)
 	parts = append(parts, strconv.Itoa(id.Ordinal))
-	return "case-" + slug(strings.Join(parts, "-"))
+	return "case-" + Slug(strings.Join(parts, "-"))
 }
 
 func HeadingAnchor(file string, headingPath HeadingPath) string {
 	parts := append([]string{file}, headingPath...)
-	return "section-" + slug(strings.Join(parts, "-"))
+	return "section-" + Slug(strings.Join(parts, "-"))
 }
 
 type Node interface {
@@ -195,7 +195,8 @@ type Document struct {
 	Warnings    []string    `json:"warnings,omitempty"`
 }
 
-func slug(input string) string {
+// Slug converts input to a URL-friendly slug (lowercase, alphanumeric, dashes).
+func Slug(input string) string {
 	var out strings.Builder
 	lastDash := false
 

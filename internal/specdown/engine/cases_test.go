@@ -95,7 +95,6 @@ func TestRecordResultPassedAddsBindings(t *testing.T) {
 	ctx := &caseRunContext{
 		bindings: newBindingsManager(),
 		results:  make([]core.CaseResult, 0),
-		status:   core.StatusPassed,
 	}
 
 	result := core.CaseResult{
@@ -111,20 +110,16 @@ func TestRecordResultPassedAddsBindings(t *testing.T) {
 	if len(ctx.results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(ctx.results))
 	}
-	if ctx.status != core.StatusPassed {
-		t.Fatalf("expected status passed, got %q", ctx.status)
-	}
 	visible := ctx.bindings.VisibleAt(core.HeadingPath{"Root", "Section"})
 	if len(visible) != 1 || visible[0].Name != "x" {
 		t.Fatalf("expected binding x, got %v", visible)
 	}
 }
 
-func TestRecordResultFailedSetsStatusAndSkipsBindings(t *testing.T) {
+func TestRecordResultFailedSkipsBindings(t *testing.T) {
 	ctx := &caseRunContext{
 		bindings: newBindingsManager(),
 		results:  make([]core.CaseResult, 0),
-		status:   core.StatusPassed,
 	}
 
 	result := core.CaseResult{
@@ -137,9 +132,6 @@ func TestRecordResultFailedSetsStatusAndSkipsBindings(t *testing.T) {
 
 	ctx.recordResult(result, core.HeadingPath{"Root"})
 
-	if ctx.status != core.StatusFailed {
-		t.Fatalf("expected status failed, got %q", ctx.status)
-	}
 	// Bindings should NOT be recorded for failed cases
 	visible := ctx.bindings.VisibleAt(core.HeadingPath{"Root"})
 	if len(visible) != 0 {
@@ -147,23 +139,13 @@ func TestRecordResultFailedSetsStatusAndSkipsBindings(t *testing.T) {
 	}
 }
 
-func TestRecordResultExpectFailDoesNotSetFailed(t *testing.T) {
-	ctx := &caseRunContext{
-		bindings: newBindingsManager(),
-		results:  make([]core.CaseResult, 0),
-		status:   core.StatusPassed,
+func TestDocumentStatusExpectFailDoesNotFail(t *testing.T) {
+	cases := []core.CaseResult{
+		{Status: core.StatusPassed},
+		{Status: core.StatusFailed, ExpectFail: true},
 	}
-
-	result := core.CaseResult{
-		ID:         core.SpecID{HeadingPath: []string{"Root"}},
-		Status:     core.StatusFailed,
-		ExpectFail: true,
-	}
-
-	ctx.recordResult(result, core.HeadingPath{"Root"})
-
-	if ctx.status != core.StatusPassed {
-		t.Fatalf("expected status to remain passed for expect-fail, got %q", ctx.status)
+	if got := documentStatus(cases); got != core.StatusPassed {
+		t.Fatalf("expected passed for expect-fail, got %q", got)
 	}
 }
 
@@ -171,7 +153,6 @@ func TestRecordResultMultipleCasesAccumulate(t *testing.T) {
 	ctx := &caseRunContext{
 		bindings: newBindingsManager(),
 		results:  make([]core.CaseResult, 0),
-		status:   core.StatusPassed,
 	}
 
 	ctx.recordResult(core.CaseResult{
@@ -186,9 +167,6 @@ func TestRecordResultMultipleCasesAccumulate(t *testing.T) {
 
 	if len(ctx.results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(ctx.results))
-	}
-	if ctx.status != core.StatusPassed {
-		t.Fatalf("expected passed, got %q", ctx.status)
 	}
 	// Both bindings should be visible from a sibling path
 	visible := ctx.bindings.VisibleAt(core.HeadingPath{"C"})
@@ -303,10 +281,7 @@ func TestMergeAlloyResultsEmpty(t *testing.T) {
 	cases := []core.CaseResult{
 		{ID: core.SpecID{Ordinal: 1}, Kind: core.CaseKindCode, Status: core.StatusPassed},
 	}
-	merged, failed := mergeAlloyResults(cases, nil)
-	if failed {
-		t.Fatal("should not report failure with no alloy results")
-	}
+	merged := mergeAlloyResults(cases, nil)
 	if len(merged) != 1 {
 		t.Fatalf("expected 1 case, got %d", len(merged))
 	}
@@ -323,29 +298,35 @@ func TestMergeAlloyResultsReplacesPlaceholder(t *testing.T) {
 		Status: core.StatusPassed,
 		Label:  "real result",
 	}
-	cases := []core.CaseResult{placeholder}
-	merged, failed := mergeAlloyResults(cases, []core.CaseResult{actual})
-	if failed {
-		t.Fatal("should not report failure for passing alloy")
-	}
+	merged := mergeAlloyResults([]core.CaseResult{placeholder}, []core.CaseResult{actual})
 	if merged[0].Label != "real result" {
 		t.Fatalf("placeholder was not replaced, label=%q", merged[0].Label)
 	}
 }
 
-func TestMergeAlloyResultsReportsFailure(t *testing.T) {
-	placeholder := core.CaseResult{
-		ID:   core.SpecID{File: "a.md", HeadingPath: []string{"X"}, Ordinal: 1},
-		Kind: core.CaseKindAlloy,
+func TestDocumentStatusAllCasesPassed(t *testing.T) {
+	cases := []core.CaseResult{
+		{Status: core.StatusPassed},
+		{Status: core.StatusPassed},
 	}
-	actual := core.CaseResult{
-		ID:     core.SpecID{File: "a.md", HeadingPath: []string{"X"}, Ordinal: 1},
-		Kind:   core.CaseKindAlloy,
-		Status: core.StatusFailed,
+	if got := documentStatus(cases); got != core.StatusPassed {
+		t.Fatalf("expected passed, got %q", got)
 	}
-	_, failed := mergeAlloyResults([]core.CaseResult{placeholder}, []core.CaseResult{actual})
-	if !failed {
-		t.Fatal("should report failure for failing alloy result")
+}
+
+func TestDocumentStatusWithFailure(t *testing.T) {
+	cases := []core.CaseResult{
+		{Status: core.StatusPassed},
+		{Status: core.StatusFailed},
+	}
+	if got := documentStatus(cases); got != core.StatusFailed {
+		t.Fatalf("expected failed, got %q", got)
+	}
+}
+
+func TestDocumentStatusEmpty(t *testing.T) {
+	if got := documentStatus(nil); got != core.StatusPassed {
+		t.Fatalf("expected passed for empty, got %q", got)
 	}
 }
 

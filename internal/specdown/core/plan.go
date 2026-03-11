@@ -285,16 +285,7 @@ type bindingDefinition struct {
 
 func bindingVisible(bindings []bindingDefinition, name string, currentPath HeadingPath) bool {
 	for i := len(bindings) - 1; i >= 0; i-- {
-		if bindings[i].Name != name {
-			continue
-		}
-		bp := bindings[i].HeadingPath
-		// Visible if binding path is a prefix of current path (ancestor or self)
-		if bp.IsPrefix(currentPath) {
-			return true
-		}
-		// Visible if binding is a sibling: same parent, defined earlier in document order
-		if bp.IsSiblingOf(currentPath) {
+		if bindings[i].Name == name && bindings[i].HeadingPath.Reachable(currentPath) {
 			return true
 		}
 	}

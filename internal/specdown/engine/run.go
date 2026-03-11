@@ -299,7 +299,7 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	sm := newSessionManager(host)
 	defer func() { _ = sm.CloseAll() }()
 
-	cases, status, err := runDocumentCases(plan, registry, sm)
+	cases, err := runDocumentCases(plan, registry, sm)
 	if err != nil {
 		return core.DocumentResult{}, err
 	}
@@ -313,23 +313,29 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		return core.DocumentResult{}, err
 	}
 
-	cases, failed := mergeAlloyResults(cases, alloyResults)
-	if failed {
-		status = core.StatusFailed
-	}
+	cases = mergeAlloyResults(cases, alloyResults)
 
 	return core.DocumentResult{
 		Document: plan.Document,
-		Status:   status,
+		Status:   documentStatus(cases),
 		Cases:    cases,
 	}, nil
 }
 
-// mergeAlloyResults replaces placeholder alloy cases with actual results
-// and reports whether any alloy check failed.
-func mergeAlloyResults(cases []core.CaseResult, alloyResults []core.CaseResult) ([]core.CaseResult, bool) {
+// documentStatus derives the overall document status from case results.
+func documentStatus(cases []core.CaseResult) core.Status {
+	for _, c := range cases {
+		if c.Status == core.StatusFailed && !c.ExpectFail {
+			return core.StatusFailed
+		}
+	}
+	return core.StatusPassed
+}
+
+// mergeAlloyResults replaces placeholder alloy cases with actual results.
+func mergeAlloyResults(cases []core.CaseResult, alloyResults []core.CaseResult) []core.CaseResult {
 	if len(alloyResults) == 0 {
-		return cases, false
+		return cases
 	}
 	alloyByKey := make(map[string]core.CaseResult, len(alloyResults))
 	for _, r := range alloyResults {
@@ -342,17 +348,10 @@ func mergeAlloyResults(cases []core.CaseResult, alloyResults []core.CaseResult) 
 			}
 		}
 	}
-	failed := false
-	for _, r := range alloyResults {
-		if r.Status == core.StatusFailed {
-			failed = true
-			break
-		}
-	}
-	return cases, failed
+	return cases
 }
 
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager) ([]core.CaseResult, core.Status, error) {
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager) ([]core.CaseResult, error) {
 	ctx := &caseRunContext{
 		registry:  registry,
 		sessions:  sm,
@@ -360,16 +359,15 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sess
 		timeoutMs: plan.Document.Frontmatter.Timeout,
 		hooks:     plan.Hooks,
 		results:   make([]core.CaseResult, 0, len(plan.Cases)),
-		status:    core.StatusPassed,
 	}
 
 	for i, specCase := range plan.Cases {
 		nextPath := peekNextPath(plan.Cases, i)
 		if err := ctx.processCase(specCase, nextPath); err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
-	return ctx.results, ctx.status, nil
+	return ctx.results, nil
 }
 
 type caseRunContext struct {
@@ -379,7 +377,6 @@ type caseRunContext struct {
 	timeoutMs int
 	hooks     []core.HookSpec
 	results   []core.CaseResult
-	status    core.Status
 	prevPath  core.HeadingPath
 }
 
@@ -393,9 +390,7 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 		return nil
 	}
 
-	if failed := c.runSetupHooks(c.prevPath, currPath); failed {
-		c.status = core.StatusFailed
-	}
+	c.runSetupHooks(c.prevPath, currPath)
 
 	result, err := runSingleCase(specCase, c.registry, c.sessions, c.bindings.VisibleAt(specCase.ID.HeadingPath), c.timeoutMs)
 	if err != nil {
@@ -404,20 +399,16 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 
 	c.recordResult(result, specCase.ID.HeadingPath)
 
-	if failed := c.runTeardownHooks(currPath, nextPath); failed {
-		c.status = core.StatusFailed
-	}
+	c.runTeardownHooks(currPath, nextPath)
 
 	c.prevPath = currPath
 	return nil
 }
 
-// recordResult appends a case result, updates status, and records bindings.
+// recordResult appends a case result and records bindings for passing cases.
 func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingPath) {
 	c.results = append(c.results, result)
-	if result.Status == core.StatusFailed && !result.ExpectFail {
-		c.status = core.StatusFailed
-	} else if result.Status != core.StatusFailed {
+	if result.Status != core.StatusFailed {
 		c.bindings.Add(result.Bindings, path)
 	}
 }
@@ -443,32 +434,24 @@ func peekNextPath(cases []core.CaseSpec, current int) core.HeadingPath {
 	return nil
 }
 
-func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) bool {
-	failed := false
+func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) {
 	for _, hook := range c.hooks {
 		if hook.Kind != core.HookSetup || !shouldRunHook(hook, prevPath, currPath) {
 			continue
 		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
-			failed = true
-		}
+		_ = runHook(hook, c.registry, c.sessions, visible, c.timeoutMs)
 	}
-	return failed
 }
 
-func (c *caseRunContext) runTeardownHooks(currPath, nextPath core.HeadingPath) bool {
-	failed := false
+func (c *caseRunContext) runTeardownHooks(currPath, nextPath core.HeadingPath) {
 	for _, hook := range c.hooks {
 		if hook.Kind != core.HookTeardown || !shouldRunTeardownHook(hook, currPath, nextPath) {
 			continue
 		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
-			failed = true
-		}
+		_ = runHook(hook, c.registry, c.sessions, visible, c.timeoutMs)
 	}
-	return failed
 }
 
 func shouldRunHook(hook core.HookSpec, prevPath, currPath core.HeadingPath) bool {

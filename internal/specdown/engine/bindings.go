@@ -60,13 +60,5 @@ func (m *bindingsManager) VisibleAt(path core.HeadingPath) []core.Binding {
 }
 
 func bindingReachable(bp core.HeadingPath, current core.HeadingPath) bool {
-	// Ancestor or self
-	if bp.IsPrefix(current) {
-		return true
-	}
-	// Sibling: same depth, same parent
-	if bp.IsSiblingOf(current) {
-		return true
-	}
-	return false
+	return bp.Reachable(current)
 }

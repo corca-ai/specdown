@@ -230,7 +230,7 @@ func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []
 }
 
 func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, checks []core.CaseSpec) ([]core.CaseResult, error) {
-	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), slug(bundle.Model)+"-output")
+	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), core.Slug(bundle.Model)+"-output")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create alloy output dir: %w", err)
 	}
@@ -497,7 +497,7 @@ func (r Runner) ensureAlloyJar() (_ string, err error) {
 }
 
 func bundleFileName(documentPath string, modelName string) string {
-	return slug(documentPath) + "-" + slug(modelName) + ".als"
+	return core.Slug(documentPath) + "-" + core.Slug(modelName) + ".als"
 }
 
 func splitBundleLines(source string) []string {
@@ -582,27 +582,6 @@ func annotateAlloyFailure(message string, location failureLocation, hasLocation 
 	return message + " (bundle line " + strconv.Itoa(location.BundleLine) + ", source: " + location.SourceRef + ")"
 }
 
-func slug(input string) string {
-	input = strings.ToLower(input)
-	var out strings.Builder
-	lastDash := false
-	for _, r := range input {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			out.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if !lastDash {
-			out.WriteByte('-')
-			lastDash = true
-		}
-	}
-	result := strings.Trim(out.String(), "-")
-	if result == "" {
-		return "spec"
-	}
-	return result
-}
 
 func strconvQuote(value string) string {
 	body, _ := json.Marshal(value)

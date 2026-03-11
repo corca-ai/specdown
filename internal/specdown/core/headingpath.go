@@ -26,6 +26,12 @@ func (hp HeadingPath) IsSiblingOf(other HeadingPath) bool {
 	return hp[:len(hp)-1].IsPrefix(other[:len(other)-1])
 }
 
+// Reachable returns true if hp is reachable from other.
+// A path is reachable if it is an ancestor (prefix) or a sibling.
+func (hp HeadingPath) Reachable(from HeadingPath) bool {
+	return hp.IsPrefix(from) || hp.IsSiblingOf(from)
+}
+
 // Key returns a null-byte-joined string suitable as a map key.
 func (hp HeadingPath) Key() string {
 	return strings.Join(hp, "\x00")
