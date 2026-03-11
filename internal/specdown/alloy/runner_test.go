@@ -32,10 +32,12 @@ func TestBuildBundleSourceCombinesFragmentsAndGeneratedChecks(t *testing.T) {
 				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Ordinal:     1,
 			},
-			Kind:      core.CaseKindAlloy,
-			Model:     "board",
-			Assertion: "cardShape",
-			Scope:     "5",
+			Kind: core.CaseKindAlloy,
+			Alloy: &core.AlloyCaseSpec{
+				Model:     "board",
+				Assertion: "cardShape",
+				Scope:     "5",
+			},
 		},
 	})
 
@@ -122,10 +124,12 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 				HeadingPath: []string{"Pocket Board", "Formal Rules"},
 				Ordinal:     1,
 			},
-			Kind:      core.CaseKindAlloy,
-			Model:     "board",
-			Assertion: "cardShape",
-			Scope:     "5",
+			Kind: core.CaseKindAlloy,
+			Alloy: &core.AlloyCaseSpec{
+				Model:     "board",
+				Assertion: "cardShape",
+				Scope:     "5",
+			},
 		},
 	})
 	if err != nil {

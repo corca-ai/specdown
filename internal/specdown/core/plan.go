@@ -18,23 +18,46 @@ const (
 	CaseKindAlloy        CaseKind = "alloy"
 )
 
-type CaseSpec struct {
-	ID            SpecID
-	Kind          CaseKind
-	Block         BlockSpec
+// CodeCaseSpec holds fields specific to executable code block cases.
+type CodeCaseSpec struct {
+	Block    BlockSpec
+	Template string
+}
+
+// TableRowCaseSpec holds fields specific to table row and check call cases.
+type TableRowCaseSpec struct {
 	Check       string
 	CheckParams map[string]string
-	Template      string
-	ExpectValue   string
-	ExpectFail    bool
-	Columns       []string
-	Cells         []string
-	RowNumber     int
-	References    []string
-	// Alloy-specific fields (only set when Kind == CaseKindAlloy)
+	Columns     []string
+	Cells       []string
+	RowNumber   int
+}
+
+// InlineExpectCaseSpec holds fields specific to inline expect cases.
+type InlineExpectCaseSpec struct {
+	Template    string
+	ExpectValue string
+	ExpectFail  bool
+}
+
+// AlloyCaseSpec holds fields specific to alloy verification cases.
+type AlloyCaseSpec struct {
 	Model     string
 	Assertion string
 	Scope     string
+}
+
+// CaseSpec represents an executable case. Exactly one of Code, TableRow,
+// InlineExpect, or Alloy is set, matching Kind.
+type CaseSpec struct {
+	ID         SpecID
+	Kind       CaseKind
+	References []string
+
+	Code         *CodeCaseSpec
+	TableRow     *TableRowCaseSpec
+	InlineExpect *InlineExpectCaseSpec
+	Alloy        *AlloyCaseSpec
 }
 
 type HookSpec struct {
@@ -218,7 +241,10 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 			}
 		}
 
-		for _, captureName := range cases[i].Block.CaptureNames {
+		if cases[i].Code == nil {
+			continue
+		}
+		for _, captureName := range cases[i].Code.Block.CaptureNames {
 			bindings = append(bindings, bindingDefinition{
 				Name:        captureName,
 				HeadingPath: append([]string(nil), cases[i].ID.HeadingPath...),
@@ -366,18 +392,22 @@ func appendInlineCases(cases []CaseSpec, node ProseNode) []CaseSpec {
 		switch inline.Kind {
 		case InlineExpect:
 			cases = append(cases, CaseSpec{
-				ID:          *inline.ID,
-				Kind:        CaseKindInlineExpect,
-				Template:    inline.ExpectExpr,
-				ExpectValue: inline.ExpectValue,
-				ExpectFail:  inline.ExpectFail,
+				ID:   *inline.ID,
+				Kind: CaseKindInlineExpect,
+				InlineExpect: &InlineExpectCaseSpec{
+					Template:    inline.ExpectExpr,
+					ExpectValue: inline.ExpectValue,
+					ExpectFail:  inline.ExpectFail,
+				},
 			})
 		case InlineCheck:
 			cases = append(cases, CaseSpec{
-				ID:            *inline.ID,
-				Kind:          CaseKindTableRow,
-				Check:       inline.Check,
-				CheckParams: inline.CheckParams,
+				ID:   *inline.ID,
+				Kind: CaseKindTableRow,
+				TableRow: &TableRowCaseSpec{
+					Check:       inline.Check,
+					CheckParams: inline.CheckParams,
+				},
 			})
 		}
 	}
@@ -389,10 +419,12 @@ func appendCodeCase(cases []CaseSpec, block CodeBlockNode) []CaseSpec {
 		return cases
 	}
 	return append(cases, CaseSpec{
-		ID:       *block.ID,
-		Kind:     CaseKindCode,
-		Block:    block.Block,
-		Template: block.Source,
+		ID:   *block.ID,
+		Kind: CaseKindCode,
+		Code: &CodeCaseSpec{
+			Block:    block.Block,
+			Template: block.Source,
+		},
 	})
 }
 
@@ -401,10 +433,12 @@ func appendCheckCallCase(cases []CaseSpec, node CheckCallNode) []CaseSpec {
 		return cases
 	}
 	return append(cases, CaseSpec{
-		ID:            *node.ID,
-		Kind:          CaseKindTableRow,
-		Check:       node.Check,
-		CheckParams: node.CheckParams,
+		ID:   *node.ID,
+		Kind: CaseKindTableRow,
+		TableRow: &TableRowCaseSpec{
+			Check:       node.Check,
+			CheckParams: node.CheckParams,
+		},
 	})
 }
 
@@ -417,13 +451,15 @@ func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
 			continue
 		}
 		cases = append(cases, CaseSpec{
-			ID:            *row.ID,
-			Kind:          CaseKindTableRow,
-			Check:       table.Check,
-			CheckParams: table.CheckParams,
-			Columns:       append([]string(nil), table.Columns...),
-			Cells:         append([]string(nil), row.Cells...),
-			RowNumber:     index + 1,
+			ID:   *row.ID,
+			Kind: CaseKindTableRow,
+			TableRow: &TableRowCaseSpec{
+				Check:       table.Check,
+				CheckParams: table.CheckParams,
+				Columns:     append([]string(nil), table.Columns...),
+				Cells:       append([]string(nil), row.Cells...),
+				RowNumber:   index + 1,
+			},
 		})
 	}
 	return cases
@@ -482,11 +518,11 @@ func mergeVariableReferences(sources ...string) []string {
 func caseReferences(spec CaseSpec) []string {
 	switch spec.Kind {
 	case CaseKindCode:
-		return variableReferences(spec.Template)
+		return variableReferences(spec.Code.Template)
 	case CaseKindInlineExpect:
-		return mergeVariableReferences(spec.Template, spec.ExpectValue)
+		return mergeVariableReferences(spec.InlineExpect.Template, spec.InlineExpect.ExpectValue)
 	case CaseKindTableRow:
-		return mergeVariableReferences(spec.Cells...)
+		return mergeVariableReferences(spec.TableRow.Cells...)
 	default:
 		return nil
 	}
@@ -495,32 +531,33 @@ func caseReferences(spec CaseSpec) []string {
 func (c CaseSpec) TargetKey() string {
 	switch c.Kind {
 	case CaseKindCode:
-		return c.Block.Descriptor()
+		return c.Code.Block.Descriptor()
 	case CaseKindInlineExpect:
 		return "expect"
 	case CaseKindAlloy:
 		return "alloy"
 	default:
-		return c.Check
+		return c.TableRow.Check
 	}
 }
 
 func (c CaseSpec) DisplayKind() string {
 	switch c.Kind {
 	case CaseKindCode:
-		return c.Block.Descriptor()
+		return c.Code.Block.Descriptor()
 	case CaseKindInlineExpect:
 		return "expect"
 	case CaseKindAlloy:
-		return "alloy:" + c.Model + "#" + c.Assertion
+		return "alloy:" + c.Alloy.Model + "#" + c.Alloy.Assertion
 	default:
-		return "check:" + c.Check
+		return "check:" + c.TableRow.Check
 	}
 }
 
 func (c CaseSpec) DefaultLabel() string {
 	if c.Kind == CaseKindAlloy {
-		suffix := "alloy:ref(" + c.Model + "#" + c.Assertion + ", scope=" + c.Scope + ")"
+		a := c.Alloy
+		suffix := "alloy:ref(" + a.Model + "#" + a.Assertion + ", scope=" + a.Scope + ")"
 		if len(c.ID.HeadingPath) == 0 {
 			return suffix
 		}
@@ -531,7 +568,7 @@ func (c CaseSpec) DefaultLabel() string {
 	}
 	suffix := c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
 	if c.Kind == CaseKindTableRow {
-		return c.DisplayKind() + " @ " + suffix + " row " + fmt.Sprintf("%d", c.RowNumber)
+		return c.DisplayKind() + " @ " + suffix + " row " + fmt.Sprintf("%d", c.TableRow.RowNumber)
 	}
 	return c.DisplayKind() + " @ " + suffix
 }

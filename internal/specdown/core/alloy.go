@@ -82,11 +82,13 @@ func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []CaseSpec, map[string]s
 			}
 			explicitRefs[current.Model+"#"+current.Assertion] = struct{}{}
 			checks = append(checks, CaseSpec{
-				ID:        *current.ID,
-				Kind:      CaseKindAlloy,
-				Model:     current.Model,
-				Assertion: current.Assertion,
-				Scope:     strings.TrimSpace(current.Scope),
+				ID:   *current.ID,
+				Kind: CaseKindAlloy,
+				Alloy: &AlloyCaseSpec{
+					Model:     current.Model,
+					Assertion: current.Assertion,
+					Scope:     strings.TrimSpace(current.Scope),
+				},
 			})
 		}
 	}
@@ -110,10 +112,12 @@ func appendImplicitChecks(file string, models []AlloyModelSpec, checks []CaseSpe
 						HeadingPath: append([]string(nil), fragment.HeadingPath...),
 						Ordinal:     ordinal,
 					},
-					Kind:      CaseKindAlloy,
-					Model:     model.Name,
-					Assertion: pc.assertion,
-					Scope:     pc.scope,
+					Kind: CaseKindAlloy,
+					Alloy: &AlloyCaseSpec{
+						Model:     model.Name,
+						Assertion: pc.assertion,
+						Scope:     pc.scope,
+					},
 				})
 			}
 		}
@@ -127,11 +131,11 @@ func validateAlloyModelRefs(file string, models []AlloyModelSpec, checks []CaseS
 		knownModels[model.Name] = struct{}{}
 	}
 	for _, check := range checks {
-		if check.Kind != CaseKindAlloy {
+		if check.Alloy == nil {
 			continue
 		}
-		if _, ok := knownModels[check.Model]; !ok {
-			return fmt.Errorf("%s: alloy reference %q targets unknown model %q", file, check.ID.Key(), check.Model)
+		if _, ok := knownModels[check.Alloy.Model]; !ok {
+			return fmt.Errorf("%s: alloy reference %q targets unknown model %q", file, check.ID.Key(), check.Alloy.Model)
 		}
 	}
 	return nil

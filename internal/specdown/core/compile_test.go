@@ -70,7 +70,7 @@ func TestCompileDocumentAcceptsVariablesInCheckRows(t *testing.T) {
 	if len(plan.Cases) != 3 {
 		t.Fatalf("expected 3 cases, got %d", len(plan.Cases))
 	}
-	if plan.Cases[1].Kind != CaseKindTableRow || plan.Cases[1].Check != "board-exists" {
+	if plan.Cases[1].Kind != CaseKindTableRow || plan.Cases[1].TableRow.Check != "board-exists" {
 		t.Fatalf("unexpected table case %#v", plan.Cases[1])
 	}
 	if got := plan.Cases[1].References; len(got) != 1 || got[0] != "boardName" {
@@ -150,7 +150,7 @@ func TestCompileDocumentCollectsAlloyModelsAndChecks(t *testing.T) {
 	if len(alloyCases) != 1 {
 		t.Fatalf("expected 1 alloy case, got %d", len(alloyCases))
 	}
-	if got := alloyCases[0]; got.Model != "board" || got.Assertion != "cardExists" || got.Scope != "5" {
+	if got := alloyCases[0]; got.Alloy.Model != "board" || got.Alloy.Assertion != "cardExists" || got.Alloy.Scope != "5" {
 		t.Fatalf("unexpected alloy case %#v", got)
 	}
 }

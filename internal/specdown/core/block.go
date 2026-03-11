@@ -134,8 +134,8 @@ func unknownBlockPrefix(info string) string {
 	return prefix
 }
 
-// isDoctestContent returns true if the first non-empty line of source starts with "$ ".
-func isDoctestContent(source string) bool {
+// IsDoctestContent returns true if the first non-empty line of source starts with "$ ".
+func IsDoctestContent(source string) bool {
 	for _, line := range strings.Split(source, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {

@@ -368,9 +368,9 @@ func TestFilterPlanByTypeCode(t *testing.T) {
 			{
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "foo"},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Code: &core.CodeCaseSpec{Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, TableRow: &core.TableRowCaseSpec{Check: "foo"}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Alloy: &core.AlloyCaseSpec{Model: "m", Assertion: "a", Scope: "5"}},
 				},
 			},
 		},
@@ -391,7 +391,7 @@ func TestFilterPlanByTypeAlloy(t *testing.T) {
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
 					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Alloy: &core.AlloyCaseSpec{Model: "m", Assertion: "a", Scope: "5"}},
 				},
 			},
 		},
@@ -412,7 +412,7 @@ func TestFilterPlanByTypeTable(t *testing.T) {
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
 					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "foo"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, TableRow: &core.TableRowCaseSpec{Check: "foo"}},
 					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindInlineExpect},
 				},
 			},
@@ -430,14 +430,14 @@ func TestFilterPlanByBlock(t *testing.T) {
 			{
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "board"}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Code: &core.CodeCaseSpec{Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Code: &core.CodeCaseSpec{Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "board"}}},
 				},
 			},
 		},
 	}
 	filtered := filterPlan(plan, "block:shell")
-	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Block.Target != "shell" {
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Code.Block.Target != "shell" {
 		t.Fatalf("expected 1 shell case, got %v", filtered.Documents[0].Cases)
 	}
 }
@@ -448,14 +448,14 @@ func TestFilterPlanByCheck(t *testing.T) {
 			{
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "foo"},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, Check: "bar"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, TableRow: &core.TableRowCaseSpec{Check: "foo"}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindTableRow, TableRow: &core.TableRowCaseSpec{Check: "bar"}},
 				},
 			},
 		},
 	}
 	filtered := filterPlan(plan, "check:foo")
-	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].Check != "foo" {
+	if len(filtered.Documents[0].Cases) != 1 || filtered.Documents[0].Cases[0].TableRow.Check != "foo" {
 		t.Fatalf("expected 1 foo case, got %v", filtered.Documents[0].Cases)
 	}
 }
@@ -466,8 +466,8 @@ func TestFilterPlanBlockExcludesAlloy(t *testing.T) {
 			{
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Code: &core.CodeCaseSpec{Block: core.BlockSpec{Kind: core.BlockKindRun, Target: "shell"}}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Alloy: &core.AlloyCaseSpec{Model: "m", Assertion: "a", Scope: "5"}},
 				},
 			},
 		},
@@ -491,7 +491,7 @@ func TestFilterPlanUnknownTypeDropsAll(t *testing.T) {
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
 					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Alloy: &core.AlloyCaseSpec{Model: "m", Assertion: "a", Scope: "5"}},
 				},
 			},
 		},
@@ -508,8 +508,8 @@ func TestDryRunReportHasZeroStatuses(t *testing.T) {
 			{
 				Document: core.Document{RelativeTo: "a.spec.md"},
 				Cases: []core.CaseSpec{
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Block: core.BlockSpec{Raw: "run:shell", Kind: core.BlockKindRun, Target: "shell"}},
-					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Model: "m", Assertion: "a", Scope: "5"},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindCode, Code: &core.CodeCaseSpec{Block: core.BlockSpec{Raw: "run:shell", Kind: core.BlockKindRun, Target: "shell"}}},
+					{ID: core.SpecID{HeadingPath: []string{"A"}}, Kind: core.CaseKindAlloy, Alloy: &core.AlloyCaseSpec{Model: "m", Assertion: "a", Scope: "5"}},
 				},
 			},
 		},
@@ -1216,13 +1216,14 @@ func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult,
 	for _, check := range alloyChecks {
 		result, ok := f.results[check.ID.Key()]
 		if !ok {
+			a := check.Alloy
 			result = core.CaseResult{
 				ID:        check.ID,
 				Kind:      core.CaseKindAlloy,
-				Model:     check.Model,
-				Assertion: check.Assertion,
-				Scope:     check.Scope,
-				Label:     "alloy:ref(" + check.Model + "#" + check.Assertion + ", scope=" + check.Scope + ")",
+				Model:     a.Model,
+				Assertion: a.Assertion,
+				Scope:     a.Scope,
+				Label:     "alloy:ref(" + a.Model + "#" + a.Assertion + ", scope=" + a.Scope + ")",
 				Status:    core.StatusPassed,
 			}
 		}

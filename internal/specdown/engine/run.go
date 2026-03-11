@@ -12,7 +12,6 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
-	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
 	"github.com/corca-ai/specdown/internal/specdown/trace"
 )
 
@@ -195,18 +194,21 @@ func dryRunReport(plan core.Plan) core.Report {
 		cases := make([]core.CaseResult, 0, len(doc.Cases))
 		for _, c := range doc.Cases {
 			cr := core.CaseResult{
-				ID:        c.ID,
-				Kind:      c.Kind,
-				Block:     c.Block.Descriptor(),
-				Check:     c.Check,
-				Label:     dryRunLabel(c),
-				Columns:   append([]string(nil), c.Columns...),
-				RowNumber: c.RowNumber,
+				ID:    c.ID,
+				Kind:  c.Kind,
+				Label: dryRunLabel(c),
 			}
-			if c.Kind == core.CaseKindAlloy {
-				cr.Model = c.Model
-				cr.Assertion = c.Assertion
-				cr.Scope = c.Scope
+			switch c.Kind {
+			case core.CaseKindCode:
+				cr.Block = c.Code.Block.Descriptor()
+			case core.CaseKindTableRow:
+				cr.Check = c.TableRow.Check
+				cr.Columns = append([]string(nil), c.TableRow.Columns...)
+				cr.RowNumber = c.TableRow.RowNumber
+			case core.CaseKindAlloy:
+				cr.Model = c.Alloy.Model
+				cr.Assertion = c.Alloy.Assertion
+				cr.Scope = c.Alloy.Scope
 			}
 			cases = append(cases, cr)
 		}
@@ -272,15 +274,17 @@ func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error) {
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		entry, ok := r.blocks[specCase.Block.Descriptor()]
+		desc := specCase.Code.Block.Descriptor()
+		entry, ok := r.blocks[desc]
 		if !ok {
-			return adapterEntry{}, fmt.Errorf("no adapter supports block %q in %s", specCase.Block.Descriptor(), specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports block %q in %s", desc, specCase.ID.Key())
 		}
 		return entry, nil
 	case core.CaseKindTableRow:
-		entry, ok := r.checks[specCase.Check]
+		check := specCase.TableRow.Check
+		entry, ok := r.checks[check]
 		if !ok {
-			return adapterEntry{}, fmt.Errorf("no adapter supports check %q in %s", specCase.Check, specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports check %q in %s", check, specCase.ID.Key())
 		}
 		return entry, nil
 	default:
@@ -416,12 +420,13 @@ func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingP
 // alloyPlaceholder creates a placeholder result for an alloy case.
 // The real result is merged in later from the alloy runner.
 func alloyPlaceholder(specCase core.CaseSpec) core.CaseResult {
+	a := specCase.Alloy
 	return core.CaseResult{
 		ID:        specCase.ID,
 		Kind:      core.CaseKindAlloy,
-		Model:     specCase.Model,
-		Assertion: specCase.Assertion,
-		Scope:     specCase.Scope,
+		Model:     a.Model,
+		Assertion: a.Assertion,
+		Scope:     a.Scope,
 		Label:     specCase.DefaultLabel(),
 	}
 }
@@ -494,9 +499,11 @@ func runHook(hook core.HookSpec, registry adapterRegistry, sm *sessionManager, v
 			File:        "_hook",
 			HeadingPath: hook.HeadingPath,
 		},
-		Kind:     core.CaseKindCode,
-		Block:    hook.Block,
-		Template: hook.Source,
+		Kind: core.CaseKindCode,
+		Code: &core.CodeCaseSpec{
+			Block:    hook.Block,
+			Template: hook.Source,
+		},
 	}
 
 	adapter, err := registry.adapterFor(synthetic)
@@ -514,7 +521,7 @@ func runHook(hook core.HookSpec, registry adapterRegistry, sm *sessionManager, v
 		return err
 	}
 
-	resp, err := session.Exec(synthetic.ID.Ordinal, prepared.Template, timeoutMs)
+	resp, err := session.Exec(synthetic.ID.Ordinal, prepared.Code.Template, timeoutMs)
 	if err != nil {
 		return err
 	}
@@ -533,7 +540,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 			return variableFailure(specCase, err), nil
 		}
 		result := runInlineExpect(prepared, visible)
-		if specCase.ExpectFail {
+		if specCase.InlineExpect.ExpectFail {
 			result = applyExpectFail(result)
 		}
 		result.DurationMs = int(time.Since(start).Milliseconds())
@@ -569,7 +576,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 	}
 	result.VisibleBindings = visible
 
-	if specCase.Block.ExpectFail {
+	if specCase.Code != nil && specCase.Code.Block.ExpectFail {
 		result = applyExpectFail(result)
 	}
 
@@ -578,13 +585,14 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 }
 
 func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+	code := specCase.Code
 	result := core.CaseResult{
 		ID:             specCase.ID,
 		Kind:           specCase.Kind,
-		Block:          specCase.Block.Descriptor(),
+		Block:          code.Block.Descriptor(),
 		Label:          specCase.DefaultLabel(),
-		Template:       specCase.Template,
-		RenderedSource: prepared.Template,
+		Template:       code.Template,
+		RenderedSource: prepared.Code.Template,
 	}
 
 	result.Events = append(result.Events, core.Event{
@@ -593,11 +601,11 @@ func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapte
 		Label: result.Label,
 	})
 
-	if shelladapter.IsDoctestContent(prepared.Template) {
+	if core.IsDoctestContent(prepared.Code.Template) {
 		return runDoctestCase(specCase, prepared, session, result, timeoutMs)
 	}
 
-	resp, err := session.Exec(specCase.ID.Ordinal, prepared.Template, timeoutMs)
+	resp, err := session.Exec(specCase.ID.Ordinal, prepared.Code.Template, timeoutMs)
 	if err != nil {
 		return result, err
 	}
@@ -617,8 +625,8 @@ func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapte
 	result.Status = core.StatusPassed
 
 	// Extract captures from output
-	if resp.HasOutput && len(specCase.Block.CaptureNames) > 0 {
-		result.Bindings = captureBindings(resp.Output, specCase.Block.CaptureNames)
+	if resp.HasOutput && len(code.Block.CaptureNames) > 0 {
+		result.Bindings = captureBindings(resp.Output, code.Block.CaptureNames)
 	}
 
 	result.Events = append(result.Events, core.Event{
@@ -632,7 +640,7 @@ func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapte
 }
 
 func runDoctestCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, result core.CaseResult, timeoutMs int) (core.CaseResult, error) {
-	steps := shelladapter.ParseDoctestSource(prepared.Template)
+	steps := core.ParseDoctestSource(prepared.Code.Template)
 	result.Status = core.StatusPassed
 
 	for _, step := range steps {
@@ -674,13 +682,13 @@ func runDoctestCase(specCase core.CaseSpec, prepared core.CaseSpec, session *ada
 func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string, core.Status) {
 	switch {
 	case resp.Error != "":
-		if expected == "" || !shelladapter.MatchWithWildcard(resp.Error, expected) {
+		if expected == "" || !matchWithWildcard(resp.Error, expected) {
 			return resp.Error, core.StatusFailed
 		}
 		return resp.Error, core.StatusPassed
 	case resp.HasOutput:
-		actual := shelladapter.ExecResponseToString(resp.Output)
-		if expected != "" && !shelladapter.MatchWithWildcard(actual, expected) {
+		actual := execResponseToString(resp.Output)
+		if expected != "" && !matchWithWildcard(actual, expected) {
 			return actual, core.StatusFailed
 		}
 		return actual, core.StatusPassed
@@ -693,15 +701,17 @@ func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string
 }
 
 func runTableRowCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+	tr := specCase.TableRow
+	pr := prepared.TableRow
 	result := core.CaseResult{
 		ID:            specCase.ID,
 		Kind:          specCase.Kind,
-		Check:         specCase.Check,
+		Check:         tr.Check,
 		Label:         specCase.DefaultLabel(),
-		Columns:       append([]string(nil), specCase.Columns...),
-		TemplateCells: append([]string(nil), specCase.Cells...),
-		RenderedCells: append([]string(nil), prepared.Cells...),
-		RowNumber:     specCase.RowNumber,
+		Columns:       append([]string(nil), tr.Columns...),
+		TemplateCells: append([]string(nil), tr.Cells...),
+		RenderedCells: append([]string(nil), pr.Cells...),
+		RowNumber:     tr.RowNumber,
 	}
 
 	result.Events = append(result.Events, core.Event{
@@ -710,7 +720,7 @@ func runTableRowCase(specCase core.CaseSpec, prepared core.CaseSpec, session *ad
 		Label: result.Label,
 	})
 
-	resp, err := session.Assert(specCase.ID.Ordinal, prepared.Check, prepared.CheckParams, prepared.Columns, prepared.Cells, timeoutMs)
+	resp, err := session.Assert(specCase.ID.Ordinal, pr.Check, pr.CheckParams, pr.Columns, pr.Cells, timeoutMs)
 	if err != nil {
 		return result, err
 	}
@@ -787,12 +797,13 @@ func captureBindings(rawOutput json.RawMessage, captureNames []string) []core.Bi
 }
 
 func runInlineExpect(prepared core.CaseSpec, visible []core.Binding) core.CaseResult {
+	ie := prepared.InlineExpect
 	result := core.CaseResult{
 		ID:              prepared.ID,
 		Kind:            prepared.Kind,
 		Label:           prepared.DefaultLabel(),
-		Expected:        prepared.ExpectValue,
-		Actual:          prepared.Template,
+		Expected:        ie.ExpectValue,
+		Actual:          ie.Template,
 		VisibleBindings: visible,
 	}
 
@@ -802,7 +813,7 @@ func runInlineExpect(prepared core.CaseSpec, visible []core.Binding) core.CaseRe
 		Label: result.Label,
 	})
 
-	if prepared.Template == prepared.ExpectValue {
+	if ie.Template == ie.ExpectValue {
 		result.Status = core.StatusPassed
 		result.Events = append(result.Events, core.Event{
 			Type:  core.EventCasePassed,
@@ -811,7 +822,7 @@ func runInlineExpect(prepared core.CaseSpec, visible []core.Binding) core.CaseRe
 		})
 	} else {
 		result.Status = core.StatusFailed
-		result.Message = fmt.Sprintf("expected %q, got %q", prepared.ExpectValue, prepared.Template)
+		result.Message = fmt.Sprintf("expected %q, got %q", ie.ExpectValue, ie.Template)
 		result.Events = append(result.Events, core.Event{
 			Type:     core.EventCaseFailed,
 			ID:       result.ID,
@@ -847,34 +858,41 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 	prepared := specCase
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		rendered, err := renderTemplate(specCase.Template, bindings)
+		// Copy the variant to avoid mutating the original
+		codeCopy := *specCase.Code
+		rendered, err := renderTemplate(codeCopy.Template, bindings)
 		if err != nil {
 			return core.CaseSpec{}, err
 		}
-		prepared.Template = rendered
+		codeCopy.Template = rendered
+		prepared.Code = &codeCopy
 		return prepared, nil
 	case core.CaseKindInlineExpect:
-		rendered, err := renderTemplate(specCase.Template, bindings)
+		ieCopy := *specCase.InlineExpect
+		rendered, err := renderTemplate(ieCopy.Template, bindings)
 		if err != nil {
 			return core.CaseSpec{}, err
 		}
-		prepared.Template = rendered
-		renderedExpect, err := renderTemplate(specCase.ExpectValue, bindings)
+		ieCopy.Template = rendered
+		renderedExpect, err := renderTemplate(ieCopy.ExpectValue, bindings)
 		if err != nil {
 			return core.CaseSpec{}, err
 		}
-		prepared.ExpectValue = renderedExpect
+		ieCopy.ExpectValue = renderedExpect
+		prepared.InlineExpect = &ieCopy
 		return prepared, nil
 	case core.CaseKindTableRow:
-		rendered := make([]string, 0, len(specCase.Cells))
-		for _, cell := range specCase.Cells {
+		trCopy := *specCase.TableRow
+		rendered := make([]string, 0, len(trCopy.Cells))
+		for _, cell := range trCopy.Cells {
 			value, err := renderTemplate(cell, bindings)
 			if err != nil {
 				return core.CaseSpec{}, err
 			}
 			rendered = append(rendered, core.UnescapeCell(value))
 		}
-		prepared.Cells = rendered
+		trCopy.Cells = rendered
+		prepared.TableRow = &trCopy
 		return prepared, nil
 	default:
 		return core.CaseSpec{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
@@ -955,24 +973,25 @@ func valueToString(v any) string {
 
 func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 	result := core.CaseResult{
-		ID:        specCase.ID,
-		Kind:      specCase.Kind,
-		Block:     specCase.Block.Descriptor(),
-		Check:     specCase.Check,
-		Label:     specCase.DefaultLabel(),
-		Columns:   append([]string(nil), specCase.Columns...),
-		RowNumber: specCase.RowNumber,
-		Status:    core.StatusFailed,
-		Message:   err.Error(),
+		ID:      specCase.ID,
+		Kind:    specCase.Kind,
+		Label:   specCase.DefaultLabel(),
+		Status:  core.StatusFailed,
+		Message: err.Error(),
 	}
 
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		result.Template = specCase.Template
-		result.RenderedSource = specCase.Template
+		result.Block = specCase.Code.Block.Descriptor()
+		result.Template = specCase.Code.Template
+		result.RenderedSource = specCase.Code.Template
 	case core.CaseKindTableRow:
-		result.TemplateCells = append([]string(nil), specCase.Cells...)
-		result.RenderedCells = append([]string(nil), specCase.Cells...)
+		tr := specCase.TableRow
+		result.Check = tr.Check
+		result.Columns = append([]string(nil), tr.Columns...)
+		result.RowNumber = tr.RowNumber
+		result.TemplateCells = append([]string(nil), tr.Cells...)
+		result.RenderedCells = append([]string(nil), tr.Cells...)
 	}
 
 	result.Events = append(result.Events, core.Event{
@@ -1003,6 +1022,58 @@ func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 		Edges:           edges,
 		TransitiveEdges: transitive,
 	}
+}
+
+// matchWithWildcard checks if actual matches expected, where a line
+// containing exactly "..." in expected matches zero or more lines in actual.
+func matchWithWildcard(actual, expected string) bool {
+	expectedLines := strings.Split(expected, "\n")
+	for _, line := range expectedLines {
+		if line == "..." {
+			return matchWildcardLines(strings.Split(actual, "\n"), expectedLines, 0, 0)
+		}
+	}
+	return actual == expected
+}
+
+func matchWildcardLines(actual, expected []string, ai, ei int) bool {
+	for ei < len(expected) {
+		if expected[ei] != "..." {
+			if ai >= len(actual) || actual[ai] != expected[ei] {
+				return false
+			}
+			ai++
+			ei++
+			continue
+		}
+		return matchWildcardSkip(actual, expected, ai, ei)
+	}
+	return ai >= len(actual)
+}
+
+func matchWildcardSkip(actual, expected []string, ai, ei int) bool {
+	for ei < len(expected) && expected[ei] == "..." {
+		ei++
+	}
+	if ei >= len(expected) {
+		return true
+	}
+	for ai <= len(actual) {
+		if matchWildcardLines(actual, expected, ai, ei) {
+			return true
+		}
+		ai++
+	}
+	return false
+}
+
+// execResponseToString extracts a string from a JSON-encoded exec response output.
+func execResponseToString(raw json.RawMessage) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return string(raw)
+	}
+	return s
 }
 
 func accumulateSummary(summary *core.Summary, result core.DocumentResult) {

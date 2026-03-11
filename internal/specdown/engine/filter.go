@@ -30,13 +30,13 @@ func (f typeFilter) matches(c core.CaseSpec) bool {
 type blockFilter struct{ target string }
 
 func (f blockFilter) matches(c core.CaseSpec) bool {
-	return c.Kind == core.CaseKindCode && c.Block.Target == f.target
+	return c.Code != nil && c.Code.Block.Target == f.target
 }
 
 type checkFilter struct{ name string }
 
 func (f checkFilter) matches(c core.CaseSpec) bool {
-	return c.Kind == core.CaseKindTableRow && c.Check == f.name
+	return c.TableRow != nil && c.TableRow.Check == f.name
 }
 
 type headingFilter struct{ substring string }

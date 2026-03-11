@@ -111,7 +111,7 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
 func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
 	var result []core.CaseSpec
 	for _, c := range cases {
-		if c.Kind == core.CaseKindAlloy {
+		if c.Alloy != nil {
 			result = append(result, c)
 		}
 	}
@@ -121,7 +121,7 @@ func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
 func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath string, jarPath string) (map[string]core.CaseResult, error) {
 	checksByModel := make(map[string][]core.CaseSpec)
 	for _, check := range alloyChecks {
-		checksByModel[check.Model] = append(checksByModel[check.Model], check)
+		checksByModel[check.Alloy.Model] = append(checksByModel[check.Alloy.Model], check)
 	}
 
 	resultsByKey := make(map[string]core.CaseResult, len(alloyChecks))
@@ -310,7 +310,7 @@ func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandRe
 		return core.CaseResult{}, err
 	}
 	summary := summarizeCounterexample(command)
-	message := "counterexample for " + strconvQuote(check.Assertion)
+	message := "counterexample for " + strconvQuote(check.Alloy.Assertion)
 	if summary != "" && summary != "counterexample found" {
 		message += "\n" + summary
 	}
@@ -321,12 +321,13 @@ func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandRe
 }
 
 func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
+	a := check.Alloy
 	return core.CaseResult{
 		ID:            check.ID,
 		Kind:          core.CaseKindAlloy,
-		Model:         check.Model,
-		Assertion:     check.Assertion,
-		Scope:         check.Scope,
+		Model:         a.Model,
+		Assertion:     a.Assertion,
+		Scope:         a.Scope,
 		Label:         check.DefaultLabel(),
 		BundlePath:    bundle.AbsolutePath,
 		SourceMapPath: bundle.SourceMapAbsolutePath,
@@ -337,12 +338,13 @@ func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
 func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
 	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
+		a := check.Alloy
 		result := core.CaseResult{
 			ID:        check.ID,
 			Kind:      core.CaseKindAlloy,
-			Model:     check.Model,
-			Assertion: check.Assertion,
-			Scope:     check.Scope,
+			Model:     a.Model,
+			Assertion: a.Assertion,
+			Scope:     a.Scope,
 			Label:     check.DefaultLabel(),
 			Status:    core.StatusFailed,
 			Message:   message,
@@ -355,12 +357,13 @@ func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
 func failedChecks(checks []core.CaseSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.CaseResult {
 	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
+		a := check.Alloy
 		result := core.CaseResult{
 			ID:            check.ID,
 			Kind:          core.CaseKindAlloy,
-			Model:         check.Model,
-			Assertion:     check.Assertion,
-			Scope:         check.Scope,
+			Model:         a.Model,
+			Assertion:     a.Assertion,
+			Scope:         a.Scope,
 			Label:         check.DefaultLabel(),
 			Status:        core.StatusFailed,
 			Message:       message,
@@ -546,7 +549,7 @@ func bundleContainsCommand(lines []string, command string) bool {
 }
 
 func checkCommandSource(check core.CaseSpec) string {
-	return "check " + check.Assertion + " for " + check.Scope
+	return "check " + check.Alloy.Assertion + " for " + check.Alloy.Scope
 }
 
 

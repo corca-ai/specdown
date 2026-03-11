@@ -13,10 +13,12 @@ func TestAlloyPlaceholder(t *testing.T) {
 			HeadingPath: []string{"Root", "Section"},
 			Ordinal:     3,
 		},
-		Kind:      core.CaseKindAlloy,
-		Model:     "board",
-		Assertion: "cardShape",
-		Scope:     "5",
+		Kind: core.CaseKindAlloy,
+		Alloy: &core.AlloyCaseSpec{
+			Model:     "board",
+			Assertion: "cardShape",
+			Scope:     "5",
+		},
 	}
 
 	result := alloyPlaceholder(spec)
@@ -46,11 +48,13 @@ func TestAlloyPlaceholder(t *testing.T) {
 
 func TestAlloyPlaceholderNoHeading(t *testing.T) {
 	spec := core.CaseSpec{
-		ID:        core.SpecID{File: "test.spec.md", Ordinal: 1},
-		Kind:      core.CaseKindAlloy,
-		Model:     "m",
-		Assertion: "a",
-		Scope:     "3",
+		ID:   core.SpecID{File: "test.spec.md", Ordinal: 1},
+		Kind: core.CaseKindAlloy,
+		Alloy: &core.AlloyCaseSpec{
+			Model:     "m",
+			Assertion: "a",
+			Scope:     "3",
+		},
 	}
 	result := alloyPlaceholder(spec)
 	if result.Label != "alloy:ref(m#a, scope=3)" {

@@ -321,7 +321,7 @@ func (p *documentParser) parseCodeBlock(i int, info string) (int, error) {
 		Source: source,
 		Raw:    raw,
 	}
-	if block.Executable() && !isDoctestContent(source) {
+	if block.Executable() && !IsDoctestContent(source) {
 		node.Summary = extractSummary(source)
 	}
 	if block.Executable() {
