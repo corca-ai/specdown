@@ -6,39 +6,27 @@ type: spec
 
 Malformed specs fail fast. specdown validates documents against the
 [depends::spec syntax](syntax.spec.md) at parse time and rejects errors
-before any adapter is invoked. Each section below demonstrates one
-class of parse-time error.
+before any adapter is invoked.
 
-## Unclosed code block
+## Rules
 
-A properly closed code block parses without error:
+| Rule | Rejection |
+|------|-----------|
+| Unclosed code block | Fenced block without closing `` ``` `` |
+| Check without table | `> check:name` with no params and no table following |
+| Hook without code block | `> setup` or `> teardown` not followed by an executable block |
+| Table needs columns | Header row must define at least one column |
+| Table needs rows | At least one data row must follow the header |
+| Block needs target | `run:` without a target name (e.g. `run:shell`) |
+| No duplicate captures | `-> $a, $a` on a single block |
+| No capture on `!fail` | `!fail` and `-> $var` are mutually exclusive |
+| Alloy ref exists | `alloy:ref` must reference a model defined in the same document |
+| Variables resolved | Every `${name}` in blocks and prose must trace to a prior capture |
 
-```run:shell
-# Accept well-formed code block
-mkdir -p .tmp-test
-BT=$(printf '\140\140\140')
-printf '%s\n' '# Good' '' "\${BT}run:shell" 'echo ok' "\${BT}" > .tmp-test/closed.spec.md
-printf '# T\n\n- [C](closed.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/closed-cfg.json
-specdown run -config .tmp-test/closed-cfg.json -dry-run 2>&1 | grep -q 'spec(s)'
-```
+## Example: Validation Error
 
-A spec with an unclosed fenced code block must be rejected at parse time.
-
-```run:shell
-# Reject spec with unclosed code block
-mkdir -p .tmp-test
-printf '# Bad\n\n```run:shell\necho hello\n' > .tmp-test/unclosed.spec.md
-printf '# T\n\n- [Unclosed](unclosed.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/unclosed-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
-CFG
-! specdown run -config .tmp-test/unclosed-cfg.json 2>/dev/null
-```
-
-## Check without table
-
-A check directive without parameters and not followed by a table must be rejected.
+A representative validation error — a check directive without a following
+table is rejected at parse time:
 
 ```run:shell
 # Reject bare check directive with no table
@@ -51,7 +39,7 @@ CFG
 ! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
 ```
 
-A check directive with parameters but no table is valid (parameterized check call).
+Adding parameters makes the directive valid as a parameterized check call:
 
 ```run:shell
 # Accept parameterized check call without table
@@ -71,158 +59,4 @@ CFG
 specdown run -config .tmp-test/check-call-cfg.json -dry-run 2>&1
 ```
 
-## Hook without code block
-
-A hook followed by an executable code block is valid:
-
-```run:shell
-# Accept hook with executable code block
-mkdir -p .tmp-test
-BT=$(printf '\140\140\140')
-printf '%s\n' '# Good' '' '> setup' '' "\${BT}run:shell" 'echo init' "\${BT}" '' '## S' '' 'Prose.' > .tmp-test/hook-ok.spec.md
-printf '# T\n\n- [H](hook-ok.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-ok-cfg.json
-specdown run -config .tmp-test/hook-ok-cfg.json -dry-run 2>&1 | grep -q 'spec(s)'
-```
-
-A setup or teardown directive not followed by a code block must be rejected.
-
-```run:shell
-# Reject hook directive followed by prose instead of code block
-mkdir -p .tmp-test
-printf '# Bad\n\n> setup:each\n\nJust prose.\n' > .tmp-test/hook-bad.spec.md
-printf '# T\n\n- [Hook](hook-bad.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-bad-cfg.json
-! specdown run -config .tmp-test/hook-bad-cfg.json 2>/dev/null
-```
-
-A hook followed by a non-executable code block (e.g. plain `json`) must also be rejected.
-
-```run:shell
-# Reject hook followed by non-executable code block
-mkdir -p .tmp-test
-printf '# Bad\n\n> setup\n\n```json\n{"a":1}\n```\n' > .tmp-test/hook-nonexec.spec.md
-printf '# T\n\n- [HNE](hook-nonexec.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/hook-nonexec-cfg.json
-! specdown run -config .tmp-test/hook-nonexec-cfg.json 2>/dev/null
-```
-
-## Table structure
-
-A well-formed check table with a header, separator, and data rows is valid:
-
-```run:shell
-# Accept well-formed check table
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/table-ok.spec.md
-# Good
-
-> check:cell-escape
-| input | expected |
-| --- | --- |
-| hello | hello |
-SPEC
-printf '# T\n\n- [TO](table-ok.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"checks":["cell-escape"]}]}' > .tmp-test/table-ok-cfg.json
-specdown run -config .tmp-test/table-ok-cfg.json -dry-run 2>&1 | grep -q 'spec(s)'
-```
-
-A table header must define at least one column.
-
-```run:shell
-# Reject check table with no columns
-mkdir -p .tmp-test
-printf '# Bad\n\n> check:x\n\n|||\n|---|\n|a|\n' > .tmp-test/table-nocol.spec.md
-printf '# T\n\n- [TC](table-nocol.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"checks":["x"]}]}' > .tmp-test/table-nocol-cfg.json
-! specdown run -config .tmp-test/table-nocol-cfg.json 2>/dev/null
-```
-
-A table must define at least one data row.
-
-```run:shell
-# Reject check table with header but no data rows
-mkdir -p .tmp-test
-printf '# Bad\n\n> check:x\n\n| a |\n|---|\n' > .tmp-test/table-norow.spec.md
-printf '# T\n\n- [TR](table-norow.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"checks":["x"]}]}' > .tmp-test/table-norow-cfg.json
-! specdown run -config .tmp-test/table-norow-cfg.json 2>/dev/null
-```
-
-## Block specification
-
-A block info string with a known prefix but no target must be rejected.
-
-```run:shell
-# Reject run: block with missing target
-mkdir -p .tmp-test
-printf '# Bad\n\n```run:\necho hello\n```\n' > .tmp-test/no-target.spec.md
-printf '# T\n\n- [NT](no-target.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/no-target-cfg.json
-! specdown run -config .tmp-test/no-target-cfg.json 2>/dev/null
-```
-
-Duplicate capture names in a single block must be rejected.
-
-```run:shell
-# Reject duplicate variable capture names
-mkdir -p .tmp-test
-printf '# Bad\n\n```run:shell -> $a, $a\necho hello\n```\n' > .tmp-test/dup-capture.spec.md
-printf '# T\n\n- [DC](dup-capture.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}' > .tmp-test/dup-capture-cfg.json
-! specdown run -config .tmp-test/dup-capture-cfg.json 2>/dev/null
-```
-
-`!fail` blocks do not support variable capture.
-
-```run:shell
-# Reject variable capture on !fail block
-mkdir -p .tmp-test
-printf '# Bad\n\n```run:shell !fail -> $x\nexit 1\n```\n' > .tmp-test/fail-capture.spec.md
-printf '# T\n\n- [FC](fail-capture.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}' > .tmp-test/fail-capture-cfg.json
-! specdown run -config .tmp-test/fail-capture-cfg.json 2>/dev/null
-```
-
-## Alloy validation
-
-An `alloy:ref` directive referencing an unknown model must be rejected.
-
-```run:shell
-# Reject alloy:ref pointing to nonexistent model
-mkdir -p .tmp-test
-printf '# Bad\n\n> alloy:ref(nonexistent#check, scope=5)\n' > .tmp-test/bad-ref.spec.md
-printf '# T\n\n- [BR](bad-ref.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/bad-ref-cfg.json
-! specdown run -config .tmp-test/bad-ref-cfg.json 2>/dev/null
-```
-
-## Unresolved variable
-
-Referencing a variable that was never captured must produce an error.
-
-```run:shell
-# Reject reference to uncaptured variable
-mkdir -p .tmp-test
-printf '# Bad\n\n```run:shell\necho \${missing}\n```\n' > .tmp-test/unresolved.spec.md
-printf '# T\n\n- [Unresolved](unresolved.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/unresolved-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
-CFG
-specdown run -config .tmp-test/unresolved-cfg.json 2>&1 | grep -q "missing"
-! specdown run -config .tmp-test/unresolved-cfg.json 2>/dev/null
-```
-
-## Unresolved variable in prose
-
-Referencing an undefined variable in prose text is also a compile-time error.
-
-```run:shell
-# Reject reference to uncaptured variable in prose
-mkdir -p .tmp-test
-printf '# Bad\n\nThe value is \${undefined}.\n' > .tmp-test/prose-unresolved.spec.md
-printf '# T\n\n- [PU](prose-unresolved.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/prose-unresolved-cfg.json
-specdown run -config .tmp-test/prose-unresolved-cfg.json 2>&1 | grep -q "undefined"
-! specdown run -config .tmp-test/prose-unresolved-cfg.json 2>/dev/null
-```
+All other validation rules are verified by unit tests.

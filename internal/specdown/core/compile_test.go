@@ -206,3 +206,38 @@ func TestCompileDocumentRejectsAlloyReferenceToUnknownModel(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
+
+func TestCompileDocumentRejectsUnresolvedVariableInBlock(t *testing.T) {
+	doc, err := ParseDocument("bad.spec.md", strings.Join([]string{
+		"# Bad",
+		"",
+		"```run:shell",
+		"echo ${missing}",
+		"```",
+		"",
+	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, err = CompileDocument(doc)
+	if err == nil {
+		t.Fatal("expected compile error for unresolved variable")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestCompileDocumentRejectsUnresolvedVariableInProse(t *testing.T) {
+	doc, err := ParseDocument("bad.spec.md", "# Bad\n\nThe value is ${undefined}.\n", nil)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, err = CompileDocument(doc)
+	if err == nil {
+		t.Fatal("expected compile error for unresolved variable in prose")
+	}
+	if !strings.Contains(err.Error(), "undefined") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}

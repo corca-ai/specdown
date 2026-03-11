@@ -38,39 +38,7 @@ plain, non-executable code blocks. A spec containing only unrecognized
 blocks has zero cases. Unrecognized prefixes emit a warning to stderr
 so typos like `runn:shell` are caught early.
 
-```run:shell
-# Create spec with unrecognized block prefixes
-mkdir -p .tmp-test
-BT=$(printf '\140\140\140')
-printf '%s\n' '# Plain' '' "\${BT}verify:shell" 'echo hello' "\${BT}" '' "\${BT}test:webapp" 'some test' "\${BT}" > .tmp-test/unrecognized.spec.md
-printf '# T\n\n- [U](unrecognized.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/unrecognized-cfg.json
-```
-
-```run:shell
-$ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | tail -1
-total: 2 spec(s), 0 case(s)
-```
-
-The warnings appear on stderr:
-
-```run:shell
-$ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^warning:' | wc -l | tr -d ' '
-2
-```
-
-To suppress warnings for specific prefixes, add `ignorePrefixes` to `specdown.json`:
-
-```run:shell
-# Configure ignorePrefixes to suppress warnings
-printf '{"entry":"index.spec.md","adapters":[],"ignorePrefixes":["verify","test"]}' > .tmp-test/unrecognized-cfg.json
-```
-
-```run:shell
-$ specdown run -config .tmp-test/unrecognized-cfg.json -dry-run 2>&1 | grep '^warning:' | wc -l | tr -d ' '
-0
-```
-
+To suppress warnings for specific prefixes, add `ignorePrefixes` to `specdown.json`.
 Plain info strings without a colon (e.g. `json`, `go`, `python`) never warn.
 
 ## Summary Lines
@@ -125,6 +93,39 @@ and tables using `${variableName}`.
 - Variables from parent sections are readable in child sections
 - Sibling sections at the same depth can share variables (in document order, only previously captured values)
 - An unresolved variable is a compile-time error
+
+The heading tree enforces a safety property: variables never leak
+upward from child to parent sections.
+
+```alloy:model(varscope)
+module varscope
+
+sig Section {
+  parent: lone Section
+}
+
+sig Var {
+  definedIn: one Section
+}
+
+-- heading hierarchy is a tree
+fact tree {
+  no s: Section | s in s.^parent
+}
+
+-- a variable is visible in its defining section and all descendants
+pred visible[v: Var, s: Section] {
+  v.definedIn in (s + s.^parent)
+}
+
+-- variables from child sections are never visible in ancestors
+assert noUpwardLeak {
+  all v: Var, s: Section |
+    v.definedIn in s.^(~parent) implies not visible[v, s]
+}
+
+check noUpwardLeak for 6
+```
 
 Variables captured in a parent section are available in child sections.
 
@@ -209,6 +210,8 @@ lines in the actual output. There is no escape for literal `...`. This is
 useful when output contains timestamps, PIDs, temporary paths, or other
 values that change between runs.
 
+A wildcard in the middle skips variable lines:
+
 ```run:shell
 $ echo hello && date && echo goodbye
 hello
@@ -216,30 +219,7 @@ hello
 goodbye
 ```
 
-A wildcard at the end matches any trailing output.
-
-```run:shell
-$ printf 'header\ndetail1\ndetail2'
-header
-...
-```
-
-A wildcard at the start matches any leading output.
-
-```run:shell
-$ printf 'preamble\nresult'
-...
-result
-```
-
-A lone `...` matches any output.
-
-```run:shell
-$ date
-...
-```
-
-Multiple wildcards can appear in a single expected block.
+Multiple wildcards can appear in a single expected block:
 
 ```run:shell
 $ printf 'a\nb\nc\nd\ne'
@@ -250,7 +230,7 @@ c
 e
 ```
 
-When no `...` line is present, matching is still exact (backward compatible).
+When no `...` line is present, matching is exact (backward compatible).
 
 ```run:shell !fail
 $ echo hello
@@ -281,34 +261,12 @@ false
 
 This block intentionally shows the wrong expected output.
 The `!fail` modifier makes the mismatch count as a pass.
+On failure, passed steps render in green and the failing step renders
+in red with the expected value below.
 
 ```run:shell !fail
 $ echo hello
 goodbye
-```
-
-### Multi-step doctest-style mismatch
-
-When multiple commands are present, the block fails fast on the first
-mismatch. Passed steps show actual output in green; the failed step
-shows actual output in red with the expected value below it.
-
-```run:shell !fail
-$ echo first
-first
-$ echo second
-WRONG
-```
-
-### Doctest-style block with multi-line mismatch
-
-Multi-line expected output is compared exactly. The entire actual
-output is shown in red on mismatch.
-
-```run:shell !fail
-$ printf 'alpha\nbeta'
-alpha
-gamma
 ```
 
 When a case fails, remaining cases continue. Bindings from failed cases

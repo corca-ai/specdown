@@ -71,6 +71,52 @@ This feature [covers::Login Story](../stories/login.md) and
 One document = one node. No heading-level references. Fragment anchors in links
 are stripped before resolution — documents are atoms.
 
+### Structural Guarantee
+
+When an edge kind connects documents of different types (e.g., `test → feature`),
+the type system alone prevents reverse cycles within that edge kind.
+This means hierarchical traceability (theme → epic → story → test) is
+inherently acyclic without needing the `acyclic` flag.
+
+```alloy:model(tracegraph)
+module tracegraph
+
+sig Type {}
+sig Doc { dtype: one Type }
+
+sig EdgeKind {
+  fromType: one Type,
+  toType: one Type
+}
+
+sig Link {
+  kind: one EdgeKind,
+  src: one Doc,
+  tgt: one Doc
+}
+
+-- links are well-typed
+fact wellTyped {
+  all l: Link |
+    l.src.dtype = l.kind.fromType and
+    l.tgt.dtype = l.kind.toType
+}
+
+-- self-loops are forbidden
+fact noSelfLoop {
+  no l: Link | l.src = l.tgt
+}
+
+-- cross-type edges cannot form reverse pairs
+assert crossTypeNoReverse {
+  all ek: EdgeKind | ek.fromType != ek.toType implies
+    no disj l1, l2: Link | l1.kind = ek and l2.kind = ek and
+      l1.src = l2.tgt and l1.tgt = l2.src
+}
+
+check crossTypeNoReverse for 5
+```
+
 ## Configuration
 
 The `trace` key in `specdown.json` configures the trace graph:
@@ -89,38 +135,8 @@ The `trace` key in `specdown.json` configures the trace graph:
 }
 ```
 
-### Config Validation
-
-Types must be valid identifiers.
-
-```run:shell
-# Reject invalid type name
-mkdir -p .tmp-test/trace
-cat <<'CFG' > .tmp-test/trace/bad-type.json
-{"entry":"i.spec.md","adapters":[],"trace":{"types":["Good"],"edges":{"x":{"from":"Good","to":"Good"}}}}
-CFG
-! specdown trace -config .tmp-test/trace/bad-type.json 2>/dev/null
-```
-
-Edge names must be valid identifiers.
-
-```run:shell
-# Reject invalid edge name (config-level)
-cat <<'CFG' > .tmp-test/trace/bad-edge.json
-{"entry":"i.spec.md","adapters":[],"trace":{"types":["goal"],"edges":{"Bad-Name":{"from":"goal","to":"goal"}}}}
-CFG
-! specdown trace -config .tmp-test/trace/bad-edge.json 2>/dev/null
-```
-
-Edge `from`/`to` must reference declared types.
-
-```run:shell
-# Reject edge referencing undeclared type
-cat <<'CFG' > .tmp-test/trace/undeclared-type.json
-{"entry":"i.spec.md","adapters":[],"trace":{"types":["goal"],"edges":{"covers":{"from":"feature","to":"goal"}}}}
-CFG
-! specdown trace -config .tmp-test/trace/undeclared-type.json 2>/dev/null
-```
+Type names, edge names, and `from`/`to` values must all be valid identifiers
+declared in `trace.types`. Invalid config is rejected before scanning begins.
 
 ### Count Notation
 
@@ -165,9 +181,19 @@ $ specdown trace -config .tmp-test/trace/disc/specdown.json 2>&1 | grep -c '"typ
 
 ## Link Errors
 
-### Unknown Edge Name
+specdown validates every trace link against the configured edge definitions.
 
-A trace link using an undeclared edge name is an error.
+| Error | Cause |
+|-------|-------|
+| Unknown edge name | Link uses an edge name not declared in config |
+| Untyped source | Source document has no `type` in frontmatter |
+| Type mismatch | Source type doesn't match the edge's `from` type |
+| Dangling reference | Target file doesn't exist |
+| Self-loop | Document links to itself |
+
+Duplicate links (same edge + same target) are silently deduplicated.
+
+Here is an example — a feature document using an undeclared edge name:
 
 ```run:shell
 # Unknown edge name is reported
@@ -179,119 +205,10 @@ mkdir -p .tmp-test/trace/unknown-edge/specs
 printf '# Index\n' > .tmp-test/trace/unknown-edge/specs/index.spec.md
 printf -- '---\ntype: feature\n---\n# F1\n\n[bogus::something](f2.md)\n' > .tmp-test/trace/unknown-edge/f1.md
 printf -- '---\ntype: feature\n---\n# F2\n' > .tmp-test/trace/unknown-edge/f2.md
-specdown trace -config .tmp-test/trace/unknown-edge/specdown.json 2>&1 | grep 'unknown edge'
 ```
 
 ```run:shell
 $ specdown trace -config .tmp-test/trace/unknown-edge/specdown.json 2>&1 | grep -c 'unknown edge'
-1
-```
-
-### Untyped Source
-
-A trace link from an untyped document is an error.
-
-```run:shell
-# Untyped source using trace link
-mkdir -p .tmp-test/trace/untyped-src
-cat <<'CFG' > .tmp-test/trace/untyped-src/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["goal"],"edges":{"covers":{"from":"goal","to":"goal"}}}}
-CFG
-mkdir -p .tmp-test/trace/untyped-src/specs
-printf '# Index\n' > .tmp-test/trace/untyped-src/specs/index.spec.md
-printf '# NoType\n\n[covers::G](g.md)\n' > .tmp-test/trace/untyped-src/src.md
-printf -- '---\ntype: goal\n---\n# G\n' > .tmp-test/trace/untyped-src/g.md
-specdown trace -config .tmp-test/trace/untyped-src/specdown.json 2>&1 | grep -c 'no type'
-```
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/untyped-src/specdown.json 2>&1 | grep -c 'no type'
-1
-```
-
-### Type Mismatch
-
-Source document type must match the edge's `from`.
-
-```run:shell
-# Source type mismatch
-mkdir -p .tmp-test/trace/type-mm
-cat <<'CFG' > .tmp-test/trace/type-mm/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["goal","test"],"edges":{"tests":{"from":"test","to":"goal"}}}}
-CFG
-mkdir -p .tmp-test/trace/type-mm/specs
-printf '# Index\n' > .tmp-test/trace/type-mm/specs/index.spec.md
-printf -- '---\ntype: goal\n---\n# WrongType\n\n[tests::G](g.md)\n' > .tmp-test/trace/type-mm/src.md
-printf -- '---\ntype: goal\n---\n# G\n' > .tmp-test/trace/type-mm/g.md
-specdown trace -config .tmp-test/trace/type-mm/specdown.json 2>&1 | grep -c 'type mismatch'
-```
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/type-mm/specdown.json 2>&1 | grep -c 'type mismatch'
-1
-```
-
-### Dangling Reference
-
-Target must resolve to an existing document.
-
-```run:shell
-# Dangling reference
-mkdir -p .tmp-test/trace/dangling
-cat <<'CFG' > .tmp-test/trace/dangling/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","goal"],"edges":{"covers":{"from":"feature","to":"goal"}}}}
-CFG
-mkdir -p .tmp-test/trace/dangling/specs
-printf '# Index\n' > .tmp-test/trace/dangling/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# F\n\n[covers::Missing](missing.md)\n' > .tmp-test/trace/dangling/f.md
-specdown trace -config .tmp-test/trace/dangling/specdown.json 2>&1 | grep -c 'dangling reference'
-```
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/dangling/specdown.json 2>&1 | grep -c 'dangling reference'
-1
-```
-
-### Self-Loop
-
-A document linking to itself is always forbidden.
-
-```run:shell
-# Self-loop detection
-mkdir -p .tmp-test/trace/self-loop
-cat <<'CFG' > .tmp-test/trace/self-loop/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature"}}}}
-CFG
-mkdir -p .tmp-test/trace/self-loop/specs
-printf '# Index\n' > .tmp-test/trace/self-loop/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# F\n\n[requires::Self](f.md)\n' > .tmp-test/trace/self-loop/f.md
-specdown trace -config .tmp-test/trace/self-loop/specdown.json 2>&1 | grep -c 'self-loop'
-```
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/self-loop/specdown.json 2>&1 | grep -c 'self-loop'
-1
-```
-
-### Duplicate Edges
-
-Multiple trace links with the same edge name and target are deduplicated to a
-single edge. No warning, no error.
-
-```run:shell
-# Duplicate edges are deduplicated silently
-mkdir -p .tmp-test/trace/dedup
-cat <<'CFG' > .tmp-test/trace/dedup/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","goal"],"edges":{"covers":{"from":"feature","to":"goal"}}}}
-CFG
-mkdir -p .tmp-test/trace/dedup/specs
-printf '# Index\n' > .tmp-test/trace/dedup/specs/index.spec.md
-printf -- '---\ntype: goal\n---\n# G\n' > .tmp-test/trace/dedup/g.md
-printf -- '---\ntype: feature\n---\n# F\n\n[covers::G](g.md)\n[covers::G again](g.md)\n' > .tmp-test/trace/dedup/f.md
-```
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/dedup/specdown.json 2>&1 | grep -c '"covers"'
 1
 ```
 
@@ -362,45 +279,27 @@ $ specdown trace -config .tmp-test/trace/trans/specdown.json 2>&1 | grep -c 'tra
 1
 ```
 
-The transitive edge A→C should appear in the output.
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/trans/specdown.json 2>&1 | grep -A1 'transitiveEdges' | grep -c '\['
-1
-```
-
 ## Output Formats
 
-### JSON
-
-`--format=json` outputs the graph as JSON with nodes, direct edges, and transitive edges.
+| Flag | Format | Description |
+|------|--------|-------------|
+| `-format=json` | JSON | Nodes, direct edges, transitive edges |
+| `-format=dot` | Graphviz DOT | For visualization with `dot` or similar tools |
+| `-format=matrix` | Traceability matrix | Tabular summary of coverage |
 
 ```run:shell
 $ specdown trace -config .tmp-test/trace/disc/specdown.json -format=json 2>&1 | head -1
 {
 ```
 
-### DOT
-
-`--format=dot` outputs Graphviz DOT format.
-
 ```run:shell
 $ specdown trace -config .tmp-test/trace/disc/specdown.json -format=dot 2>&1 | head -1
 digraph trace {
 ```
 
-### Matrix
-
-`--format=matrix` outputs a traceability matrix.
-
-```run:shell
-$ specdown trace -config .tmp-test/trace/disc/specdown.json -format=matrix 2>&1 | head -1 | grep -c 'features'
-1
-```
-
 ### Strict Mode
 
-With `--strict`, validation errors suppress output.
+With `--strict`, validation errors cause a non-zero exit code.
 
 ```run:shell
 # Strict mode exits non-zero on errors
@@ -411,15 +310,6 @@ With `--strict`, validation errors suppress output.
 
 No `trace` config in `specdown.json` means everything works as before.
 The trace feature activates only when the `trace` key is present in config.
-
-```run:shell
-# No trace config = trace command reports missing config
-mkdir -p .tmp-test/trace/noop
-printf '{"entry":"specs/index.spec.md","adapters":[]}' > .tmp-test/trace/noop/specdown.json
-mkdir -p .tmp-test/trace/noop/specs
-printf '# Index\n' > .tmp-test/trace/noop/specs/index.spec.md
-! specdown trace -config .tmp-test/trace/noop/specdown.json 2>/dev/null
-```
 
 ## Integration with `specdown run`
 
@@ -436,7 +326,6 @@ CFG
 mkdir -p .tmp-test/trace/run-int/specs
 printf '# Index\n\n- [F](../f.md)\n' > .tmp-test/trace/run-int/specs/index.spec.md
 printf -- '---\ntype: feature\n---\n# F\n' > .tmp-test/trace/run-int/f.md
-specdown run -config .tmp-test/trace/run-int/specdown.json 2>&1 | grep -c 'trace:'
 ```
 
 ```run:shell

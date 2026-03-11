@@ -593,3 +593,34 @@ func TestParseDocumentNoWarningForPlainInfoStrings(t *testing.T) {
 		t.Fatalf("expected 0 warnings for plain blocks, got %d: %v", len(doc.Warnings), doc.Warnings)
 	}
 }
+
+func TestParseDocumentRejectsUnclosedCodeBlock(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", "# Bad\n\n```run:shell\necho hello\n", nil)
+	if err == nil {
+		t.Fatal("expected parse error for unclosed code block")
+	}
+}
+
+func TestParseDocumentRejectsHookWithNonExecutableBlock(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", "# Bad\n\n> setup\n\n```json\n{\"a\":1}\n```\n", nil)
+	if err == nil {
+		t.Fatal("expected parse error for hook with non-executable block")
+	}
+	if !strings.Contains(err.Error(), "must be followed by") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestParseDocumentRejectsTableWithNoColumns(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", "# Bad\n\n> check:x\n\n|||\n|---|\n|a|\n", nil)
+	if err == nil {
+		t.Fatal("expected parse error for table with no columns")
+	}
+}
+
+func TestParseDocumentRejectsTableWithNoDataRows(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", "# Bad\n\n> check:x\n\n| a |\n|---|\n", nil)
+	if err == nil {
+		t.Fatal("expected parse error for table with no data rows")
+	}
+}

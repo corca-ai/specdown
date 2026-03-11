@@ -154,6 +154,47 @@ $ specdown run -config .tmp-test/ref-test-cfg.json -dry-run 2>&1 | grep -o 'allo
 ...
 ```
 
+## State Machine Models
+
+Alloy is especially useful for modeling state machines where
+exhaustive path coverage by example is impractical.
+
+This example models a traffic light with valid transitions only.
+Alloy proves that an invalid transition (Green → Red) cannot happen.
+
+```alloy:model(traffic)
+module traffic
+
+abstract sig Color {}
+one sig Red, Yellow, Green extends Color {}
+
+sig Light {
+  color: one Color
+}
+
+pred validTransition[from, to: Color] {
+  from = Red implies to = Green
+  from = Green implies to = Yellow
+  from = Yellow implies to = Red
+}
+
+assert noGreenToRed {
+  all from, to: Color |
+    validTransition[from, to] implies not (from = Green and to = Red)
+}
+
+check noGreenToRed for 5
+```
+
+```run:shell
+# Verify the traffic light model passes
+mkdir -p .tmp-test
+printf '%s\n' '# Traffic' '' '```alloy:model(traffic)' 'module traffic' '' 'abstract sig Color {}' 'one sig Red, Yellow, Green extends Color {}' '' 'sig Light {' '  color: one Color' '}' '' 'pred validTransition[from, to: Color] {' '  from = Red implies to = Green' '  from = Green implies to = Yellow' '  from = Yellow implies to = Red' '}' '' 'assert noGreenToRed {' '  all from, to: Color |' '    validTransition[from, to] implies not (from = Green and to = Red)' '}' '' 'check noGreenToRed for 5' '```' > .tmp-test/traffic.spec.md
+printf '# T\n\n- [Traffic](traffic.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/traffic-cfg.json
+specdown run -config .tmp-test/traffic-cfg.json 2>&1 | grep -q 'PASS'
+```
+
 ## Counterexample Artifacts
 
 When an Alloy check fails, specdown writes a counterexample artifact to

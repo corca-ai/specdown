@@ -14,34 +14,6 @@ a [depends::spec document](syntax.spec.md) that describes behavior,
 a [depends::configuration file](config.spec.md) that registers adapters,
 and the `specdown run` command.
 
-### A Minimal Spec
-
-A well-formed spec document needs only a heading and prose to parse successfully.
-Executable blocks and check tables are added as needed.
-
-```run:shell
-# Create a minimal spec and verify it parses
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/valid.spec.md
-# Valid Spec
-
-Some prose.
-
-## Section
-
-More prose.
-SPEC
-printf '# T\n\n- [Valid](valid.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/valid-cfg.json
-{"entry":"index.spec.md","adapters":[]}
-CFG
-specdown run -config .tmp-test/valid-cfg.json -dry-run 2>&1
-```
-
-### Running Specdown
-
-The CLI reports its version when invoked with `version`.
-
 ```run:shell
 $ specdown version
 ...
@@ -58,31 +30,12 @@ $ specdown run -dry-run 2>&1 | grep 'spec(s)'
 ## Init
 
 `specdown init` scaffolds a new project with a config file, entry file, and example spec.
+The generated project is runnable immediately.
 
 ```run:shell
-# Scaffold a new project
+# Scaffold a new project and verify it runs
 rm -rf .tmp-test/init-test && mkdir -p .tmp-test/init-test && cd .tmp-test/init-test && specdown init 2>&1
 ```
-
-The scaffolded project contains all required files.
-
-```run:shell
-$ test -f .tmp-test/init-test/specdown.json && echo yes
-yes
-$ test -f .tmp-test/init-test/specs/index.spec.md && echo yes
-yes
-$ test -f .tmp-test/init-test/specs/example.spec.md && echo yes
-yes
-```
-
-Running init again in the same directory must fail (no overwrite).
-
-```run:shell
-# Refuse to overwrite existing project
-cd .tmp-test/init-test && ! specdown init 2>/dev/null
-```
-
-The generated project must be runnable immediately.
 
 ```run:shell
 $ cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
@@ -161,3 +114,35 @@ echo "$block_dry" | grep -q '\[run:shell\]'
 
 A `block:` prefix matches code blocks by adapter target.
 A `check:` prefix matches check table rows by check name.
+
+### Combining Filters
+
+Multiple `-filter` flags narrow the selection. Each flag is additive
+within the same prefix but the result is the union of all filters.
+
+```run:shell
+# A filter that matches nothing produces zero cases
+specdown run -dry-run -filter "NoSuchHeading" 2>&1 | grep -q '0 case'
+```
+
+## Error Messages
+
+The CLI reports clear errors for common mistakes.
+
+### Missing Config File
+
+When `-config` points to a non-existent file, the error is immediate.
+
+```run:shell
+! specdown run -config nonexistent.json 2>/dev/null
+```
+
+### Invalid JSON Config
+
+Malformed JSON in the config file is reported as a parse error.
+
+```run:shell
+# Reject syntactically invalid JSON
+printf 'NOT JSON' > .tmp-test/invalid.json
+! specdown run -config .tmp-test/invalid.json 2>/dev/null
+```

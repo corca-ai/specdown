@@ -120,7 +120,53 @@ When Alloy finds a counterexample, fix the model, then add the counterexample as
 
 ### 3. Exhaustive Classification
 
-Use Alloy to prove the set of cases is complete and mutually exclusive, then test one representative per case. Two assertions — one for completeness, one for mutual exclusivity — together guarantee that the check table covers every case with minimal rows.
+Use Alloy to prove the set of cases is complete and mutually exclusive,
+then test one representative per case. Two assertions — one for
+completeness, one for mutual exclusivity — together guarantee that
+the check table covers every case with minimal rows.
+
+Here a permission model partitions access into three levels.
+Alloy proves every subject falls into exactly one level.
+
+```alloy:model(classify)
+module classify
+
+abstract sig Level {}
+one sig Admin, Member, Guest extends Level {}
+
+sig Subject { level: one Level }
+
+pred isAdmin[s: Subject] { s.level = Admin }
+pred isMember[s: Subject] { s.level = Member }
+pred isGuest[s: Subject] { s.level = Guest }
+
+-- completeness: every subject is one of the three
+assert complete {
+  all s: Subject | isAdmin[s] or isMember[s] or isGuest[s]
+}
+
+-- mutual exclusivity: no overlap
+assert exclusive {
+  no s: Subject | (isAdmin[s] and isMember[s])
+    or (isMember[s] and isGuest[s])
+    or (isAdmin[s] and isGuest[s])
+}
+
+check complete for 5
+check exclusive for 5
+```
+
+```run:shell
+# Verify the classification model passes
+mkdir -p .tmp-test
+printf '%s\n' '# Classify' '' '```alloy:model(classify)' 'module classify' '' 'abstract sig Level {}' 'one sig Admin, Member, Guest extends Level {}' '' 'sig Subject { level: one Level }' '' 'pred isAdmin[s: Subject] { s.level = Admin }' 'pred isMember[s: Subject] { s.level = Member }' 'pred isGuest[s: Subject] { s.level = Guest }' '' 'assert complete {' '  all s: Subject | isAdmin[s] or isMember[s] or isGuest[s]' '}' '' 'assert exclusive {' '  no s: Subject | (isAdmin[s] and isMember[s])' '    or (isMember[s] and isGuest[s])' '    or (isAdmin[s] and isGuest[s])' '}' '' 'check complete for 5' 'check exclusive for 5' '```' > .tmp-test/classify.spec.md
+printf '# T\n\n- [Classify](classify.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/classify-cfg.json
+specdown run -config .tmp-test/classify-cfg.json 2>&1 | grep -q 'PASS'
+```
+
+With this proof, a check table needs only one representative per level
+(Admin, Member, Guest) — Alloy guarantees there are no gaps.
 
 ### 4. Invariant Leverage
 
@@ -128,7 +174,12 @@ Prove that one strong invariant implies several weaker properties. Then only tes
 
 ### 5. Transition Safety Net
 
-Model state transitions in Alloy to prove which transitions are impossible. Executable blocks test the valid paths and a minimal set of invalid ones. No need to test every impossible pair; Alloy covers the rest.
+Model state transitions in Alloy to prove which transitions are
+impossible. Executable blocks test the valid paths and a minimal set of
+invalid ones. No need to test every impossible pair; Alloy covers the rest.
+
+See the [State Machine Models](alloy.spec.md#state-machine-models)
+section in the Alloy spec for a worked example.
 
 ### 6. Composition Safety
 

@@ -277,3 +277,53 @@ human-readable row identifier; if omitted, specdown uses the default
   "label": "list: empty middle splits"
 }
 ```
+
+## Error Handling
+
+### Adapter Crash (Non-Zero Exit)
+
+A non-zero exit code from the adapter process signals an infrastructure
+failure, not a case failure. specdown reports it as an error, distinct
+from a test failure.
+
+```run:shell
+# Create an adapter that crashes mid-session
+mkdir -p .tmp-test
+cat <<'ADAPTER' > .tmp-test/crash-adapter.sh
+#!/bin/sh
+read -r line
+id=$(printf '%s' "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+printf '{"id":%s,"output":"ok"}\n' "$id"
+exit 1
+ADAPTER
+chmod +x .tmp-test/crash-adapter.sh
+```
+
+```run:shell
+# Wire the crashing adapter to a two-case spec
+BT=$(printf '\140\140\140')
+printf '%s\n' '# Crash' '' "\${BT}run:boom" 'step1' "\${BT}" '' "\${BT}run:boom" 'step2' "\${BT}" > .tmp-test/crash.spec.md
+printf '# T\n\n- [Crash](crash.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"boom","command":["sh","./crash-adapter.sh"],"blocks":["run:boom"]}]}' > .tmp-test/crash-cfg.json
+! specdown run -config .tmp-test/crash-cfg.json 2>/dev/null
+```
+
+### Malformed Adapter Response
+
+If the adapter writes invalid JSON, specdown treats it as an error.
+
+```run:shell
+# Create an adapter that writes garbage
+mkdir -p .tmp-test
+printf '#!/bin/sh\necho "NOT JSON"\n' > .tmp-test/bad-adapter.sh
+chmod +x .tmp-test/bad-adapter.sh
+```
+
+```run:shell
+# Run a spec against the malformed adapter
+BT=$(printf '\140\140\140')
+printf '%s\n' '# Bad' '' "\${BT}run:bad" 'hello' "\${BT}" > .tmp-test/bad.spec.md
+printf '# T\n\n- [Bad](bad.spec.md)\n' > .tmp-test/index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"bad","command":["sh","./bad-adapter.sh"],"blocks":["run:bad"]}]}' > .tmp-test/bad-cfg.json
+! specdown run -config .tmp-test/bad-cfg.json 2>/dev/null
+```

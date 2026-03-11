@@ -146,6 +146,37 @@ cd .tmp-test/no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 
 ## Validation
 
+The routing model guarantees that no block prefix is handled by more
+than one adapter. User adapters have exclusive claims, and the built-in
+adapter yields to any user adapter that claims the same prefix.
+
+```alloy:model(routing)
+module routing
+
+sig Prefix {}
+sig Adapter { handles: set Prefix }
+one sig Builtin extends Adapter {}
+
+-- user adapters never overlap
+fact exclusiveUserClaims {
+  all disj a1, a2: Adapter - Builtin |
+    no a1.handles & a2.handles
+}
+
+-- builtin yields when a user adapter claims the same prefix
+fact builtinYields {
+  no p: Prefix |
+    p in Builtin.handles and p in (Adapter - Builtin).handles
+}
+
+-- every prefix is handled by at most one adapter
+assert noConflict {
+  all p: Prefix | lone a: Adapter | p in a.handles
+}
+
+check noConflict for 6
+```
+
 Two adapters with the same name must be rejected.
 
 ```run:shell
@@ -194,4 +225,18 @@ Only `"alloy"` is supported as a models builtin. Unknown values are rejected.
 # Reject unknown models builtin
 printf '{"entry":"i.spec.md","adapters":[],"models":{"builtin":"unknown"}}' > .tmp-test/bad-model.json
 ! specdown run -config .tmp-test/bad-model.json 2>/dev/null
+```
+
+### Relative Paths
+
+All paths in the config are resolved relative to the config file's directory.
+This ensures the project works from any checkout location.
+
+```run:shell
+# Verify relative entry path resolves from config directory
+mkdir -p .tmp-test/relpath/specs
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/relpath/specs/index.spec.md
+printf '# S\n\nProse.\n' > .tmp-test/relpath/specs/s.spec.md
+printf '{"entry":"specs/index.spec.md","adapters":[]}' > .tmp-test/relpath/specdown.json
+specdown run -config .tmp-test/relpath/specdown.json -dry-run 2>&1 | grep 'spec(s)'
 ```

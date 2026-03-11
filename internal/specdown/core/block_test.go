@@ -122,3 +122,9 @@ func TestUnknownBlockPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestParseBlockSpecRejectsDuplicateCaptureNames(t *testing.T) {
+	if _, err := parseBlockSpec("run:shell -> $a, $a"); err == nil {
+		t.Fatal("expected error for duplicate capture names")
+	}
+}
