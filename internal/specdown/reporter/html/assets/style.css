@@ -171,12 +171,10 @@ main {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.2em 0.55em;
-  border-radius: 0.2rem;
 }
-.pill.pass { background: var(--pass-bg); color: var(--pass-ink); }
-.pill.fail { background: var(--fail-bg); color: var(--fail-ink); }
-.pill.xfail { background: var(--xfail-bg); color: var(--xfail-ink); }
+.pill.pass { color: var(--pass-ink); }
+.pill.fail { color: var(--fail-ink); }
+.pill.xfail { color: var(--xfail-ink); }
 
 .meta-date { color: var(--muted); margin-left: auto; }
 
