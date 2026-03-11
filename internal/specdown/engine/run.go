@@ -359,54 +359,17 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sess
 		bindings:  newBindingsManager(),
 		timeoutMs: plan.Document.Frontmatter.Timeout,
 		hooks:     plan.Hooks,
+		results:   make([]core.CaseResult, 0, len(plan.Cases)),
+		status:    core.StatusPassed,
 	}
-	cases := make([]core.CaseResult, 0, len(plan.Cases))
-	status := core.StatusPassed
 
-	var prevPath core.HeadingPath
 	for i, specCase := range plan.Cases {
-		currPath := specCase.ID.HeadingPath
-
-		// Alloy cases are handled by the alloy runner; produce placeholder results.
-		if specCase.Kind == core.CaseKindAlloy {
-			cases = append(cases, core.CaseResult{
-				ID:        specCase.ID,
-				Kind:      core.CaseKindAlloy,
-				Model:     specCase.Model,
-				Assertion: specCase.Assertion,
-				Scope:     specCase.Scope,
-				Label:     specCase.DefaultLabel(),
-			})
-			prevPath = currPath
-			continue
-		}
-
-		if failed := ctx.runSetupHooks(prevPath, currPath); failed {
-			status = core.StatusFailed
-		}
-
-		result, err := runSingleCase(specCase, ctx.registry, ctx.sessions, ctx.bindings.VisibleAt(specCase.ID.HeadingPath), ctx.timeoutMs)
-		if err != nil {
+		nextPath := peekNextPath(plan.Cases, i)
+		if err := ctx.processCase(specCase, nextPath); err != nil {
 			return nil, "", err
 		}
-		cases = append(cases, result)
-		if result.Status == core.StatusFailed && !result.ExpectFail {
-			status = core.StatusFailed
-		} else if result.Status != core.StatusFailed {
-			ctx.bindings.Add(result.Bindings, specCase.ID.HeadingPath)
-		}
-
-		var nextPath core.HeadingPath
-		if i+1 < len(plan.Cases) {
-			nextPath = plan.Cases[i+1].ID.HeadingPath
-		}
-		if failed := ctx.runTeardownHooks(currPath, nextPath); failed {
-			status = core.StatusFailed
-		}
-
-		prevPath = currPath
 	}
-	return cases, status, nil
+	return ctx.results, ctx.status, nil
 }
 
 type caseRunContext struct {
@@ -415,6 +378,69 @@ type caseRunContext struct {
 	bindings  *bindingsManager
 	timeoutMs int
 	hooks     []core.HookSpec
+	results   []core.CaseResult
+	status    core.Status
+	prevPath  core.HeadingPath
+}
+
+// processCase handles a single case: hooks, execution, result recording.
+func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.HeadingPath) error {
+	currPath := specCase.ID.HeadingPath
+
+	if specCase.Kind == core.CaseKindAlloy {
+		c.results = append(c.results, alloyPlaceholder(specCase))
+		c.prevPath = currPath
+		return nil
+	}
+
+	if failed := c.runSetupHooks(c.prevPath, currPath); failed {
+		c.status = core.StatusFailed
+	}
+
+	result, err := runSingleCase(specCase, c.registry, c.sessions, c.bindings.VisibleAt(specCase.ID.HeadingPath), c.timeoutMs)
+	if err != nil {
+		return err
+	}
+
+	c.recordResult(result, specCase.ID.HeadingPath)
+
+	if failed := c.runTeardownHooks(currPath, nextPath); failed {
+		c.status = core.StatusFailed
+	}
+
+	c.prevPath = currPath
+	return nil
+}
+
+// recordResult appends a case result, updates status, and records bindings.
+func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingPath) {
+	c.results = append(c.results, result)
+	if result.Status == core.StatusFailed && !result.ExpectFail {
+		c.status = core.StatusFailed
+	} else if result.Status != core.StatusFailed {
+		c.bindings.Add(result.Bindings, path)
+	}
+}
+
+// alloyPlaceholder creates a placeholder result for an alloy case.
+// The real result is merged in later from the alloy runner.
+func alloyPlaceholder(specCase core.CaseSpec) core.CaseResult {
+	return core.CaseResult{
+		ID:        specCase.ID,
+		Kind:      core.CaseKindAlloy,
+		Model:     specCase.Model,
+		Assertion: specCase.Assertion,
+		Scope:     specCase.Scope,
+		Label:     specCase.DefaultLabel(),
+	}
+}
+
+// peekNextPath returns the heading path of the next case, or nil if at the end.
+func peekNextPath(cases []core.CaseSpec, current int) core.HeadingPath {
+	if current+1 < len(cases) {
+		return cases[current+1].ID.HeadingPath
+	}
+	return nil
 }
 
 func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) bool {
