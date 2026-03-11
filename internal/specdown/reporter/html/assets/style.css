@@ -160,9 +160,9 @@ main {
 
 .content-meta {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.4rem;
   font-size: 0.82rem;
   line-height: 1;
 }
@@ -206,7 +206,6 @@ main {
   letter-spacing: 0.06em;
   padding: 0.15em 0.5em;
   border-radius: 0.2rem;
-  margin-bottom: 0.3rem;
   background: hsl(var(--type-hue) 55% 92%);
   color: hsl(var(--type-hue) 50% 35%);
   border: 1px solid hsl(var(--type-hue) 40% 82%);
@@ -709,7 +708,7 @@ code, pre, kbd, samp {
 }
 
 .trace-ctx-child {
-  padding-left: 0.75rem;
+  padding-left: 1.5rem;
 }
 
 /* ── Mobile layout ── */

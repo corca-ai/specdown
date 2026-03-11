@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
@@ -31,31 +32,41 @@ func rewriteTraceLinks(html string) string {
 	})
 }
 
+type traceLink struct {
+	edge    string
+	doc     string
+	docType string
+	href    string
+}
+
+// sortTraceLinks sorts by type (primary) then title (secondary).
+func sortTraceLinks(links []traceLink) {
+	sort.SliceStable(links, func(i, j int) bool {
+		if links[i].docType != links[j].docType {
+			return links[i].docType < links[j].docType
+		}
+		return titleFromPath(links[i].doc) < titleFromPath(links[j].doc)
+	})
+}
+
 // renderPageTraceContext builds a right-side traceability panel showing parents → current → children.
 func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, entryDir string) string {
-	type link struct {
-		edge     string
-		doc      string
-		docType  string
-		href     string
-	}
-
 	// Build type lookup.
 	typeOf := make(map[string]string, len(tg.Documents))
 	for _, d := range tg.Documents {
 		typeOf[d.Path] = d.Type
 	}
 
-	var incoming, outgoing []link
+	var incoming, outgoing []traceLink
 	for _, e := range tg.Edges {
 		if e.Target == docPath {
-			incoming = append(incoming, link{
+			incoming = append(incoming, traceLink{
 				edge: e.EdgeName, doc: e.Source,
 				docType: typeOf[e.Source], href: docToHTMLPath(e.Source, entryDir),
 			})
 		}
 		if e.Source == docPath {
-			outgoing = append(outgoing, link{
+			outgoing = append(outgoing, traceLink{
 				edge: e.EdgeName, doc: e.Target,
 				docType: typeOf[e.Target], href: docToHTMLPath(e.Target, entryDir),
 			})
@@ -64,6 +75,9 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 	if len(incoming) == 0 && len(outgoing) == 0 {
 		return ""
 	}
+
+	sortTraceLinks(incoming)
+	sortTraceLinks(outgoing)
 
 	var b strings.Builder
 	b.WriteString(`<p class="trace-ctx-title">Traceability</p>`)

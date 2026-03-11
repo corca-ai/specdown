@@ -88,9 +88,10 @@ func Write(report core.Report, outDir string) error {
 	docs := collectDocTOCs(report.Results, entryDir)
 
 	for i, result := range report.Results {
-		meta := buildDocMeta(result, report.GeneratedAt)
+		docType := result.Document.Frontmatter.Type
+		meta := buildDocMeta(result, report.GeneratedAt, docType)
 		if i == 0 {
-			meta = buildMeta(report)
+			meta = buildMeta(report, docType)
 		}
 		assetRoot := computeAssetRoot(path.Dir(docs[i].htmlPath))
 		globalTOC := buildGlobalTOC(docs, i, assetRoot)
@@ -201,7 +202,17 @@ func writePills(b *strings.Builder, passed, failed, xfail int) {
 	}
 }
 
-func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
+func writeTypeBadge(b *strings.Builder, docType string) {
+	if docType == "" {
+		return
+	}
+	hue := typeHue(docType)
+	fmt.Fprintf(b,
+		`<span class="doc-type" style="--type-hue:%d">%s</span>`,
+		hue, template.HTMLEscapeString(docType))
+}
+
+func buildDocMeta(result core.DocumentResult, generatedAt time.Time, docType string) string {
 	passed := 0
 	failed := 0
 	xfail := 0
@@ -217,6 +228,7 @@ func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
 	}
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
+	writeTypeBadge(&b, docType)
 	writePills(&b, passed, failed, xfail)
 	fmt.Fprintf(&b, `<span class="meta-date">%s</span>`,
 		template.HTMLEscapeString(generatedAt.Format("2 Jan 2006 15:04")))
@@ -224,12 +236,13 @@ func buildDocMeta(result core.DocumentResult, generatedAt time.Time) string {
 	return b.String()
 }
 
-func buildMeta(report core.Report) string {
+func buildMeta(report core.Report, docType string) string {
 	passed := report.Summary.CasesPassed
 	failed := report.Summary.CasesFailed
 	xfail := report.Summary.CasesExpectedFail
 	var b strings.Builder
 	b.WriteString(`<p class="content-meta">`)
+	writeTypeBadge(&b, docType)
 	writePills(&b, passed, failed, xfail)
 	fmt.Fprintf(&b, `<span class="meta-date">%s</span>`,
 		template.HTMLEscapeString(report.GeneratedAt.Format("2 Jan 2006 15:04")))
