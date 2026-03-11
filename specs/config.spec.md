@@ -90,7 +90,7 @@ the user adapter takes precedence over the built-in.
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification. Can be omitted if not used |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
-| `trace` | Trace graph configuration. See [Trace Graph](trace.spec.md) |
+| `trace` | Traceability configuration. See [Traceability](traceability.spec.md) |
 
 ### Adapter Fields
 

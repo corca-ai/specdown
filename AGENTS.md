@@ -18,7 +18,7 @@
 - [HTML Report](specs/report.spec.md) — report structure and failure diagnostics
 - [Best Practices](specs/best-practices.spec.md) — patterns, pitfalls, anti-patterns
 - [Validation Rules](specs/validation.spec.md) — parse-time error checking
-- [Trace Graph](specs/trace.spec.md) — document traceability graph
+- [Traceability](specs/traceability.spec.md) — document traceability graph
 - [Alloy Language Reference](docs/alloy-reference.md) — Alloy syntax and semantics
 
 Note: `CLAUDE.md` is a symlink to `AGENTS.md`.

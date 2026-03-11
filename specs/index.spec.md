@@ -26,7 +26,7 @@ Connecting specs to code and formal properties.
 Ensuring specs and documents are well-formed.
 
 - [Validation Rules](validation.spec.md) — parse-time error checking
-- [Trace Graph](trace.spec.md) — document traceability with typed edges
+- [Traceability](traceability.spec.md) — document traceability with typed edges
 
 ## Reporting and Internals
 

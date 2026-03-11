@@ -2,7 +2,7 @@
 type: spec
 ---
 
-# Trace Graph
+# Traceability
 
 Consider a project with four layers of documentation: Themes describe
 business goals, Epics break themes into deliverables, User Stories
@@ -10,7 +10,7 @@ describe end-user behavior, and Acceptance Tests verify each story.
 How do you know every story has at least one test? That every epic
 traces back to a theme? That no test is orphaned?
 
-The trace graph answers these questions. Documents are nodes; named,
+Traceability answers these questions. Documents are nodes; named,
 typed links between them are edges. Configure edge types and
 cardinality constraints in [depends::specdown.json](config.spec.md),
 and specdown checks them automatically:
@@ -119,7 +119,7 @@ check crossTypeNoReverse for 5
 
 ## Configuration
 
-The `trace` key in `specdown.json` configures the trace graph:
+The `trace` key in `specdown.json` configures traceability:
 
 ```json
 {

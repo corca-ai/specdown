@@ -470,7 +470,7 @@ func installSkillsCmd(args []string) error {
 		{"adapter-protocol.md", specdown.SkillAdapterProtocol},
 		{"syntax.md", specdown.SkillSyntax},
 		{"config.md", specdown.SkillConfig},
-		{"trace.md", specdown.SkillTrace},
+		{"traceability.md", specdown.SkillTraceability},
 		{"alloy.md", specdown.SkillAlloy},
 	}
 	for _, f := range files {
