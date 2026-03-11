@@ -2235,94 +2235,6 @@ code, pre, kbd, samp {
   background: transparent;
 }
 
-/* ── Mobile layout ── */
-.mobile-title { display: none; }
-
-@media (max-width: 960px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
-  .content { display: contents; }
-
-  .mobile-title {
-    display: block;
-    order: 1;
-  }
-  .mobile-title h1 { margin: 0; }
-
-  .toc {
-    position: static;
-    order: 2;
-    margin-bottom: 1rem;
-  }
-
-  .toc-inner { padding-left: 0; padding-bottom: 1rem; }
-
-  .trace-context {
-    position: static;
-    order: 3;
-    max-width: none;
-    min-width: 0;
-    margin-bottom: 1.5rem;
-  }
-
-  .content-header { order: 4; }
-  .content-body { order: 5; }
-}
-
-@media (min-width: 961px) {
-  .toc-title,
-  .trace-ctx-title {
-    border-bottom: 1px solid var(--rule);
-  }
-}
-
-.site-footer {
-  max-width: 52rem;
-  margin: 3rem auto 0;
-  padding: 0 1rem 4rem;
-  text-align: center;
-  font-size: 0.84rem;
-  color: var(--muted);
-}
-.site-footer hr {
-  border: none;
-  border-top: 1px solid var(--muted);
-  opacity: 0.4;
-  margin-bottom: 0.75rem;
-}
-.site-footer a {
-  color: var(--muted);
-  text-decoration: underline;
-}
-
-/* ── Trace page ── */
-.trace-meta {
-  color: var(--muted);
-  font-size: 0.88rem;
-  margin: 0.5rem 0 1.5rem;
-}
-
-/* ── Trace tag (type badge) ── */
-.trace-tag {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1em 0.4em;
-  border-radius: 0.15rem;
-  min-width: 2.5em;
-  text-align: center;
-  vertical-align: baseline;
-  background: hsl(var(--type-hue) 55% 92%);
-  color: hsl(var(--type-hue) 50% 35%);
-  border: 1px solid hsl(var(--type-hue) 40% 82%);
-}
-
 /* ── Per-page trace context (right panel) ── */
 .trace-context {
   position: sticky;
@@ -2392,6 +2304,102 @@ code, pre, kbd, samp {
   text-decoration: none;
 }
 .trace-ctx-child a:hover { color: var(--accent); }
+
+/* ── Mobile layout ── */
+.mobile-title { display: none; }
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .content { display: contents; }
+
+  .mobile-title {
+    display: block;
+    order: 1;
+  }
+  .mobile-title h1 { margin: 0; }
+
+  .toc {
+    position: static;
+    order: 2;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .toc-inner { padding-left: 0; padding-bottom: 1rem; }
+
+  .toc-title,
+  .trace-ctx-title {
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
+  }
+
+  .trace-context {
+    position: static;
+    order: 3;
+    max-width: none;
+    min-width: 0;
+    margin-bottom: 1.5rem;
+  }
+
+  .content-header { order: 4; }
+  .content-body { order: 5; }
+}
+
+@media (min-width: 961px) {
+  .toc-title,
+  .trace-ctx-title {
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+.site-footer {
+  max-width: 52rem;
+  margin: 3rem auto 0;
+  padding: 0 1rem 4rem;
+  text-align: center;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.site-footer hr {
+  border: none;
+  border-top: 1px solid var(--muted);
+  opacity: 0.4;
+  margin-bottom: 0.75rem;
+}
+.site-footer a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+/* ── Trace page ── */
+.trace-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+/* ── Trace tag (type badge) ── */
+.trace-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1em 0.4em;
+  border-radius: 0.15rem;
+  min-width: 2.5em;
+  text-align: center;
+  vertical-align: baseline;
+  background: hsl(var(--type-hue) 55% 92%);
+  color: hsl(var(--type-hue) 50% 35%);
+  border: 1px solid hsl(var(--type-hue) 40% 82%);
+}
+
 `
 
 const scriptJS = `(() => {
