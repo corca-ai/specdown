@@ -118,7 +118,7 @@ func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
 	return result
 }
 
-func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath string, jarPath string) (map[string]core.CaseResult, error) {
+func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath, jarPath string) (map[string]core.CaseResult, error) {
 	checksByModel := make(map[string][]core.CaseSpec)
 	for _, check := range alloyChecks {
 		checksByModel[check.Alloy.Model] = append(checksByModel[check.Alloy.Model], check)
@@ -140,8 +140,8 @@ func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec
 		if err != nil {
 			return nil, err
 		}
-		for _, result := range modelResults {
-			resultsByKey[result.ID.Key()] = result
+		for j := range modelResults {
+			resultsByKey[modelResults[j].ID.Key()] = modelResults[j]
 		}
 	}
 	return resultsByKey, nil
@@ -188,10 +188,9 @@ func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, chec
 	}, nil
 }
 
-func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []core.CaseSpec) (string, []string) {
+func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []core.CaseSpec) (source string, lineRefs []string) {
 	var (
 		lines     []string
-		lineRefs  []string
 		seenCheck = make(map[string]struct{})
 	)
 
@@ -226,10 +225,11 @@ func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []
 		}
 	}
 
-	return strings.Join(lines, "\n") + "\n", lineRefs
+	source = strings.Join(lines, "\n") + "\n"
+	return
 }
 
-func (r Runner) runModel(javaPath string, jarPath string, bundle modelBundle, checks []core.CaseSpec) ([]core.CaseResult, error) {
+func (r Runner) runModel(javaPath, jarPath string, bundle modelBundle, checks []core.CaseSpec) ([]core.CaseResult, error) {
 	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), core.Slug(bundle.Model)+"-output")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create alloy output dir: %w", err)
@@ -354,7 +354,7 @@ func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
 	return results
 }
 
-func failedChecks(checks []core.CaseSpec, bundlePath string, sourceMapPath string, message string, location failureLocation, hasLocation bool) []core.CaseResult {
+func failedChecks(checks []core.CaseSpec, bundlePath, sourceMapPath, message string, location failureLocation, hasLocation bool) []core.CaseResult {
 	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
 		a := check.Alloy
@@ -499,7 +499,7 @@ func (r Runner) ensureAlloyJar() (_ string, err error) {
 	return jarPath, nil
 }
 
-func bundleFileName(documentPath string, modelName string) string {
+func bundleFileName(documentPath, modelName string) string {
 	return core.Slug(documentPath) + "-" + core.Slug(modelName) + ".als"
 }
 
@@ -510,7 +510,7 @@ func splitBundleLines(source string) []string {
 	return strings.Split(strings.ReplaceAll(source, "\r\n", "\n"), "\n")
 }
 
-func writeSourceMap(outPath string, bundlePath string, lineRefs []string) error {
+func writeSourceMap(outPath, bundlePath string, lineRefs []string) error {
 	items := make([]sourceMapLineItem, 0, len(lineRefs))
 	for i, sourceRef := range lineRefs {
 		items = append(items, sourceMapLineItem{
@@ -553,7 +553,7 @@ func checkCommandSource(check core.CaseSpec) string {
 }
 
 
-var alloyLinePattern = regexp.MustCompile(`\bline\s+([0-9]+)\b`)
+var alloyLinePattern = regexp.MustCompile(`\bline\s+(\d+)\b`)
 
 func locateAlloyFailure(lineRefs []string, message string) (failureLocation, bool) {
 	match := alloyLinePattern.FindStringSubmatch(message)

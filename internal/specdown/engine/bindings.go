@@ -59,6 +59,6 @@ func (m *bindingsManager) VisibleAt(path core.HeadingPath) []core.Binding {
 	return items
 }
 
-func bindingReachable(bp core.HeadingPath, current core.HeadingPath) bool {
+func bindingReachable(bp, current core.HeadingPath) bool {
 	return bp.Reachable(current)
 }

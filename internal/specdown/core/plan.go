@@ -81,7 +81,7 @@ type Plan struct {
 
 // resolveLink resolves a markdown link relative to the current document.
 // Returns empty string if the link should be skipped (external, anchor, non-md).
-func resolveLink(link string, currentDir string) string {
+func resolveLink(link, currentDir string) string {
 	if strings.Contains(link, "://") || strings.HasPrefix(link, "#") {
 		return ""
 	}
@@ -135,7 +135,7 @@ func (cs *crawlState) processLink(link string, source Document) (*Document, erro
 	return &doc, nil
 }
 
-func DiscoverFromEntry(baseDir string, entryPath string, ignorePrefixes []string) (string, []Document, error) {
+func DiscoverFromEntry(baseDir, entryPath string, ignorePrefixes []string) (string, []Document, error) {
 	entryPath = path.Clean(entryPath)
 
 	entryDoc, err := readDocument(baseDir, entryPath, ignorePrefixes)
@@ -174,7 +174,7 @@ func DiscoverFromEntry(baseDir string, entryPath string, ignorePrefixes []string
 }
 
 // isInsideDir checks if a cleaned path is inside the given directory.
-func isInsideDir(filePath string, dir string) bool {
+func isInsideDir(filePath, dir string) bool {
 	if dir == "." {
 		// Root-relative: anything without ".." prefix is inside.
 		return !strings.HasPrefix(filePath, "..")
@@ -319,13 +319,13 @@ func bindingVisible(bindings []bindingDefinition, name string, currentPath Headi
 }
 
 func documentMaxOrdinal(doc Document) int {
-	max := 0
+	maxOrd := 0
 	for _, id := range documentOrdinals(doc) {
-		if id != nil && id.Ordinal > max {
-			max = id.Ordinal
+		if id != nil && id.Ordinal > maxOrd {
+			maxOrd = id.Ordinal
 		}
 	}
-	return max
+	return maxOrd
 }
 
 func documentOrdinals(doc Document) []*SpecID {

@@ -210,18 +210,18 @@ type Multiplicity struct {
 }
 
 // ParseCount parses a count string like "1..* → 1..*" into source and target multiplicities.
-func ParseCount(s string) (Multiplicity, Multiplicity, error) {
+func ParseCount(s string) (source, target Multiplicity, err error) {
 	// Normalize arrow
 	normalized := strings.ReplaceAll(s, "→", "->")
 	parts := strings.SplitN(normalized, "->", 2)
 	if len(parts) != 2 {
 		return Multiplicity{}, Multiplicity{}, fmt.Errorf("invalid count %q: expected format 'source -> target'", s)
 	}
-	source, err := parseMultiplicity(strings.TrimSpace(parts[0]))
+	source, err = parseMultiplicity(strings.TrimSpace(parts[0]))
 	if err != nil {
 		return Multiplicity{}, Multiplicity{}, fmt.Errorf("invalid count %q: source side: %w", s, err)
 	}
-	target, err := parseMultiplicity(strings.TrimSpace(parts[1]))
+	target, err = parseMultiplicity(strings.TrimSpace(parts[1]))
 	if err != nil {
 		return Multiplicity{}, Multiplicity{}, fmt.Errorf("invalid count %q: target side: %w", s, err)
 	}

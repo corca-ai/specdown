@@ -19,5 +19,9 @@ linters:
     gocritic:
       enabled-tags:
         - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
     gocognit:
       min-complexity: 15

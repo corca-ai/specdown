@@ -128,7 +128,7 @@ func StepStatus(actual, expected string) string {
 }
 
 // ExecForDoctest runs a single command and returns stdout/stderr.
-func ExecForDoctest(command string) (stdout string, errMsg string, ok bool) {
+func ExecForDoctest(command string) (stdout, errMsg string, ok bool) {
 	cmd := exec.Command("sh", "-c", command)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

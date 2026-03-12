@@ -67,7 +67,7 @@ var traceLinkPattern = regexp.MustCompile(`\[([a-z][a-z0-9_]*)::([^\]]+)\]\(([^)
 var fencedCodeBlockPattern = regexp.MustCompile("(?m)^```[^\n]*\n(?s:.*?)\n```\\s*$")
 
 // ParseTraceLinks extracts trace links from markdown content.
-func ParseTraceLinks(sourcePath string, markdown string) []TraceLink {
+func ParseTraceLinks(sourcePath, markdown string) []TraceLink {
 	stripped := fencedCodeBlockPattern.ReplaceAllStringFunc(markdown, func(block string) string {
 		return strings.Repeat("\n", strings.Count(block, "\n"))
 	})
@@ -219,7 +219,7 @@ func discoverFile(absPath, baseDir string, ignorePatterns []string, typeSet map[
 }
 
 // resolveTraceLinks parses trace links from a document and resolves their target paths.
-func resolveTraceLinks(relPath string, markdown string) ([]TraceLink, []TraceError) {
+func resolveTraceLinks(relPath, markdown string) ([]TraceLink, []TraceError) {
 	docLinks := ParseTraceLinks(relPath, markdown)
 	var resolved []TraceLink
 	var errs []TraceError
@@ -359,7 +359,7 @@ func checkCardinality(docs []TypedDocument, edges []Edge, edgeName string, edgeC
 }
 
 // checkSideCardinality checks source-side or target-side cardinality.
-func checkSideCardinality(docs []TypedDocument, edges []Edge, edgeName string, docType string, mult config.Multiplicity, isSource bool) []TraceError {
+func checkSideCardinality(docs []TypedDocument, edges []Edge, edgeName, docType string, mult config.Multiplicity, isSource bool) []TraceError {
 	var errs []TraceError
 	for _, doc := range docs {
 		if doc.Type != docType {
@@ -394,7 +394,7 @@ func countEdgesForDoc(edges []Edge, docPath string, isSource bool) int {
 }
 
 // checkCycles runs cycle detection for an acyclic edge type.
-func checkCycles(allEdges []Edge, edgeTypeEdges []Edge, edgeName string, edgeCfg config.TraceEdge) []TraceError {
+func checkCycles(allEdges, edgeTypeEdges []Edge, edgeName string, edgeCfg config.TraceEdge) []TraceError {
 	if !edgeCfg.Acyclic {
 		return nil
 	}

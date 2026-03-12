@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func readDocument(baseDir string, relativePath string, ignorePrefixes []string) (Document, error) {
+func readDocument(baseDir, relativePath string, ignorePrefixes []string) (Document, error) {
 	fullPath := filepath.Join(baseDir, filepath.FromSlash(relativePath))
 	body, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -18,7 +18,7 @@ func readDocument(baseDir string, relativePath string, ignorePrefixes []string) 
 	return ParseDocument(relativePath, string(body), ignorePrefixes)
 }
 
-func parseFrontmatter(markdown string) (Frontmatter, string) {
+func parseFrontmatter(markdown string) (fm Frontmatter, rest string) {
 	if !strings.HasPrefix(markdown, "---\n") {
 		return Frontmatter{}, markdown
 	}
@@ -27,9 +27,7 @@ func parseFrontmatter(markdown string) (Frontmatter, string) {
 		return Frontmatter{}, markdown
 	}
 	body := markdown[4 : 4+end]
-	rest := markdown[4+end+5:]
-
-	var fm Frontmatter
+	rest = markdown[4+end+5:]
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -71,7 +69,7 @@ type documentParser struct {
 	warnings        []string
 }
 
-func ParseDocument(relativePath string, markdown string, ignorePrefixes []string) (Document, error) {
+func ParseDocument(relativePath, markdown string, ignorePrefixes []string) (Document, error) {
 	fm, content := parseFrontmatter(markdown)
 
 	ignorePrefixSet := make(map[string]bool, len(ignorePrefixes))
@@ -246,7 +244,7 @@ func (p *documentParser) findFenceEnd(start int) (int, error) {
 	return 0, fmt.Errorf("%s: unclosed fenced code block", p.file)
 }
 
-func (p *documentParser) fenceContent(start, end int) (raw string, source string) {
+func (p *documentParser) fenceContent(start, end int) (raw, source string) {
 	raw = strings.Join(p.lines[start:end+1], "")
 	source = strings.TrimSuffix(strings.Join(p.lines[start+1:end], ""), "\n")
 	return
@@ -351,7 +349,7 @@ func (p *documentParser) handleTable(i int) (int, error) {
 	return next, nil
 }
 
-func (p *documentParser) handleHeading(i int, level int, text string) (int, error) {
+func (p *documentParser) handleHeading(i, level int, text string) (int, error) {
 	if err := p.requireNoHook(); err != nil {
 		return 0, err
 	}
@@ -457,12 +455,11 @@ var alloyModelInfoPattern = regexp.MustCompile(`^alloy:model\(([A-Za-z_][A-Za-z0
 var alloyRefDirectivePattern = regexp.MustCompile(`^\s*>\s*alloy:ref\(([A-Za-z_][A-Za-z0-9_-]*)#([A-Za-z_][A-Za-z0-9_]*),\s*scope=([^)]+)\)\s*$`)
 var hookDirectivePattern = regexp.MustCompile(`^\s*>\s*(setup|teardown)(?::(each))?\s*$`)
 
-func parseCheckDirective(line string) (string, map[string]string, bool) {
+func parseCheckDirective(line string) (check string, params map[string]string, ok bool) {
 	matches := checkDirectivePattern.FindStringSubmatch(line)
 	if matches == nil {
 		return "", nil, false
 	}
-	var params map[string]string
 	if matches[2] != "" {
 		params = parseCheckParams(matches[2])
 	}
@@ -492,7 +489,7 @@ func parseHookDirective(line string) (HookKind, bool, bool) {
 	return HookKind(matches[1]), matches[2] == "each", true
 }
 
-func tryFlushCheck(check string, checkParams map[string]string, checkRaw string, relativePath string, ordinal *int, headingPath []string) (CheckCallNode, bool, error) {
+func tryFlushCheck(check string, checkParams map[string]string, checkRaw, relativePath string, ordinal *int, headingPath []string) (CheckCallNode, bool, error) {
 	if check == "" {
 		return CheckCallNode{}, false, nil
 	}
@@ -703,13 +700,12 @@ func UnescapeCell(s string) string {
 	return out.String()
 }
 
-func parseHeading(line string) (int, string, bool) {
+func parseHeading(line string) (level int, text string, ok bool) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || trimmed[0] != '#' {
 		return 0, "", false
 	}
 
-	level := 0
 	for level < len(trimmed) && trimmed[level] == '#' {
 		level++
 	}
@@ -720,7 +716,7 @@ func parseHeading(line string) (int, string, bool) {
 		return 0, "", false
 	}
 
-	text := strings.TrimSpace(trimmed[level:])
+	text = strings.TrimSpace(trimmed[level:])
 	if text == "" {
 		return 0, "", false
 	}
@@ -753,7 +749,7 @@ func insideCodeSpan(raw string, start, end int) bool {
 	return false
 }
 
-func parseInlineElements(raw string, relativePath string, ordinal *int, headingPath []string) []InlineElement {
+func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []string) []InlineElement {
 	var elements []InlineElement
 
 	for _, loc := range inlineExpectPattern.FindAllStringSubmatchIndex(raw, -1) {

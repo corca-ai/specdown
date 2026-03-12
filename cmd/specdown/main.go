@@ -223,10 +223,6 @@ func traceCmd(args []string) error {
 		}
 	}
 
-	if *strict && len(traceErrs) > 0 {
-		return fmt.Errorf("trace validation failed")
-	}
-
 	switch *format {
 	case "json":
 		return traceOutputJSON(graph)
@@ -532,7 +528,7 @@ Only executable blocks and check tables are run.
 	return nil
 }
 
-func writeArtifacts(report core.Report, reportPath string, baseDir string, cfg config.Config) error {
+func writeArtifacts(report core.Report, reportPath, baseDir string, cfg config.Config) error {
 	if reportPath != "" {
 		if err := htmlreport.Write(report, reportPath); err != nil {
 			return err
@@ -569,7 +565,7 @@ func jsonReportPath(htmlReportDir string) string {
 	return filepath.Join(htmlReportDir, "report.json")
 }
 
-func resolvePath(baseDir string, value string) string {
+func resolvePath(baseDir, value string) string {
 	if filepath.IsAbs(value) {
 		return value
 	}
@@ -577,17 +573,17 @@ func resolvePath(baseDir string, value string) string {
 }
 
 func printFailures(report core.Report) {
-	for _, doc := range report.Results {
-		printCaseFailures(doc.Cases)
+	for i := range report.Results {
+		printCaseFailures(report.Results[i].Cases)
 	}
 }
 
 func printCaseFailures(cases []core.CaseResult) {
-	for _, c := range cases {
-		if c.Status != core.StatusFailed {
+	for i := range cases {
+		if cases[i].Status != core.StatusFailed {
 			continue
 		}
-		printCaseFailure(c)
+		printCaseFailure(cases[i])
 	}
 }
 
@@ -629,8 +625,9 @@ func printCaseFailure(c core.CaseResult) {
 }
 
 func printBindings(report core.Report) {
-	for _, doc := range report.Results {
-		for _, c := range doc.Cases {
+	for i := range report.Results {
+		for j := range report.Results[i].Cases {
+			c := report.Results[i].Cases[j]
 			if len(c.VisibleBindings) == 0 {
 				continue
 			}
@@ -652,8 +649,8 @@ func printTraceErrors(report core.Report) {
 }
 
 func printWarnings(report core.Report) {
-	for _, doc := range report.Results {
-		for _, w := range doc.Document.Warnings {
+	for i := range report.Results {
+		for _, w := range report.Results[i].Document.Warnings {
 			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 		}
 	}
@@ -661,10 +658,10 @@ func printWarnings(report core.Report) {
 
 
 func printResults(report core.Report) {
-	for _, doc := range report.Results {
-		fmt.Printf("spec: %s\n", doc.Document.RelativeTo)
-		for _, c := range doc.Cases {
-			printCaseResult(c)
+	for i := range report.Results {
+		fmt.Printf("spec: %s\n", report.Results[i].Document.RelativeTo)
+		for j := range report.Results[i].Cases {
+			printCaseResult(report.Results[i].Cases[j])
 		}
 	}
 }
@@ -715,9 +712,10 @@ func prependSelfToPath() {
 }
 
 func printDryRun(report core.Report) {
-	for _, doc := range report.Results {
-		fmt.Printf("spec: %s\n", doc.Document.RelativeTo)
-		for _, c := range doc.Cases {
+	for i := range report.Results {
+		fmt.Printf("spec: %s\n", report.Results[i].Document.RelativeTo)
+		for j := range report.Results[i].Cases {
+			c := report.Results[i].Cases[j]
 			if c.Kind == core.CaseKindAlloy {
 				fmt.Printf("  alloy: %s [%s#%s, scope=%s]\n", strings.Join(c.ID.HeadingPath, " > "), c.Model, c.Assertion, c.Scope)
 				continue

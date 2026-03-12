@@ -1110,7 +1110,7 @@ func helperBoardExistsFailure(name string, shouldExist bool) *helperError {
 	}
 }
 
-func helperCardExistsFailure(boardName string, cardName string, shouldExist bool) *helperError {
+func helperCardExistsFailure(boardName, cardName string, shouldExist bool) *helperError {
 	if shouldExist {
 		return &helperError{
 			message: "expected card " + strconvQuote(cardName) + " to exist in board " + strconvQuote(boardName) + "; actual cards: [\"card-1\"]",
@@ -1165,16 +1165,16 @@ func parseHelperCommand(source string) ([]string, error) {
 	return parts, nil
 }
 
-func parseHelperVerifySource(source string) (string, bool, error) {
+func parseHelperVerifySource(source string) (name string, shouldExist bool, err error) {
 	trimmed := strings.TrimSpace(strings.TrimPrefix(source, "board"))
 	if strings.HasSuffix(trimmed, "should exist") {
 		namePart := strings.TrimSpace(strings.TrimSuffix(trimmed, "should exist"))
-		name, err := parseHelperCommandArg(namePart)
+		name, err = parseHelperCommandArg(namePart)
 		return name, true, err
 	}
 	if strings.HasSuffix(trimmed, "should not exist") {
 		namePart := strings.TrimSpace(strings.TrimSuffix(trimmed, "should not exist"))
-		name, err := parseHelperCommandArg(namePart)
+		name, err = parseHelperCommandArg(namePart)
 		return name, false, err
 	}
 	return "", false, &helperError{message: "invalid verify source " + strconvQuote(source)}

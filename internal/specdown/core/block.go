@@ -72,24 +72,24 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 	return BlockSpec{Raw: trimmed}, nil
 }
 
-func extractExpectFail(s string) (bool, string) {
+func extractExpectFail(s string) (found bool, rest string) {
 	idx := strings.Index(s, " !fail")
 	if idx < 0 {
 		return false, s
 	}
-	rest := s[idx+len(" !fail"):]
+	rest = s[idx+len(" !fail"):]
 	if rest != "" && rest[0] != ' ' {
 		return false, s
 	}
 	return true, strings.TrimSpace(s[:idx] + rest)
 }
 
-func extractCaptures(working string) (string, []string, error) {
+func extractCaptures(working string) (remaining string, names []string, err error) {
 	if !strings.Contains(working, "->") {
 		return working, nil, nil
 	}
 	parts := strings.SplitN(working, "->", 2)
-	names, err := parseCaptureNames(parts[1])
+	names, err = parseCaptureNames(parts[1])
 	if err != nil {
 		return "", nil, err
 	}

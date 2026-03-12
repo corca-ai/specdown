@@ -141,7 +141,7 @@ func handleBuiltinMessage(raw []byte, encoder *json.Encoder, checksDir string) e
 	}
 }
 
-func (s *Session) Exec(id int, source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
+func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
 	s.nextID++
 	seqID := s.nextID
 
@@ -193,7 +193,7 @@ func (s *Session) Exec(id int, source string, timeoutMs int) (adapterprotocol.Ex
 	return r.resp, r.err
 }
 
-func (s *Session) Assert(id int, check string, params map[string]string, columns, cells []string, timeoutMs int) (adapterprotocol.AssertResponse, error) {
+func (s *Session) Assert(check string, params map[string]string, columns, cells []string, timeoutMs int) (adapterprotocol.AssertResponse, error) {
 	s.nextID++
 	seqID := s.nextID
 

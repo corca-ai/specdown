@@ -10,21 +10,21 @@ import (
 
 func collectDocTOCs(results []core.DocumentResult, entryDir string) []docTOC {
 	docs := make([]docTOC, len(results))
-	for i, result := range results {
-		htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
-		title := result.Document.Title
+	for i := range results {
+		htmlPath := docToHTMLPath(results[i].Document.RelativeTo, entryDir)
+		title := results[i].Document.Title
 		if title == "" {
-			title = titleFromPath(result.Document.RelativeTo)
+			title = titleFromPath(results[i].Document.RelativeTo)
 		}
-		headings := collectHeadings(result)
+		headings := collectHeadings(results[i])
 		snippet := ""
 		if len(headings) == 0 {
-			snippet = extractSnippet(result.Document)
+			snippet = extractSnippet(results[i].Document)
 		}
 		docs[i] = docTOC{
 			title:    title,
 			htmlPath: htmlPath,
-			status:   docStatusClass(result),
+			status:   docStatusClass(results[i]),
 			snippet:  snippet,
 			headings: headings,
 		}
@@ -103,29 +103,29 @@ func collectHeadingStatuses(result core.DocumentResult) map[string]string {
 		}
 	}
 
-	for _, item := range result.Cases {
+	for i := range result.Cases {
 		switch {
-		case item.Status == core.StatusFailed && !item.ExpectFail:
-			mark(item.ID.HeadingPath, "failed")
-		case item.ExpectFail:
-			mark(item.ID.HeadingPath, "expected-fail")
+		case result.Cases[i].Status == core.StatusFailed && !result.Cases[i].ExpectFail:
+			mark(result.Cases[i].ID.HeadingPath, "failed")
+		case result.Cases[i].ExpectFail:
+			mark(result.Cases[i].ID.HeadingPath, "expected-fail")
 		}
 	}
 	return statuses
 }
 
-func headingPathKey(path core.HeadingPath) string {
-	return path.Key()
+func headingPathKey(hp core.HeadingPath) string {
+	return hp.Key()
 }
 
 // docStatusClass returns "failed", "expected-fail", or "" for a document.
 func docStatusClass(result core.DocumentResult) string {
 	hasXFail := false
-	for _, c := range result.Cases {
-		if c.Status == core.StatusFailed && !c.ExpectFail {
+	for i := range result.Cases {
+		if result.Cases[i].Status == core.StatusFailed && !result.Cases[i].ExpectFail {
 			return "failed"
 		}
-		if c.ExpectFail {
+		if result.Cases[i].ExpectFail {
 			hasXFail = true
 		}
 	}
@@ -142,7 +142,7 @@ func titleFromPath(docPath string) string {
 	base = strings.TrimSuffix(base, ".md")
 	words := strings.Split(base, "-")
 	for i, w := range words {
-		if len(w) > 0 {
+		if w != "" {
 			words[i] = strings.ToUpper(w[:1]) + w[1:]
 		}
 	}

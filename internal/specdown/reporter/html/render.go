@@ -17,7 +17,7 @@ import (
 
 // rewriteMarkdownLinks rewrites href attributes pointing to .md or .spec.md files
 // to point to .html files instead, preserving fragments.
-var hrefMDPattern = regexp.MustCompile(`href="([^"]*\.(?:spec\.md|md))(#[^"]*)?(?:")`)
+var hrefMDPattern = regexp.MustCompile(`href="([^"]*\.(?:spec\.md|md))(#[^"]*)?"`)
 
 func rewriteMarkdownLinks(html string) string {
 	return hrefMDPattern.ReplaceAllStringFunc(html, func(match string) string {
@@ -42,8 +42,8 @@ func rewriteMarkdownLinks(html string) string {
 
 func renderDocument(result core.DocumentResult) (string, error) {
 	caseResults := make(map[string]core.CaseResult, len(result.Cases))
-	for _, item := range result.Cases {
-		caseResults[item.ID.Key()] = item
+	for i := range result.Cases {
+		caseResults[result.Cases[i].ID.Key()] = result.Cases[i]
 	}
 
 	var out strings.Builder
@@ -257,7 +257,8 @@ type renderedRow struct {
 
 func tableStatusClass(rows []renderedRow) string {
 	status := ""
-	for _, item := range rows {
+	for i := range rows {
+		item := rows[i]
 		switch {
 		case item.result.Status == core.StatusFailed && !item.result.ExpectFail:
 			return string(core.StatusFailed)
@@ -304,8 +305,8 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 	}
 	out.WriteString(`</tr></thead>`)
 	out.WriteString(`<tbody>`)
-	for _, item := range rows {
-		renderTableRow(&out, item.node, item.result)
+	for i := range rows {
+		renderTableRow(&out, rows[i].node, rows[i].result)
 	}
 	out.WriteString(`</tbody></table>`)
 	out.WriteString(`<p class="exec-table-footer">check:`)
@@ -376,7 +377,8 @@ func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.Case
 	// Find checks targeting this model
 	var failedResult *core.CaseResult
 	hasCheck := false
-	for _, r := range caseResults {
+	for k := range caseResults {
+		r := caseResults[k]
 		if r.Kind != core.CaseKindAlloy || r.Model != node.Model {
 			continue
 		}
@@ -501,7 +503,7 @@ func renderAlloyRef(node core.AlloyRefNode, caseResults map[string]core.CaseResu
 	return "", nil
 }
 
-func mergeBindings(bindings []core.Binding, newBindings []core.Binding) []core.Binding {
+func mergeBindings(bindings, newBindings []core.Binding) []core.Binding {
 	for _, b := range newBindings {
 		found := false
 		for i, existing := range bindings {

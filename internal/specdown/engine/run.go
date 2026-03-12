@@ -103,8 +103,8 @@ func DumpModels(baseDir string, cfg config.Config, dumper ModelDumper) ([]string
 	}
 
 	var paths []string
-	for _, docPlan := range plan.Documents {
-		dumped, err := dumper.DumpModels(docPlan)
+	for i := range plan.Documents {
+		dumped, err := dumper.DumpModels(plan.Documents[i])
 		if err != nil {
 			return nil, err
 		}
@@ -145,8 +145,8 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	}
 
 	summary := core.Summary{SpecsTotal: len(plan.Documents)}
-	for _, result := range results {
-		accumulateSummary(&summary, result)
+	for i := range results {
+		accumulateSummary(&summary, results[i])
 	}
 
 	return core.Report{
@@ -160,8 +160,8 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
 	if jobs == 1 {
-		for i, docPlan := range documents {
-			result, err := runDocument(docPlan, registry, host, alloyRunner)
+		for i := range documents {
+			result, err := runDocument(documents[i], registry, host, alloyRunner)
 			if err != nil {
 				return nil, err
 			}
@@ -173,7 +173,7 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 	errs := make([]error, len(documents))
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
-	for i, docPlan := range documents {
+	for i := range documents {
 		wg.Add(1)
 		go func(i int, dp core.DocumentPlan) {
 			defer wg.Done()
@@ -182,7 +182,7 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 			result, err := runDocument(dp, registry, host, alloyRunner)
 			results[i] = result
 			errs[i] = err
-		}(i, docPlan)
+		}(i, documents[i])
 	}
 	wg.Wait()
 	for _, err := range errs {
@@ -196,18 +196,18 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 func filterPlan(plan core.Plan, filter string) core.Plan {
 	f := parseFilter(filter)
 	var filtered []core.DocumentPlan
-	for _, doc := range plan.Documents {
+	for i := range plan.Documents {
 		var cases []core.CaseSpec
-		for _, c := range doc.Cases {
+		for _, c := range plan.Documents[i].Cases {
 			if f.matches(c) {
 				cases = append(cases, c)
 			}
 		}
 		if len(cases) > 0 {
 			filtered = append(filtered, core.DocumentPlan{
-				Document:    doc.Document,
+				Document:    plan.Documents[i].Document,
 				Cases:       cases,
-				AlloyModels: doc.AlloyModels,
+				AlloyModels: plan.Documents[i].AlloyModels,
 			})
 		}
 	}
@@ -218,7 +218,8 @@ func dryRunReport(plan core.Plan) core.Report {
 	results := make([]core.DocumentResult, 0, len(plan.Documents))
 	summary := core.Summary{SpecsTotal: len(plan.Documents)}
 
-	for _, doc := range plan.Documents {
+	for i := range plan.Documents {
+		doc := &plan.Documents[i]
 		cases := make([]core.CaseResult, 0, len(doc.Cases))
 		for _, c := range doc.Cases {
 			cr := core.CaseResult{
@@ -358,8 +359,8 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 
 // documentStatus derives the overall document status from case results.
 func documentStatus(cases []core.CaseResult) core.Status {
-	for _, c := range cases {
-		if c.Status == core.StatusFailed && !c.ExpectFail {
+	for i := range cases {
+		if cases[i].Status == core.StatusFailed && !cases[i].ExpectFail {
 			return core.StatusFailed
 		}
 	}
@@ -367,17 +368,17 @@ func documentStatus(cases []core.CaseResult) core.Status {
 }
 
 // mergeAlloyResults replaces placeholder alloy cases with actual results.
-func mergeAlloyResults(cases []core.CaseResult, alloyResults []core.CaseResult) []core.CaseResult {
+func mergeAlloyResults(cases, alloyResults []core.CaseResult) []core.CaseResult {
 	if len(alloyResults) == 0 {
 		return cases
 	}
 	alloyByKey := make(map[string]core.CaseResult, len(alloyResults))
-	for _, r := range alloyResults {
-		alloyByKey[r.ID.Key()] = r
+	for i := range alloyResults {
+		alloyByKey[alloyResults[i].ID.Key()] = alloyResults[i]
 	}
-	for i, c := range cases {
-		if c.Kind == core.CaseKindAlloy {
-			if ar, ok := alloyByKey[c.ID.Key()]; ok {
+	for i := range cases {
+		if cases[i].Kind == core.CaseKindAlloy {
+			if ar, ok := alloyByKey[cases[i].ID.Key()]; ok {
 				cases[i] = ar
 			}
 		}
@@ -470,7 +471,8 @@ func peekNextPath(cases []core.CaseSpec, current int) core.HeadingPath {
 }
 
 func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) {
-	for _, hook := range c.hooks {
+	for i := range c.hooks {
+		hook := c.hooks[i]
 		if hook.Kind != core.HookSetup || !shouldRunHook(hook, prevPath, currPath) {
 			continue
 		}
@@ -482,7 +484,8 @@ func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) {
 }
 
 func (c *caseRunContext) runTeardownHooks(currPath, nextPath core.HeadingPath) {
-	for _, hook := range c.hooks {
+	for i := range c.hooks {
+		hook := c.hooks[i]
 		if hook.Kind != core.HookTeardown || !shouldRunTeardownHook(hook, currPath, nextPath) {
 			continue
 		}
@@ -555,7 +558,7 @@ func runHook(hook core.HookSpec, registry adapterRegistry, sm *sessionManager, v
 		return err
 	}
 
-	resp, err := session.Exec(synthetic.ID.Ordinal, prepared.Code.Template, timeoutMs)
+	resp, err := session.Exec(prepared.Code.Template, timeoutMs)
 	if err != nil {
 		return err
 	}
@@ -618,7 +621,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 	return result, nil
 }
 
-func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+func runCodeCase(specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
 	code := specCase.Code
 	result := core.CaseResult{
 		ID:             specCase.ID,
@@ -639,7 +642,7 @@ func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapte
 		return runDoctestCase(specCase, prepared, session, result, timeoutMs)
 	}
 
-	resp, err := session.Exec(specCase.ID.Ordinal, prepared.Code.Template, timeoutMs)
+	resp, err := session.Exec(prepared.Code.Template, timeoutMs)
 	if err != nil {
 		return result, err
 	}
@@ -673,12 +676,12 @@ func runCodeCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapte
 	return result, nil
 }
 
-func runDoctestCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, result core.CaseResult, timeoutMs int) (core.CaseResult, error) {
+func runDoctestCase(_, prepared core.CaseSpec, session *adapterhost.Session, result core.CaseResult, timeoutMs int) (core.CaseResult, error) {
 	steps := core.ParseDoctestSource(prepared.Code.Template)
 	result.Status = core.StatusPassed
 
 	for _, step := range steps {
-		resp, err := session.Exec(specCase.ID.Ordinal, step.Command, timeoutMs)
+		resp, err := session.Exec(step.Command, timeoutMs)
 		if err != nil {
 			return result, err
 		}
@@ -734,7 +737,7 @@ func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string
 	}
 }
 
-func runTableRowCase(specCase core.CaseSpec, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+func runTableRowCase(specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
 	tr := specCase.TableRow
 	pr := prepared.TableRow
 	result := core.CaseResult{
@@ -754,7 +757,7 @@ func runTableRowCase(specCase core.CaseSpec, prepared core.CaseSpec, session *ad
 		Label: result.Label,
 	})
 
-	resp, err := session.Assert(specCase.ID.Ordinal, pr.Check, pr.CheckParams, pr.Columns, pr.Cells, timeoutMs)
+	resp, err := session.Assert(pr.Check, pr.CheckParams, pr.Columns, pr.Cells, timeoutMs)
 	if err != nil {
 		return result, err
 	}
@@ -1066,11 +1069,11 @@ func accumulateSummary(summary *core.Summary, result core.DocumentResult) {
 	}
 
 	summary.CasesTotal += len(result.Cases)
-	for _, item := range result.Cases {
+	for i := range result.Cases {
 		switch {
-		case item.Status == core.StatusPassed:
+		case result.Cases[i].Status == core.StatusPassed:
 			summary.CasesPassed++
-		case item.ExpectFail:
+		case result.Cases[i].ExpectFail:
 			summary.CasesExpectedFail++
 		default:
 			summary.CasesFailed++

@@ -87,16 +87,16 @@ func Write(report core.Report, outDir string) error {
 
 	docs := collectDocTOCs(report.Results, entryDir)
 
-	for i, result := range report.Results {
-		docType := result.Document.Frontmatter.Type
-		meta := buildDocMeta(result, report.GeneratedAt, docType)
+	for i := range report.Results {
+		docType := report.Results[i].Document.Frontmatter.Type
+		meta := buildDocMeta(report.Results[i], report.GeneratedAt, docType)
 		if i == 0 {
 			meta = buildMeta(report, docType)
 		}
 		assetRoot := computeAssetRoot(path.Dir(docs[i].htmlPath))
 		globalTOC := buildGlobalTOC(docs, i, assetRoot)
 
-		if err := writePage(outDir, entryDir, result, meta, globalTOC, report.TraceGraph); err != nil {
+		if err := writePage(outDir, entryDir, report.Results[i], meta, globalTOC, report.TraceGraph); err != nil {
 			return err
 		}
 	}
@@ -166,7 +166,7 @@ func writeHTMLFile(outPath string, view pageView) (err error) {
 
 // docToHTMLPath converts a document's relative path to an HTML output path.
 // The path is relative to the entry directory.
-func docToHTMLPath(docPath string, entryDir string) string {
+func docToHTMLPath(docPath, entryDir string) string {
 	docPath = path.Clean(docPath)
 	rel := docPath
 	if entryDir != "." && strings.HasPrefix(docPath, entryDir+"/") {
@@ -216,11 +216,11 @@ func buildDocMeta(result core.DocumentResult, generatedAt time.Time, docType str
 	passed := 0
 	failed := 0
 	xfail := 0
-	for _, c := range result.Cases {
+	for i := range result.Cases {
 		switch {
-		case c.Status == core.StatusPassed:
+		case result.Cases[i].Status == core.StatusPassed:
 			passed++
-		case c.ExpectFail:
+		case result.Cases[i].ExpectFail:
 			xfail++
 		default:
 			failed++
