@@ -90,3 +90,96 @@ without launching any adapter.
 $ specdown run -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
+
+## Event Schema
+
+All components communicate through a common event type. Each event
+carries a type, a case identifier, and optional diagnostic fields:
+
+| Field    | Type   | Description                                    |
+| -------- | ------ | ---------------------------------------------- |
+| type     | string | `caseStarted`, `casePassed`, or `caseFailed`   |
+| id       | SpecID | Unique identifier for the case                 |
+| label    | string | Human-readable description of the case         |
+| message  | string | Failure reason (failed events only)            |
+| expected | string | Expected value (failed events only)            |
+| actual   | string | Actual value (failed events only)              |
+| bindings | array  | Variable bindings captured during execution    |
+
+Events flow from adapters and the Alloy runner into case results.
+The reporter never sees raw adapter protocol messages — only the
+unified event stream assembled by the engine.
+
+## Reporter Contract
+
+A reporter receives a `Report` value after execution completes and
+writes output artifacts. The report contains:
+
+- **Title** — derived from the entry document heading.
+- **Results** — one `DocumentResult` per spec, each holding an ordered list of `CaseResult` values.
+- **Summary** — aggregate counts: specs total/passed/failed, cases total/passed/failed/expected-fail.
+- **TraceErrors** — validation messages from the traceability checker (if configured).
+- **TraceGraph** — the document graph with typed edges (if configured).
+
+Two built-in reporters are supported:
+
+- **html** — writes a multi-page HTML site with a global table of contents, per-document pages, shared CSS/JS assets, and optional trace graph visualization.
+- **json** — writes the full `Report` struct as indented JSON.
+
+Reporter selection is configured in [depends::specdown.json](config.spec.md) via the `reporters` array. Each entry specifies a `builtin` name and an `outFile` path.
+
+The JSON report is machine-readable and can be verified:
+
+```run:shell
+$ specdown run -quiet 2>&1 | tail -1
+...
+```
+
+```run:shell
+$ cat specs/report.json | head -1
+{
+```
+
+## Parallel Execution
+
+When `-jobs N` is greater than 1, the engine executes documents
+concurrently using a semaphore of size N. Each document gets its own
+adapter sessions — sessions are never shared across documents.
+
+Within a single document, cases execute sequentially in document order.
+Variable bindings from earlier blocks are available to later blocks
+within the same scope.
+
+The default is `-jobs 1` (sequential). Setting `-jobs` to the number
+of CPU cores is safe because each goroutine blocks on adapter I/O,
+not CPU.
+
+Sequential execution is the default:
+
+```run:shell
+$ specdown run -dry-run 2>&1 | grep 'spec(s)'
+...
+```
+
+## Alloy Runner Integration
+
+The Alloy runner implements the `ModelRunner` interface:
+
+```text
+ModelRunner
+  RunDocument(plan) -> []CaseResult
+```
+
+For each document, the runner:
+
+1. Collects all `CaseKindAlloy` cases from the plan.
+2. Groups them by model name.
+3. Bundles embedded Alloy fragments into a single `.als` file per model.
+4. Invokes the Alloy solver (Java subprocess) on each bundle.
+5. Maps solver output back to individual assertion results.
+
+The runner caches the Alloy JAR in `~/.cache/specdown/`. If the JAR
+is missing, it downloads the official release automatically.
+
+Alloy cases run in parallel with adapter cases at the document level
+and their results are merged into the same `DocumentResult`.
