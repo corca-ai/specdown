@@ -624,3 +624,30 @@ func TestParseDocumentRejectsTableWithNoDataRows(t *testing.T) {
 		t.Fatal("expected parse error for table with no data rows")
 	}
 }
+
+func TestExtractSummary(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"single line", "# Hello\necho ok", "Hello"},
+		{"multiline", "# First part\n# second part\necho ok", "First part second part"},
+		{"three lines", "# A\n# B\n# C\necho ok", "A B C"},
+		{"stops at non-comment", "# Title\necho ok\n# not summary", "Title"},
+		{"stops at blank line", "# Title\n\n# not summary", "Title"},
+		{"no comment", "echo ok", ""},
+		{"empty source", "", ""},
+		{"slash prefix", "// First\n// Second\ncode", "First Second"},
+		{"dash prefix", "-- First\n-- Second\ncode", "First Second"},
+		{"empty comment", "# \necho ok", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSummary(tt.source)
+			if got != tt.want {
+				t.Errorf("extractSummary(%q) = %q, want %q", tt.source, got, tt.want)
+			}
+		})
+	}
+}

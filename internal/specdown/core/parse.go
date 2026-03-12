@@ -800,30 +800,41 @@ func parseInlineElements(raw string, relativePath string, ordinal *int, headingP
 // commentPrefixes maps common comment markers to check for summary lines.
 var commentPrefixes = []string{"# ", "// ", "-- "}
 
-// extractSummary checks if the first line of source is a comment and returns
-// the summary text. If no summary is found, returns empty string.
+// extractSummary collects consecutive comment lines at the start of source
+// and joins them with a space. If the first line is not a comment, returns
+// empty string.
 func extractSummary(source string) string {
 	if source == "" {
 		return ""
 	}
-	firstNewline := strings.IndexByte(source, '\n')
-	var firstLine string
-	if firstNewline < 0 {
-		firstLine = source
-	} else {
-		firstLine = source[:firstNewline]
+	lines := strings.Split(source, "\n")
+	var parts []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			break
+		}
+		text, ok := stripCommentPrefix(trimmed)
+		if !ok {
+			break
+		}
+		if text == "" {
+			break
+		}
+		parts = append(parts, text)
 	}
-	trimmed := strings.TrimSpace(firstLine)
+	return strings.Join(parts, " ")
+}
+
+// stripCommentPrefix returns the text after a comment prefix and true,
+// or empty string and false if the line is not a comment.
+func stripCommentPrefix(line string) (string, bool) {
 	for _, prefix := range commentPrefixes {
-		if strings.HasPrefix(trimmed, prefix) {
-			caption := strings.TrimSpace(trimmed[len(prefix):])
-			if caption == "" {
-				return ""
-			}
-			return caption
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(line[len(prefix):]), true
 		}
 	}
-	return ""
+	return "", false
 }
 
 func nextHeadingPath(current []string, level int, text string) []string {

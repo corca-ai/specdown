@@ -63,6 +63,13 @@ func Assert(id int, req *adapterprotocol.AssertRequest, checksDir string) adapte
 	env = append(env, fmt.Sprintf("CHECK=%s", req.Check))
 
 	script := filepath.Join(checksDir, req.Check+".sh")
+	if _, err := os.Stat(script); err != nil {
+		return adapterprotocol.AssertResponse{
+			ID:      id,
+			Type:    "failed",
+			Message: fmt.Sprintf("check script not found: %s", script),
+		}
+	}
 	cmd := exec.Command("sh", script)
 	cmd.Env = env
 	var stdout, stderr bytes.Buffer

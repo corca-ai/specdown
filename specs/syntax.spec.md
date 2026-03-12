@@ -46,6 +46,10 @@ Plain info strings without a colon (e.g. `json`, `go`, `python`) never warn.
 If the first line of a `run:` block is a comment,
 specdown extracts it as the block's **summary line**.
 
+Consecutive comment lines at the start of a block are joined with a
+space into a single summary. The summary ends at the first non-comment
+line or blank line.
+
 In the HTML report, blocks with a summary are rendered collapsed:
 only the summary text and pass/fail indicator are visible. A `>` marker
 on the right side lets readers expand the block to see the full code.
@@ -70,6 +74,14 @@ so the report will render it collapsed with the summary
 test 1 -eq 1
 ```
 
+Multiple comment lines are joined into one summary:
+
+```run:shell
+# First part of the summary
+# and the second part
+test 1 -eq 1
+```
+
 A block without a leading comment renders normally (not collapsed):
 
 ```run:shell
@@ -87,6 +99,12 @@ A block can capture its output into a variable with `-> $varName`.
 
 Variables captured this way are referenced in subsequent blocks
 and tables using `${variableName}`.
+
+When the adapter returns structured (non-string) output, the value is
+stored as-is and fields are accessible via dot-path syntax:
+`${result.field}`. Nested access works to arbitrary depth:
+`${result.outer.inner}`. Accessing a missing key or indexing into a
+non-object value is a compile-time error.
 
 ### Scoping rules
 
@@ -411,6 +429,13 @@ A hook directive must be followed by an executable code block.
 
 Hooks are not counted as test cases. Their results do not appear in the
 case list, but a hook failure marks the document as failed.
+
+### Hook variable visibility
+
+Hooks can read variables captured by blocks in parent sections.
+When a hook executes, it receives all bindings visible at the
+hook's heading path — the same scoping rules that apply to
+regular blocks apply to hooks.
 
 A setup or teardown directive followed by an executable code block must parse successfully.
 
