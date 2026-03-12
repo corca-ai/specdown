@@ -53,7 +53,11 @@ func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts R
 		}
 	}
 	if cfg.Teardown != "" {
-		defer func() { _ = runShellCommand(baseDir, cfg.Teardown) }()
+		defer func() {
+			if terr := runShellCommand(baseDir, cfg.Teardown); terr != nil {
+				fmt.Fprintf(os.Stderr, "warning: teardown command failed: %v\n", terr)
+			}
+		}()
 	}
 
 	title, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
@@ -325,10 +329,12 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 	}
 
 	sm := newSessionManager(host)
-	defer func() { _ = sm.CloseAll() }()
 
 	cases, err := runDocumentCases(plan, registry, sm)
 	if err != nil {
+		if closeErr := sm.CloseAll(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing adapter sessions: %v\n", closeErr)
+		}
 		return core.DocumentResult{}, err
 	}
 
@@ -469,7 +475,9 @@ func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) {
 			continue
 		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		_ = runHook(hook, c.registry, c.sessions, visible, c.timeoutMs)
+		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %s hook failed: %v\n", hook.Kind, err)
+		}
 	}
 }
 
@@ -479,7 +487,9 @@ func (c *caseRunContext) runTeardownHooks(currPath, nextPath core.HeadingPath) {
 			continue
 		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		_ = runHook(hook, c.registry, c.sessions, visible, c.timeoutMs)
+		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %s hook failed: %v\n", hook.Kind, err)
+		}
 	}
 }
 
@@ -596,7 +606,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 		return core.CaseResult{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
 	}
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("%s: %s: %w", specCase.ID.File, specCase.ID.Key(), err)
 	}
 	result.VisibleBindings = visible
 
@@ -706,13 +716,13 @@ func runDoctestCase(specCase core.CaseSpec, prepared core.CaseSpec, session *ada
 func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string, core.Status) {
 	switch {
 	case resp.Error != "":
-		if expected == "" || !matchWithWildcard(resp.Error, expected) {
+		if expected == "" || !core.MatchWithWildcard(resp.Error, expected) {
 			return resp.Error, core.StatusFailed
 		}
 		return resp.Error, core.StatusPassed
 	case resp.HasOutput:
-		actual := execResponseToString(resp.Output)
-		if expected != "" && !matchWithWildcard(actual, expected) {
+		actual := core.ExecResponseToString(resp.Output)
+		if expected != "" && !core.MatchWithWildcard(actual, expected) {
 			return actual, core.StatusFailed
 		}
 		return actual, core.StatusPassed
@@ -1046,58 +1056,6 @@ func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 		Edges:           edges,
 		TransitiveEdges: transitive,
 	}
-}
-
-// matchWithWildcard checks if actual matches expected, where a line
-// containing exactly "..." in expected matches zero or more lines in actual.
-func matchWithWildcard(actual, expected string) bool {
-	expectedLines := strings.Split(expected, "\n")
-	for _, line := range expectedLines {
-		if line == "..." {
-			return matchWildcardLines(strings.Split(actual, "\n"), expectedLines, 0, 0)
-		}
-	}
-	return actual == expected
-}
-
-func matchWildcardLines(actual, expected []string, ai, ei int) bool {
-	for ei < len(expected) {
-		if expected[ei] != "..." {
-			if ai >= len(actual) || actual[ai] != expected[ei] {
-				return false
-			}
-			ai++
-			ei++
-			continue
-		}
-		return matchWildcardSkip(actual, expected, ai, ei)
-	}
-	return ai >= len(actual)
-}
-
-func matchWildcardSkip(actual, expected []string, ai, ei int) bool {
-	for ei < len(expected) && expected[ei] == "..." {
-		ei++
-	}
-	if ei >= len(expected) {
-		return true
-	}
-	for ai <= len(actual) {
-		if matchWildcardLines(actual, expected, ai, ei) {
-			return true
-		}
-		ai++
-	}
-	return false
-}
-
-// execResponseToString extracts a string from a JSON-encoded exec response output.
-func execResponseToString(raw json.RawMessage) string {
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return string(raw)
-	}
-	return s
 }
 
 func accumulateSummary(summary *core.Summary, result core.DocumentResult) {

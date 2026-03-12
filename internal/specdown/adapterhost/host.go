@@ -271,6 +271,9 @@ func (s *Session) readRawResponse() ([]byte, error) {
 		return append([]byte(nil), s.scanner.Bytes()...), nil
 	}
 	if err := s.scanner.Err(); err != nil {
+		if err.Error() == "bufio.Scanner: token too long" {
+			return nil, fmt.Errorf("adapter %q response exceeded buffer limit (1 MB); consider reducing output size", s.adapter.Name)
+		}
 		return nil, fmt.Errorf("read adapter %q response: %w", s.adapter.Name, err)
 	}
 	if err := s.wait(); err != nil {

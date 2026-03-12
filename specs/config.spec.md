@@ -169,6 +169,7 @@ CFG
 | `command` | Array of strings — the executable and its arguments |
 | `blocks` | List of block prefixes this adapter handles (e.g. `["run:myapp"]`) |
 | `checks` | List of check names this adapter handles (e.g. `["user-exists"]`) |
+| `checksDir` | Directory containing shell check scripts (default: `"./checks"`) |
 
 ### Reporter Fields
 
@@ -186,9 +187,18 @@ CFG
 ## Defaults
 
 When fields are omitted from a config file, sensible defaults are applied:
-- `entry` defaults to `specs/index.spec.md`
-- `models.builtin` defaults to `"alloy"`
-- `reporters` defaults to HTML and JSON reporters in `specs/`
+
+| Field | Default |
+|-------|---------|
+| `entry` | `specs/index.spec.md` |
+| `adapters` | `[]` (empty — built-in shell adapter handles `run:shell`) |
+| `models.builtin` | `"alloy"` |
+| `reporters` | `[{"builtin":"html","outFile":"specs/report"}, {"builtin":"json","outFile":"specs/report.json"}]` |
+| `ignorePrefixes` | `[]` (empty) |
+| `trace` | not set (traceability disabled) |
+| `setup` | not set (no pre-run command) |
+| `teardown` | not set (no post-run command) |
+| `checksDir` (adapter) | `"./checks"` (directory for shell check scripts) |
 
 An empty config `{}` is valid — all fields are defaulted.
 

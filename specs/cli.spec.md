@@ -48,6 +48,7 @@ $ cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 |---------|-------------|
 | `specdown init` | Scaffold a new project |
 | `specdown run` | Parse, execute, and generate reports in one pass |
+| `specdown trace` | Validate trace graph and output results |
 | `specdown install skills` | Install Claude Code skills for this project |
 | `specdown version` | Print the build version |
 | `specdown alloy dump` | Generate Alloy model `.als` files without running adapters |
@@ -59,6 +60,7 @@ Every command listed above must appear in the help output.
 help=$(specdown --help 2>&1)
 echo "$help" | grep -q "init"
 echo "$help" | grep -q "run"
+echo "$help" | grep -q "trace"
 echo "$help" | grep -q "install skills"
 echo "$help" | grep -q "version"
 echo "$help" | grep -q "alloy dump"
@@ -74,6 +76,33 @@ echo "$help" | grep -q "alloy dump"
 | `-jobs` | `1` | Number of spec files to run in parallel |
 | `-dry-run` | `false` | Parse and validate only |
 | `-show-bindings` | `false` | Print resolved variable bindings for each case |
+
+### Trace Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-config` | `specdown.json` | Config file path |
+| `-format` | `json` | Output format: `json`, `dot`, or `matrix` |
+| `-strict` | `false` | Suppress output and exit non-zero when validation errors exist |
+
+## Trace
+
+The `specdown trace` command validates the [depends::traceability](traceability.spec.md)
+graph configured in `specdown.json` and outputs the result.
+
+Without `-strict`, validation errors are printed to stderr but the graph
+is still written to stdout and the command exits successfully.
+With `-strict`, any validation error causes a non-zero exit.
+
+Three output formats are supported: `json` (structured graph data),
+`dot` (Graphviz), and `matrix` (tabular traceability matrix).
+
+The trace command requires a `trace` key in the config file.
+
+```run:shell
+# Verify trace command rejects configs without trace key
+! specdown trace -config .tmp-test/builtin-shell-cfg.json 2>/dev/null
+```
 
 ## Filter
 

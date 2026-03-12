@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
+	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
 // ExecRawResponse is the raw JSON map returned by Exec, suitable for encoding as a line.
@@ -93,107 +94,27 @@ func Assert(id int, req *adapterprotocol.AssertRequest, checksDir string) adapte
 	return resp
 }
 
-// DoctestStep represents a single command/expected-output pair in a doctest block.
-type DoctestStep struct {
-	Command  string
-	Expected string
-}
+// DoctestStep is an alias for core.DoctestCommand for backward compatibility.
+type DoctestStep = core.DoctestCommand
 
-// IsDoctestContent returns true if the source starts with a `$ ` line.
+// IsDoctestContent delegates to core.IsDoctestContent.
 func IsDoctestContent(source string) bool {
-	for _, line := range strings.Split(source, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		return strings.HasPrefix(line, "$ ")
-	}
-	return false
+	return core.IsDoctestContent(source)
 }
 
+// ParseDoctestSource delegates to core.ParseDoctestSource.
 func ParseDoctestSource(source string) []DoctestStep {
-	lines := strings.Split(source, "\n")
-	var steps []DoctestStep
-	var current *DoctestStep
-	var expectedLines []string
-
-	flush := func() {
-		if current != nil {
-			current.Expected = strings.Join(expectedLines, "\n")
-			steps = append(steps, *current)
-			current = nil
-			expectedLines = nil
-		}
-	}
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "$ ") {
-			flush()
-			current = &DoctestStep{Command: strings.TrimPrefix(line, "$ ")}
-			expectedLines = nil
-		} else if current != nil {
-			expectedLines = append(expectedLines, line)
-		}
-	}
-	flush()
-	return steps
+	return core.ParseDoctestSource(source)
 }
 
-// MatchWithWildcard checks if actual matches expected, where a line
-// containing exactly "..." in expected matches zero or more lines in actual.
+// MatchWithWildcard delegates to core.MatchWithWildcard.
 func MatchWithWildcard(actual, expected string) bool {
-	expectedLines := strings.Split(expected, "\n")
-	if !hasWildcardLine(expectedLines) {
-		return actual == expected
-	}
-	actualLines := strings.Split(actual, "\n")
-	return matchLines(actualLines, expectedLines, 0, 0)
-}
-
-func hasWildcardLine(lines []string) bool {
-	for _, line := range lines {
-		if line == "..." {
-			return true
-		}
-	}
-	return false
-}
-
-func skipWildcards(expected []string, ei int) int {
-	for ei < len(expected) && expected[ei] == "..." {
-		ei++
-	}
-	return ei
-}
-
-func matchLines(actual, expected []string, ai, ei int) bool {
-	for ei < len(expected) {
-		if expected[ei] != "..." {
-			if ai >= len(actual) || actual[ai] != expected[ei] {
-				return false
-			}
-			ai++
-			ei++
-			continue
-		}
-		ei = skipWildcards(expected, ei)
-		if ei >= len(expected) {
-			return true
-		}
-		for ai <= len(actual) {
-			if matchLines(actual, expected, ai, ei) {
-				return true
-			}
-			ai++
-		}
-		return false
-	}
-	return ai >= len(actual)
+	return core.MatchWithWildcard(actual, expected)
 }
 
 // StepStatus returns "passed" or "failed" for a doctest step.
 func StepStatus(actual, expected string) string {
-	if MatchWithWildcard(actual, expected) {
+	if core.MatchWithWildcard(actual, expected) {
 		return "passed"
 	}
 	return "failed"
@@ -216,12 +137,7 @@ func ExecForDoctest(command string) (stdout string, errMsg string, ok bool) {
 	return strings.TrimRight(outBuf.String(), "\n"), "", true
 }
 
-// ExecResponseToString extracts a string from an ExecResponse output field.
+// ExecResponseToString delegates to core.ExecResponseToString.
 func ExecResponseToString(raw json.RawMessage) string {
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		// Not a string — return raw JSON
-		return string(raw)
-	}
-	return s
+	return core.ExecResponseToString(raw)
 }

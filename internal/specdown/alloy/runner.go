@@ -410,7 +410,7 @@ func summarizeCounterexample(command receiptCommand) string {
 		Values map[string]map[string][][]string `json:"values"`
 	}
 	if err := json.Unmarshal(solution.Instances[0], &instance); err != nil {
-		return "counterexample found"
+		return "counterexample found (unable to parse instance: " + err.Error() + ")"
 	}
 
 	var lines []string

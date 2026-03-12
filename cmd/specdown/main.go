@@ -28,6 +28,8 @@ var version = "dev"
 var skillSpecdown string
 
 func main() {
+	prependSelfToPath()
+
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
@@ -688,6 +690,28 @@ func printCaseResult(c core.CaseResult) {
 		label = fmt.Sprintf(" row %d", c.RowNumber)
 	}
 	fmt.Printf("  %s  %s  [%s]%s  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
+}
+
+// prependSelfToPath ensures that child processes (adapters, setup/teardown
+// commands, and shell blocks that invoke specdown recursively) resolve the
+// same binary that is currently running.  Without this, a stale "specdown"
+// earlier on PATH can silently take precedence.
+func prependSelfToPath() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	dir := filepath.Dir(exe)
+	path := os.Getenv("PATH")
+	if path == "" {
+		_ = os.Setenv("PATH", dir)
+		return
+	}
+	// Skip if already at the front.
+	if strings.HasPrefix(path, dir+string(os.PathListSeparator)) || path == dir {
+		return
+	}
+	_ = os.Setenv("PATH", dir+string(os.PathListSeparator)+path)
 }
 
 func printDryRun(report core.Report) {
