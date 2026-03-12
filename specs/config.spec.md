@@ -91,6 +91,75 @@ the user adapter takes precedence over the built-in.
 | `models` | Alloy model verification. Can be omitted if not used |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
 | `trace` | Traceability configuration. See [Traceability](traceability.spec.md) |
+| `setup` | Shell command to run once before any specs execute |
+| `teardown` | Shell command to run once after all specs finish (runs even on failure) |
+
+## Global Setup and Teardown
+
+The `setup` and `teardown` fields run shell commands before and after the
+entire spec run. This is useful for managing test infrastructure — starting
+databases, launching containers, seeding data, or cleaning up afterwards.
+
+```json
+{
+  "setup": "docker compose up -d && sleep 2",
+  "teardown": "docker compose down",
+  "entry": "specs/index.spec.md",
+  "adapters": []
+}
+```
+
+The setup command runs before any spec execution begins. If it fails,
+specdown exits immediately without running specs.
+
+```run:shell
+# Verify setup runs before specs
+mkdir -p .tmp-test/setup-test
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/setup-test/index.spec.md
+printf '# S\n\nProse.\n' > .tmp-test/setup-test/s.spec.md
+cat <<'CFG' > .tmp-test/setup-test/specdown.json
+{"entry": "index.spec.md", "setup": "echo SETUP-RAN > setup-marker.txt"}
+CFG
+specdown run -config .tmp-test/setup-test/specdown.json 2>&1 || true
+```
+
+```run:shell
+$ cat .tmp-test/setup-test/setup-marker.txt
+SETUP-RAN
+```
+
+The teardown command runs after specs complete, even if specs fail.
+
+```run:shell
+# Verify teardown runs after specs (even on failure)
+mkdir -p .tmp-test/teardown-test
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/teardown-test/index.spec.md
+BT=$(printf '\140\140\140')
+printf '%s\n' '# S' '' "$BT"'run:shell' '$ echo hello' 'wrong-output' "$BT" > .tmp-test/teardown-test/s.spec.md
+cat <<'CFG' > .tmp-test/teardown-test/specdown.json
+{"entry": "index.spec.md", "setup": "echo SETUP-OK > marker.txt", "teardown": "echo TEARDOWN-RAN >> marker.txt"}
+CFG
+specdown run -config .tmp-test/teardown-test/specdown.json 2>&1 || true
+```
+
+```run:shell
+$ cat .tmp-test/teardown-test/marker.txt
+SETUP-OK
+TEARDOWN-RAN
+```
+
+A failing setup command prevents spec execution and exits with an error.
+
+```run:shell
+# Verify failing setup aborts the run
+mkdir -p .tmp-test/setup-fail-test
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/setup-fail-test/index.spec.md
+printf '# S\n\nProse.\n' > .tmp-test/setup-fail-test/s.spec.md
+cat <<'CFG' > .tmp-test/setup-fail-test/specdown.json
+{"entry": "index.spec.md", "setup": "exit 1"}
+CFG
+! specdown run -config .tmp-test/setup-fail-test/specdown.json 2>/dev/null
+```
 
 ### Adapter Fields
 

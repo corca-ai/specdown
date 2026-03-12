@@ -17,6 +17,8 @@ type Config struct {
 	Reporters      []Reporter      `json:"reporters"`
 	IgnorePrefixes []string        `json:"ignorePrefixes,omitempty"`
 	Trace          *TraceConfig    `json:"trace,omitempty"`
+	Setup          string          `json:"setup,omitempty"`
+	Teardown       string          `json:"teardown,omitempty"`
 }
 
 type TraceConfig struct {

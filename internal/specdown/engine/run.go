@@ -3,7 +3,10 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +34,28 @@ type adapterRegistry struct {
 	checks map[string]adapterEntry
 }
 
+func runShellCommand(baseDir, command string) error {
+	shell, flag := "sh", "-c"
+	if runtime.GOOS == "windows" {
+		shell, flag = "cmd", "/C"
+	}
+	cmd := exec.Command(shell, flag, command)
+	cmd.Dir = baseDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
+	if cfg.Setup != "" {
+		if err := runShellCommand(baseDir, cfg.Setup); err != nil {
+			return core.Report{}, fmt.Errorf("setup command failed: %w", err)
+		}
+	}
+	if cfg.Teardown != "" {
+		defer func() { _ = runShellCommand(baseDir, cfg.Teardown) }()
+	}
+
 	title, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return core.Report{}, err
