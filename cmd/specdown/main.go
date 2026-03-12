@@ -111,6 +111,7 @@ func run(args []string) error {
 	jobs := fs.Int("jobs", 1, "Number of spec files to run in parallel")
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
 	showBindings := fs.Bool("show-bindings", false, "Print resolved variable bindings for each case")
+	quiet := fs.Bool("quiet", false, "Suppress progress output; show only final summary")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -137,17 +138,23 @@ func run(args []string) error {
 		return err
 	}
 
-	printWarnings(report)
-	printTraceErrors(report)
+	if !*quiet {
+		printWarnings(report)
+		printTraceErrors(report)
+	}
 
 	if *dryRun {
-		printDryRun(report)
+		if !*quiet {
+			printDryRun(report)
+		}
 		return nil
 	}
 
-	printResults(report)
+	if !*quiet {
+		printResults(report)
+	}
 
-	if *showBindings {
+	if *showBindings && !*quiet {
 		printBindings(report)
 	}
 
@@ -157,25 +164,31 @@ func run(args []string) error {
 	}
 
 	if report.Summary.SpecsFailed > 0 || report.Summary.TraceErrorCount > 0 {
-		printFailures(report)
+		if !*quiet {
+			printFailures(report)
+		}
 		xfailSuffix := ""
 		if report.Summary.CasesExpectedFail > 0 {
 			xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
 		}
-		fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, elapsed.Milliseconds())
-		if reportPath != "" {
-			fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
+		if !*quiet {
+			fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, elapsed.Milliseconds())
+			if reportPath != "" {
+				fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
+			}
 		}
 		return fmt.Errorf("spec run failed")
 	}
 
-	xfailSuffix := ""
-	if report.Summary.CasesExpectedFail > 0 {
-		xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
-	}
-	fmt.Printf("PASS %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, elapsed.Milliseconds())
-	if reportPath != "" {
-		fmt.Printf("report: %s\n", reportPath)
+	if !*quiet {
+		xfailSuffix := ""
+		if report.Summary.CasesExpectedFail > 0 {
+			xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
+		}
+		fmt.Printf("PASS %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, elapsed.Milliseconds())
+		if reportPath != "" {
+			fmt.Printf("report: %s\n", reportPath)
+		}
 	}
 	return nil
 }
