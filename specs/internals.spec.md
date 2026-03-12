@@ -131,12 +131,18 @@ Reporter selection is configured in [depends::specdown.json](config.spec.md) via
 The JSON report is machine-readable and can be verified:
 
 ```run:shell
-$ specdown run -quiet 2>&1 | tail -1
-...
+# Create a minimal project and run it with a JSON reporter
+mkdir -p .tmp-test/reporter-json/specs
+printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/reporter-json/specs/index.spec.md
+printf '# S\n\nProse.\n' > .tmp-test/reporter-json/specs/s.spec.md
+cat <<'CFG' > .tmp-test/reporter-json/specdown.json
+{"entry":"specs/index.spec.md","adapters":[],"reporters":[{"builtin":"json","outFile":"out.json"}]}
+CFG
+specdown run -config .tmp-test/reporter-json/specdown.json -quiet 2>&1 | tail -1
 ```
 
 ```run:shell
-$ cat specs/report.json | head -1
+$ cat .tmp-test/reporter-json/out.json | head -1
 {
 ```
 
