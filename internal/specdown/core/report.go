@@ -33,27 +33,27 @@ type DoctestStep struct {
 }
 
 type CaseResult struct {
-	ID             SpecID    `json:"id"`
-	Kind           CaseKind  `json:"kind"`
-	Block          string    `json:"block,omitempty"`
-	Check          string    `json:"check,omitempty"`
-	Label          string    `json:"label"`
-	Template       string    `json:"template,omitempty"`
-	RenderedSource string    `json:"renderedSource,omitempty"`
-	Columns        []string  `json:"columns,omitempty"`
-	TemplateCells  []string  `json:"templateCells,omitempty"`
-	RenderedCells  []string  `json:"renderedCells,omitempty"`
-	RowNumber      int       `json:"rowNumber,omitempty"`
-	Status         Status    `json:"status"`
-	ExpectFail     bool      `json:"expectFail,omitempty"`
-	Message        string    `json:"message,omitempty"`
-	Expected       string    `json:"expected,omitempty"`
-	Actual         string    `json:"actual,omitempty"`
-	Bindings       []Binding      `json:"bindings,omitempty"`
+	ID              SpecID        `json:"id"`
+	Kind            CaseKind      `json:"kind"`
+	Block           string        `json:"block,omitempty"`
+	Check           string        `json:"check,omitempty"`
+	Label           string        `json:"label"`
+	Template        string        `json:"template,omitempty"`
+	RenderedSource  string        `json:"renderedSource,omitempty"`
+	Columns         []string      `json:"columns,omitempty"`
+	TemplateCells   []string      `json:"templateCells,omitempty"`
+	RenderedCells   []string      `json:"renderedCells,omitempty"`
+	RowNumber       int           `json:"rowNumber,omitempty"`
+	Status          Status        `json:"status"`
+	ExpectFail      bool          `json:"expectFail,omitempty"`
+	Message         string        `json:"message,omitempty"`
+	Expected        string        `json:"expected,omitempty"`
+	Actual          string        `json:"actual,omitempty"`
+	Bindings        []Binding     `json:"bindings,omitempty"`
 	VisibleBindings []Binding     `json:"visibleBindings,omitempty"`
-	DurationMs     int            `json:"durationMs,omitempty"`
-	Steps          []DoctestStep  `json:"steps,omitempty"`
-	Events         []Event        `json:"events,omitempty"`
+	DurationMs      int           `json:"durationMs,omitempty"`
+	Steps           []DoctestStep `json:"steps,omitempty"`
+	Events          []Event       `json:"events,omitempty"`
 	// Alloy-specific fields (only set when Kind == CaseKindAlloy)
 	Model              string `json:"model,omitempty"`
 	Assertion          string `json:"assertion,omitempty"`
@@ -66,20 +66,20 @@ type CaseResult struct {
 }
 
 type DocumentResult struct {
-	Document    Document            `json:"document"`
-	Status      Status              `json:"status"`
-	Cases       []CaseResult        `json:"cases,omitempty"`
+	Document Document     `json:"document"`
+	Status   Status       `json:"status"`
+	Cases    []CaseResult `json:"cases,omitempty"`
 }
 
 type Summary struct {
-	SpecsTotal           int `json:"specsTotal"`
-	SpecsPassed          int `json:"specsPassed"`
-	SpecsFailed          int `json:"specsFailed"`
-	CasesTotal           int `json:"casesTotal"`
-	CasesPassed          int `json:"casesPassed"`
-	CasesFailed          int `json:"casesFailed"`
-	CasesExpectedFail    int `json:"casesExpectedFail"`
-	TraceErrorCount      int `json:"traceErrorCount,omitempty"`
+	SpecsTotal        int `json:"specsTotal"`
+	SpecsPassed       int `json:"specsPassed"`
+	SpecsFailed       int `json:"specsFailed"`
+	CasesTotal        int `json:"casesTotal"`
+	CasesPassed       int `json:"casesPassed"`
+	CasesFailed       int `json:"casesFailed"`
+	CasesExpectedFail int `json:"casesExpectedFail"`
+	TraceErrorCount   int `json:"traceErrorCount,omitempty"`
 }
 
 // TraceGraphData holds the trace graph for report rendering.
@@ -98,7 +98,7 @@ type TraceDocument struct {
 // TraceEdge is a directed edge in the trace graph.
 type TraceEdge struct {
 	Source   string `json:"source"`
-	Target  string `json:"target"`
+	Target   string `json:"target"`
 	EdgeName string `json:"edgeName"`
 }
 

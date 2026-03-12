@@ -105,15 +105,15 @@ func TestUnknownBlockPrefix(t *testing.T) {
 		{"verify:shell", "verify"},
 		{"test:webapp", "test"},
 		{"example:python", "example"},
-		{"run:shell", ""},       // recognized
+		{"run:shell", ""},            // recognized
 		{"doctest:shell", "doctest"}, // no longer recognized
-		{"alloy:model(x)", ""},  // handled separately
-		{"json", ""},            // no colon
-		{"go", ""},              // no colon
-		{"", ""},                // empty
-		{"run:", ""},            // no target
-		{"text/plain", ""},     // non-alpha before colon
-		{"http://example", ""}, // non-alpha before colon
+		{"alloy:model(x)", ""},       // handled separately
+		{"json", ""},                 // no colon
+		{"go", ""},                   // no colon
+		{"", ""},                     // empty
+		{"run:", ""},                 // no target
+		{"text/plain", ""},           // non-alpha before colon
+		{"http://example", ""},       // non-alpha before colon
 	}
 	for _, tc := range cases {
 		got := unknownBlockPrefix(tc.input)

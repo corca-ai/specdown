@@ -22,9 +22,9 @@ type Config struct {
 }
 
 type TraceConfig struct {
-	Types  []string               `json:"types"`
-	Ignore []string               `json:"ignore,omitempty"`
-	Edges  map[string]TraceEdge   `json:"edges"`
+	Types  []string             `json:"types"`
+	Ignore []string             `json:"ignore,omitempty"`
+	Edges  map[string]TraceEdge `json:"edges"`
 }
 
 type TraceEdge struct {
@@ -40,12 +40,12 @@ type ModelConfig struct {
 }
 
 type AdapterConfig struct {
-	Name        string   `json:"name"`
-	Command     []string `json:"command"`
-	Blocks      []string `json:"blocks"`
-	Checks    []string `json:"checks,omitempty"`
-	ChecksDir string   `json:"checksDir,omitempty"`
-	BuiltinShell bool    `json:"-"` // set internally for the auto-registered shell adapter
+	Name         string   `json:"name"`
+	Command      []string `json:"command"`
+	Blocks       []string `json:"blocks"`
+	Checks       []string `json:"checks,omitempty"`
+	ChecksDir    string   `json:"checksDir,omitempty"`
+	BuiltinShell bool     `json:"-"` // set internally for the auto-registered shell adapter
 }
 
 type Reporter struct {
@@ -205,8 +205,8 @@ func validateTraceEdges(edges map[string]TraceEdge, typeSet map[string]struct{})
 
 // Multiplicity represents a UML-style cardinality constraint.
 type Multiplicity struct {
-	Min int  // 0 or 1
-	Max int  // -1 means unlimited (*)
+	Min int // 0 or 1
+	Max int // -1 means unlimited (*)
 }
 
 // ParseCount parses a count string like "1..* → 1..*" into source and target multiplicities.

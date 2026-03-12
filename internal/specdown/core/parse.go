@@ -500,8 +500,8 @@ func tryFlushCheck(check string, checkParams map[string]string, checkRaw, relati
 	return CheckCallNode{
 		Check:       check,
 		CheckParams: checkParams,
-		Raw:           checkRaw,
-		HeadingPath:   append([]string(nil), headingPath...),
+		Raw:         checkRaw,
+		HeadingPath: append([]string(nil), headingPath...),
 		ID: &SpecID{
 			File:        relativePath,
 			HeadingPath: append([]string(nil), headingPath...),
@@ -591,9 +591,9 @@ func parseTableNode(relativePath string, lines []string, start int, check string
 	return TableNode{
 		Check:       check,
 		CheckParams: checkParams,
-		Columns:       columns,
-		Rows:          rows,
-		Raw:           strings.Join(lines[start:end], ""),
+		Columns:     columns,
+		Rows:        rows,
+		Raw:         strings.Join(lines[start:end], ""),
 	}, end, nil
 }
 
@@ -730,7 +730,7 @@ var inlineCheckPattern = regexp.MustCompile("`check:([A-Za-z0-9_-]+)\\(([^)]*)\\
 // is enclosed by a Markdown code span. The match itself includes its
 // surrounding backticks, so we look for additional backticks just
 // outside the match boundaries (possibly separated by a space, as in
-// the double-backtick form `` `...` ``).
+// the double-backtick form “ `...` “).
 func insideCodeSpan(raw string, start, end int) bool {
 	// Immediately adjacent backtick (triple-backtick or ```)
 	if start > 0 && raw[start-1] == '`' {
@@ -778,8 +778,8 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 		}
 		*ordinal++
 		elements = append(elements, InlineElement{
-			Kind:          InlineCheck,
-			Raw:           raw[loc[0]:loc[1]],
+			Kind:        InlineCheck,
+			Raw:         raw[loc[0]:loc[1]],
 			Check:       raw[loc[2]:loc[3]],
 			CheckParams: parseCheckParams(raw[loc[4]:loc[5]]),
 			ID: &SpecID{

@@ -799,15 +799,14 @@ func helperAdapterConfig() config.Config {
 		Entry: "specs/index.spec.md",
 		Adapters: []config.AdapterConfig{
 			{
-				Name:     "helper-board",
-				Command:  []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board"},
-				Blocks:   []string{"run:board"},
-				Checks: []string{"board-exists", "card-exists", "card-column"},
+				Name:    "helper-board",
+				Command: []string{executable, "-test.run=TestHelperAdapterProcess", "--", "board"},
+				Blocks:  []string{"run:board"},
+				Checks:  []string{"board-exists", "card-exists", "card-column"},
 			},
 		},
 	}
 }
-
 
 func TestHelperAdapterProcess(t *testing.T) {
 	if len(os.Args) < 2 {

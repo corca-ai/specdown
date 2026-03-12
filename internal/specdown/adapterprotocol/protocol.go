@@ -7,7 +7,7 @@ import (
 
 // ExecRequest asks the adapter to execute source code.
 type ExecRequest struct {
-	Type   string `json:"type"`   // "exec"
+	Type   string `json:"type"` // "exec"
 	ID     int    `json:"id"`
 	Source string `json:"source"`
 }

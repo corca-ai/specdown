@@ -656,7 +656,6 @@ func printWarnings(report core.Report) {
 	}
 }
 
-
 func printResults(report core.Report) {
 	for i := range report.Results {
 		fmt.Printf("spec: %s\n", report.Results[i].Document.RelativeTo)

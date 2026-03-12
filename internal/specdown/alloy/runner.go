@@ -61,7 +61,7 @@ type receipt struct {
 type receiptCommand struct {
 	Type     string            `json:"type"`
 	Source   string            `json:"source"`
-	Scopes   json.RawMessage  `json:"scopes"`
+	Scopes   json.RawMessage   `json:"scopes"`
 	Solution []receiptSolution `json:"solution"`
 }
 
@@ -379,7 +379,6 @@ func failedChecks(checks []core.CaseSpec, bundlePath, sourceMapPath, message str
 	return results
 }
 
-
 func writeCounterexample(baseDir string, check core.CaseSpec, command receiptCommand) (string, error) {
 	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "counterexamples", check.ID.Anchor()+".json"))
 	absolutePath := filepath.Join(baseDir, filepath.FromSlash(relativePath))
@@ -552,7 +551,6 @@ func checkCommandSource(check core.CaseSpec) string {
 	return "check " + check.Alloy.Assertion + " for " + check.Alloy.Scope
 }
 
-
 var alloyLinePattern = regexp.MustCompile(`\bline\s+(\d+)\b`)
 
 func locateAlloyFailure(lineRefs []string, message string) (failureLocation, bool) {
@@ -584,7 +582,6 @@ func annotateAlloyFailure(message string, location failureLocation, hasLocation 
 	}
 	return message + " (bundle line " + strconv.Itoa(location.BundleLine) + ", source: " + location.SourceRef + ")"
 }
-
 
 func strconvQuote(value string) string {
 	body, _ := json.Marshal(value)

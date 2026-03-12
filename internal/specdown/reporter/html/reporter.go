@@ -141,7 +141,7 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 		AssetRoot:    computeAssetRoot(path.Dir(htmlPath)),
 		GlobalTOC:    globalTOC,
 		Headings:     headings,
-		Body:         template.HTML(body),         //nolint:gosec // body is internally generated
+		Body:         template.HTML(body),     //nolint:gosec // body is internally generated
 		TraceContext: template.HTML(traceCtx), //nolint:gosec // internally generated
 	}
 

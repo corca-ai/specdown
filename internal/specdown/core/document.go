@@ -61,19 +61,19 @@ func (n HeadingNode) Markdown() string {
 type InlineKind string
 
 const (
-	InlineExpect  InlineKind = "expect"
-	InlineCheck InlineKind = "check"
+	InlineExpect InlineKind = "expect"
+	InlineCheck  InlineKind = "check"
 )
 
 type InlineElement struct {
-	Kind          InlineKind        `json:"kind"`
-	Raw           string            `json:"raw"`
-	ExpectExpr    string            `json:"expectExpr,omitempty"`
-	ExpectValue   string            `json:"expectValue,omitempty"`
-	ExpectFail    bool              `json:"expectFail,omitempty"`
+	Kind        InlineKind        `json:"kind"`
+	Raw         string            `json:"raw"`
+	ExpectExpr  string            `json:"expectExpr,omitempty"`
+	ExpectValue string            `json:"expectValue,omitempty"`
+	ExpectFail  bool              `json:"expectFail,omitempty"`
 	Check       string            `json:"check,omitempty"`
 	CheckParams map[string]string `json:"checkParams,omitempty"`
-	ID            *SpecID           `json:"id,omitempty"`
+	ID          *SpecID           `json:"id,omitempty"`
 }
 
 type ProseNode struct {
@@ -139,9 +139,9 @@ type TableRowNode struct {
 type TableNode struct {
 	Check       string            `json:"check"`
 	CheckParams map[string]string `json:"checkParams,omitempty"`
-	Columns       []string          `json:"columns"`
-	Rows          []TableRowNode    `json:"rows"`
-	Raw           string            `json:"raw"`
+	Columns     []string          `json:"columns"`
+	Rows        []TableRowNode    `json:"rows"`
+	Raw         string            `json:"raw"`
 }
 
 func (TableNode) isNode() {}

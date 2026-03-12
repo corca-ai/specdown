@@ -21,9 +21,9 @@ func rewriteTraceLinks(html string) string {
 		if len(parts) < 5 {
 			return match
 		}
-		anchor := parts[1]    // <a href="..."
-		edgeName := parts[3]  // e.g. "depends"
-		display := parts[4]   // e.g. "Spec Syntax"
+		anchor := parts[1]   // <a href="..."
+		edgeName := parts[3] // e.g. "depends"
+		display := parts[4]  // e.g. "Spec Syntax"
 		return anchor + ` class="trace-link">` +
 			template.HTMLEscapeString(display) +
 			`<span class="annotation">` +

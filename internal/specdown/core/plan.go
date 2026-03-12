@@ -97,12 +97,12 @@ func resolveLink(link, currentDir string) string {
 
 // crawlState holds mutable state for the BFS document crawl.
 type crawlState struct {
-	baseDir         string
-	entryDir        string
-	ignorePrefixes  []string
-	seen            map[string]struct{}
-	docs            []Document
-	warnings        []string
+	baseDir        string
+	entryDir       string
+	ignorePrefixes []string
+	seen           map[string]struct{}
+	docs           []Document
+	warnings       []string
 }
 
 // processLink resolves a single link from a document and, if valid,
@@ -572,4 +572,3 @@ func (c CaseSpec) DefaultLabel() string {
 	}
 	return c.DisplayKind() + " @ " + suffix
 }
-

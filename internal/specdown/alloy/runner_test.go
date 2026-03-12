@@ -73,7 +73,6 @@ func TestAnnotateAlloyFailureMapsBundleLineToSource(t *testing.T) {
 	}
 }
 
-
 func TestDumpModelsWritesBundleWithoutRunning(t *testing.T) {
 	root := t.TempDir()
 	runner := Runner{BaseDir: root}

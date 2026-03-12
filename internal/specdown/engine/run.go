@@ -30,7 +30,7 @@ type RunOptions struct {
 }
 
 type adapterRegistry struct {
-	blocks   map[string]adapterEntry
+	blocks map[string]adapterEntry
 	checks map[string]adapterEntry
 }
 
@@ -267,7 +267,7 @@ func dryRunLabel(c core.CaseSpec) string {
 
 func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 	registry := adapterRegistry{
-		blocks:   make(map[string]adapterEntry),
+		blocks: make(map[string]adapterEntry),
 		checks: make(map[string]adapterEntry),
 	}
 	for _, adapter := range adapters {
@@ -888,7 +888,6 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 	return result
 }
 
-
 var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {
@@ -1039,7 +1038,6 @@ func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 	})
 	return result
 }
-
 
 func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 	docs := make([]core.TraceDocument, len(g.Documents))

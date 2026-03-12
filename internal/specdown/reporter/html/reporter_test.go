@@ -50,7 +50,7 @@ func buildMainTestReport() core.Report {
 							},
 						},
 						core.TableNode{
-							Check: "board-exists",
+							Check:   "board-exists",
 							Columns: []string{"board", "exists"},
 							Rows: []core.TableRowNode{
 								{
@@ -137,8 +137,8 @@ func buildMainTestReport() core.Report {
 						RowNumber:     2,
 						Status:        core.StatusFailed,
 						Message:       "board existence check failed",
-					Expected:      "board-1-archive exists",
-					Actual:        "not found",
+						Expected:      "board-1-archive exists",
+						Actual:        "not found",
 					},
 				},
 			},
@@ -388,7 +388,7 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Editor", Raw: "# Editor\n", HeadingPath: []string{"Editor"}},
 						core.TableNode{
-							Check: "editor-op",
+							Check:   "editor-op",
 							Columns: []string{"initial", "expected"},
 							Rows: []core.TableRowNode{
 								{
