@@ -477,12 +477,17 @@ func installSkillsCmd(args []string) error {
 	}
 	files := []struct{ name, content string }{
 		{"SKILL.md", skillSpecdown},
-		{"guide-writing.md", specdown.SkillWritingGuide},
-		{"adapter-protocol.md", specdown.SkillAdapterProtocol},
+		{"overview.md", specdown.SkillOverview},
 		{"syntax.md", specdown.SkillSyntax},
 		{"config.md", specdown.SkillConfig},
-		{"traceability.md", specdown.SkillTraceability},
+		{"cli.md", specdown.SkillCLI},
+		{"adapter-protocol.md", specdown.SkillAdapterProtocol},
 		{"alloy.md", specdown.SkillAlloy},
+		{"report.md", specdown.SkillReport},
+		{"internals.md", specdown.SkillInternals},
+		{"best-practices.md", specdown.SkillBestPractices},
+		{"validation.md", specdown.SkillValidation},
+		{"traceability.md", specdown.SkillTraceability},
 	}
 	for _, f := range files {
 		p := filepath.Join(dir, f.name)

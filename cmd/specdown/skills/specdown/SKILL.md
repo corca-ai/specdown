@@ -1,56 +1,76 @@
 ---
 name: specdown
-description: Run specdown specs, interpret failures, and fix them. Use when the user asks to run, check, or fix specs.
+description: Write, run, and fix specdown executable specifications. Use when the user asks to create, edit, run, or fix specs.
 allowed-tools: Bash, Read, Edit, Glob, Grep
 ---
 
 # specdown
 
-Run executable specifications and fix failures.
+Write, run, and fix executable specifications.
 
 ## Project Context
 
-- Config: !`cat specs/specdown.json 2>/dev/null || echo "no specs/specdown.json found"`
-- Specs: !`specdown run -config specs/specdown.json -dry-run 2>&1 | head -50`
+- Config: !`cat specdown.json 2>/dev/null || cat specs/specdown.json 2>/dev/null || echo "no specdown.json found"`
+- Specs: !`specdown run -dry-run 2>&1 | head -50`
 
-## Instructions
+## Running and Fixing Specs
 
-1. Run specs with `specdown run -config specs/specdown.json`. If $ARGUMENTS is provided, pass it as `-filter "$ARGUMENTS"`.
+1. Run specs with `specdown run`. If $ARGUMENTS is provided, pass it as `-filter "$ARGUMENTS"`.
 2. If all specs pass, report the result and stop.
 3. If specs fail, read the failing spec file to understand the intent.
 4. Fix the implementation to make the spec pass. Do NOT modify the spec unless the spec itself is wrong.
-5. Re-run `specdown run -config specs/specdown.json` to confirm the fix.
+5. Re-run `specdown run` to confirm the fix.
 
-## Using Alloy Models
+Useful filters: `-filter type:alloy` (Alloy only), `-filter type:code` (code blocks only), `-filter type:table` (check tables only), `-filter block:shell` (shell blocks only), `-filter check:<name>` (specific check).
 
-Alloy is not optional decoration — it is a core part of specdown's value.
-When writing or editing specs, actively look for opportunities to use Alloy:
+## Writing New Specs
 
-- **Prove properties exhaustively** — executable blocks test selected examples; Alloy proves properties for all cases within scope. Use both.
-- **Discover logical relationships** — Alloy can reveal equivalences (enabling test reuse after refactors) and implications (eliminating redundant tests).
-- **Surface prose errors** — formalize prose claims as Alloy assertions. If the model finds a counterexample, the prose is wrong.
-- **Optimize tests** — prove case partitions are complete, transitions are impossible, or compositions are safe, then test only what Alloy cannot cover.
-- **Harvest counterexamples** — when Alloy finds a violation, add it as a check-table row to prevent regression.
+Before writing, read the reference specs below — they are the authoritative source of truth for specdown's syntax and behavior. Start with **Overview** and **Spec Syntax** for the basics.
 
-Read `${CLAUDE_SKILL_DIR}/guide-writing.md` § "What Alloy Provides" for the full catalogue of benefits, and § "Patterns" for concrete recipes (Invariant Leverage, Exhaustive Classification, Failure-Driven Modeling, etc.).
+1. Read the project's `specdown.json` to understand the entry file, adapters, and directory layout.
+2. Create the `.spec.md` file in the appropriate directory.
+3. Add it to the entry/index file: `- [Title](path/to/new.spec.md)`.
+4. Structure: H1 title, prose context explaining the feature, then executable blocks and check tables that verify the implementation.
+5. Run `specdown run` to verify.
 
-Every model should include `run sanityCheck {} for 5` to guard against vacuous satisfaction.
+Do NOT modify the spec unless the spec itself is wrong.
 
-### Fast Alloy Iteration
+## Reference Specs
 
-Use `-filter type:alloy` to run only Alloy checks without executing code blocks or check tables. This provides a fast feedback loop when writing or debugging models:
+Each document below is itself a specdown spec — readable prose interleaved with executable examples. Read the ones relevant to your task.
 
-```
-specdown run -config specs/specdown.json -filter type:alloy
-```
+### Getting started
 
-Other useful filters: `type:code` (code blocks only), `type:table` (check tables only), `block:shell` (shell blocks only), `check:<name>` (specific check).
+| Spec | What it covers |
+|------|----------------|
+| [Overview](${CLAUDE_SKILL_DIR}/overview.md) | What specdown is, installation, project setup (`specdown init`), and a first-spec walkthrough showing how prose, executable blocks, and check tables work together |
+| [Best Practices](${CLAUDE_SKILL_DIR}/best-practices.md) | How to structure a spec document (lead with prose, then verify), Alloy + implementation patterns (Invariant Leverage, Exhaustive Classification, Counterexample Harvesting, etc.), common pitfalls (vacuous satisfaction, scope too small), and anti-patterns to avoid |
 
-## Writing and Editing Specs
+### Writing specs
 
-- Syntax: `${CLAUDE_SKILL_DIR}/syntax.md` — executable blocks, variables, check tables, hooks, frontmatter
-- Configuration: `${CLAUDE_SKILL_DIR}/config.md` — specdown.json format, adapters, reporters, defaults
-- Adapter protocol: `${CLAUDE_SKILL_DIR}/adapter-protocol.md` — NDJSON protocol, request/response format, examples
-- Alloy models: `${CLAUDE_SKILL_DIR}/alloy.md` — embedding formal models, check statements, counterexamples
-- Trace graph: `${CLAUDE_SKILL_DIR}/trace.md` — document traceability, typed edges, cardinality constraints
-- Best practices: `${CLAUDE_SKILL_DIR}/guide-writing.md` — patterns, pitfalls, anti-patterns, **Alloy benefits and recipes**
+| Spec | What it covers |
+|------|----------------|
+| [Spec Syntax](${CLAUDE_SKILL_DIR}/syntax.md) | All executable elements: `run:<target>` blocks, doctest style (`$ ` lines with expected output), variable capture (`-> $var`) and scoping, `!fail` expected failures, wildcard matching (`...`), check tables (`> check:name`), check parameters, inline assertions (`expect:`, `check:`), setup/teardown hooks, summary lines, and YAML frontmatter (`timeout`) |
+| [Configuration](${CLAUDE_SKILL_DIR}/config.md) | `specdown.json` format: entry file, adapter registration (`blocks`/`checks`), reporter configuration (HTML, JSON), Alloy model runner, global setup/teardown, defaults, `ignorePrefixes`, and validation rules that reject invalid config before scanning |
+| [Validation Rules](${CLAUDE_SKILL_DIR}/validation.md) | Parse-time errors specdown catches before any adapter runs: unclosed code blocks, check without table, hook without code block, table without columns/rows, block without target |
+
+### Adapters and execution
+
+| Spec | What it covers |
+|------|----------------|
+| [Adapter Protocol](${CLAUDE_SKILL_DIR}/adapter-protocol.md) | NDJSON stdin/stdout process protocol: `exec` requests (run code, capture output) and `assert` requests (check table rows), response format (`output`/`error`, `passed`/`failed`), structured failure reporting (`expected`/`actual`/`label`), built-in shell adapter behavior, and complete adapter examples in Python and Shell |
+| [CLI](${CLAUDE_SKILL_DIR}/cli.md) | Commands (`run`, `trace`, `init`, `alloy dump`, `install skills`), flags (`-config`, `-filter`, `-quiet`, `-dry-run`), filter expressions for targeting specific test types |
+
+### Formal modeling
+
+| Spec | What it covers |
+|------|----------------|
+| [Alloy Models](${CLAUDE_SKILL_DIR}/alloy.md) | Embedding `alloy:model(name)` blocks, `check`/`run` statements, `alloy:ref` directives for cross-section references, scoped checks with `but` clauses, state machine modeling with temporal operators, counterexample artifact generation, and combination rules for multi-fragment models |
+
+### Advanced features
+
+| Spec | What it covers |
+|------|----------------|
+| [Traceability](${CLAUDE_SKILL_DIR}/traceability.md) | Document-level traceability graph: typed documents (frontmatter `type`), named edges (`[edge::Title](target.md)`), `trace` config with `types`/`edges`/`ignore`, cardinality constraints (UML notation), cycle detection, transitive closure, strict mode, and integration with `specdown run` |
+| [HTML Report](${CLAUDE_SKILL_DIR}/report.md) | Multi-page HTML report structure: sidebar with status dots, section-level pass/fail borders, failure diagnostics with expected/actual diffs, collapsed summary blocks |
+| [Internals](${CLAUDE_SKILL_DIR}/internals.md) | Architecture for adapter authors and contributors: core/adapter/reporter separation, parallel execution model, design pillars |
