@@ -228,22 +228,31 @@ cd .tmp-test/no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ## TOC Grouping
 
 The `toc` field controls how documents are organized in the HTML report sidebar.
-Each entry is either a string (standalone document) or a group object with a name
-and a list of document paths.
+It is an ordered array — entries render in the exact order they appear. Each
+entry is one of two forms:
+
+| Form | Meaning |
+|------|---------|
+| `"path/to/doc.spec.md"` | A standalone document link |
+| `{"group": "Name", "docs": ["a.spec.md", ...]}` | A collapsible group containing one or more documents |
+
+Both forms are first-class citizens; they can be freely mixed in any order.
 
 ```json
 {
   "toc": [
+    "specs/overview.spec.md",
     { "group": "Core", "docs": ["specs/syntax.spec.md", "specs/cli.spec.md"] },
-    { "group": "Advanced", "docs": ["specs/alloy.spec.md", "specs/traceability.spec.md"] },
-    "specs/overview.spec.md"
+    "specs/best-practices.spec.md",
+    { "group": "Advanced", "docs": ["specs/alloy.spec.md", "specs/traceability.spec.md"] }
   ]
 }
 ```
 
-String entries appear as ungrouped items. Group entries render as collapsible
-sections in the sidebar. The current document's group is expanded by default;
-others are collapsed.
+The example above renders four sidebar entries in order: Overview (standalone),
+Core (collapsible group), Best Practices (standalone), Advanced (collapsible
+group). The group containing the current page is expanded by default; others
+are collapsed.
 
 **Status propagation**: if any document in a group has a failed test case,
 the group header shows a red status dot. Expected-fail propagates similarly.
@@ -251,14 +260,15 @@ the group header shows a red status dot. Expected-fail propagates similarly.
 **Type badges**: when a document has a frontmatter `type` field, a small
 colored badge appears next to its title in the sidebar.
 
-**Auto-grouping fallback**: documents not listed in `toc` are automatically
-grouped by their directory. Documents in the same directory as the entry file
-remain ungrouped; documents in subdirectories form groups named after the
-directory (e.g., `specs/stories/` becomes "Stories").
+**Auto-grouping fallback**: documents not listed in `toc` are appended after
+the explicit entries, automatically grouped by their directory. Documents in
+the same directory as the entry file appear as standalone entries; documents
+in subdirectories form collapsible groups named after the directory (e.g.,
+`specs/stories/` becomes "Stories").
 
 When `toc` is omitted entirely, auto-grouping by directory is applied if the
 spec tree spans multiple directories. If all documents are in a single
-directory, the sidebar renders as a flat list (backward-compatible).
+directory, the sidebar renders as a flat list.
 
 ## Validation
 

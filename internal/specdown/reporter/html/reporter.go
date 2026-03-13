@@ -48,32 +48,24 @@ type globalTocEntry struct {
 	DocType  string
 }
 
-type tocGroupView struct {
-	Name     string
-	Status   string
-	Expanded bool
-	Entries  []globalTocEntry
+// tocSection is a single ordered element in the sidebar TOC.
+// Name=="" means a standalone document; Name!="" means a collapsible group.
+type tocSection struct {
+	Name     string           // group name; empty for standalone docs
+	Status   string           // "failed", "expected-fail", or ""
+	Expanded bool             // true if current doc is in this section
+	Entries  []globalTocEntry // one entry for standalone, multiple for groups
 }
 
-type globalTOCView struct {
-	Groups    []tocGroupView
-	Ungrouped []globalTocEntry
-}
+// IsGroup returns true if this section is a named group.
+func (s tocSection) IsGroup() bool { return s.Name != "" }
 
-// HasGroups returns true if there are any groups in the TOC.
-func (v globalTOCView) HasGroups() bool {
-	return len(v.Groups) > 0
-}
+type globalTOCView []tocSection
 
 // currentHeadings returns the heading children for the current page.
 func (v globalTOCView) currentHeadings() []tocItemView {
-	for _, entry := range v.Ungrouped {
-		if entry.Current {
-			return entry.Children
-		}
-	}
-	for _, g := range v.Groups {
-		for _, entry := range g.Entries {
+	for _, s := range v {
+		for _, entry := range s.Entries {
 			if entry.Current {
 				return entry.Children
 			}
@@ -146,7 +138,7 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) er
 		if len(tocCfg) > 0 || hasSubdirectories(docs) {
 			tocView = buildGroupedTOC(docs, i, assetRoot, tocCfg)
 		} else {
-			tocView = globalTOCView{Ungrouped: buildGlobalTOC(docs, i, assetRoot)}
+			tocView = flatTOC(docs, i, assetRoot)
 		}
 
 		if err := writePage(outDir, entryDir, report.Results[i], meta, tocView, report.TraceGraph); err != nil {
@@ -352,7 +344,8 @@ var pageTemplate = template.Must(template.New("page").Funcs(template.FuncMap{
       <aside class="toc" aria-label="Table of contents">
         <div class="toc-inner">
           <p class="toc-title">Contents</p>
-          {{ range .TOCView.Groups }}
+          {{ range .TOCView }}
+          {{ if .IsGroup }}
           <section class="toc-group{{ if .Expanded }} expanded{{ end }}">
             <button class="toc-group-title {{ .Status }}" aria-expanded="{{ if .Expanded }}true{{ else }}false{{ end }}">{{ .Name }}</button>
             <div class="toc-group-body">
@@ -360,8 +353,10 @@ var pageTemplate = template.Must(template.New("page").Funcs(template.FuncMap{
               {{ end }}
             </div>
           </section>
+          {{ else }}
+          {{ range .Entries }}` + tocEntryTmpl + `
           {{ end }}
-          {{ range .TOCView.Ungrouped }}` + tocEntryTmpl + `
+          {{ end }}
           {{ end }}
         </div>
       </aside>

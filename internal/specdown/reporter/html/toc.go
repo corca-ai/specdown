@@ -35,14 +35,6 @@ func collectDocTOCs(results []core.DocumentResult, entryDir string) []docTOC {
 	return docs
 }
 
-func buildGlobalTOC(docs []docTOC, currentIdx int, assetRoot string) []globalTocEntry {
-	toc := make([]globalTocEntry, len(docs))
-	for j, d := range docs {
-		toc[j] = buildTocEntry(d, j == currentIdx, assetRoot)
-	}
-	return toc
-}
-
 func buildTocEntry(d docTOC, isCurrent bool, assetRoot string) globalTocEntry {
 	href := ""
 	if !isCurrent {
@@ -63,21 +55,29 @@ func buildTocEntry(d docTOC, isCurrent bool, assetRoot string) globalTocEntry {
 	}
 }
 
-// buildGroupedTOC organizes documents into groups based on tocConfig and directory structure.
-// Documents listed in tocConfig are placed according to that config; remaining documents
-// are auto-grouped by directory. Root-level documents remain ungrouped.
+// flatTOC returns each document as its own standalone section (no grouping).
+func flatTOC(docs []docTOC, currentIdx int, assetRoot string) globalTOCView {
+	sections := make(globalTOCView, len(docs))
+	for j, d := range docs {
+		sections[j] = tocSection{
+			Entries: []globalTocEntry{buildTocEntry(d, j == currentIdx, assetRoot)},
+		}
+	}
+	return sections
+}
+
+// buildGroupedTOC organizes documents into an ordered list of sections.
+// Config entries are placed in order; unclaimed documents are auto-grouped by directory.
 func buildGroupedTOC(docs []docTOC, currentIdx int, assetRoot string, tocConfig []config.TOCEntry) globalTOCView {
-	// Build lookup by relative path.
 	pathIndex := make(map[string]int, len(docs))
 	for i, d := range docs {
 		pathIndex[d.relPath] = i
 	}
 	claimed := make(map[int]bool)
 
-	var groups []tocGroupView
-	var ungrouped []globalTocEntry
+	var sections globalTOCView
 
-	// Phase 1: process explicit TOC config entries.
+	// Phase 1: process explicit TOC config entries in order.
 	for _, entry := range tocConfig {
 		if entry.Doc != "" {
 			idx, ok := pathIndex[entry.Doc]
@@ -85,25 +85,21 @@ func buildGroupedTOC(docs []docTOC, currentIdx int, assetRoot string, tocConfig 
 				continue
 			}
 			claimed[idx] = true
-			ungrouped = append(ungrouped, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
+			sections = append(sections, tocSection{
+				Entries: []globalTocEntry{buildTocEntry(docs[idx], idx == currentIdx, assetRoot)},
+			})
 		} else {
-			group := buildExplicitGroup(entry, docs, pathIndex, currentIdx, assetRoot, claimed)
-			groups = append(groups, group)
+			sections = append(sections, buildExplicitGroup(entry, docs, pathIndex, currentIdx, assetRoot, claimed))
 		}
 	}
 
 	// Phase 2: auto-group unclaimed documents by directory.
-	autoGroups, autoUngrouped := autoGroupUnclaimed(docs, claimed, currentIdx, assetRoot)
-	groups = append(groups, autoGroups...)
-	ungrouped = append(ungrouped, autoUngrouped...)
+	sections = append(sections, autoGroupUnclaimed(docs, claimed, currentIdx, assetRoot)...)
 
-	return globalTOCView{
-		Groups:    groups,
-		Ungrouped: ungrouped,
-	}
+	return sections
 }
 
-func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[string]int, currentIdx int, assetRoot string, claimed map[int]bool) tocGroupView {
+func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[string]int, currentIdx int, assetRoot string, claimed map[int]bool) tocSection {
 	var entries []globalTocEntry
 	hasCurrent := false
 	for _, docPath := range entry.Docs {
@@ -117,7 +113,7 @@ func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[stri
 		}
 		entries = append(entries, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
 	}
-	return tocGroupView{
+	return tocSection{
 		Name:     entry.Group,
 		Status:   groupStatus(entries),
 		Expanded: hasCurrent,
@@ -125,10 +121,19 @@ func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[stri
 	}
 }
 
-func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, assetRoot string) ([]tocGroupView, []globalTocEntry) {
+func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, assetRoot string) []tocSection {
 	dirBuckets, rootIndices := bucketByDirectory(docs, claimed)
 
-	var groups []tocGroupView
+	var sections []tocSection
+
+	// Root-level docs become standalone sections.
+	for _, idx := range rootIndices {
+		sections = append(sections, tocSection{
+			Entries: []globalTocEntry{buildTocEntry(docs[idx], idx == currentIdx, assetRoot)},
+		})
+	}
+
+	// Subdirectory docs become named groups.
 	for _, bucket := range dirBuckets {
 		var entries []globalTocEntry
 		hasCurrent := false
@@ -138,7 +143,7 @@ func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, ass
 			}
 			entries = append(entries, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
 		}
-		groups = append(groups, tocGroupView{
+		sections = append(sections, tocSection{
 			Name:     dirGroupName(bucket.dir),
 			Status:   groupStatus(entries),
 			Expanded: hasCurrent,
@@ -146,12 +151,7 @@ func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, ass
 		})
 	}
 
-	var ungrouped []globalTocEntry
-	for _, idx := range rootIndices {
-		ungrouped = append(ungrouped, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
-	}
-
-	return groups, ungrouped
+	return sections
 }
 
 type dirBucket struct {
