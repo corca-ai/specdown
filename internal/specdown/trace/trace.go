@@ -352,9 +352,11 @@ func checkCardinality(docs []TypedDocument, edges []Edge, edgeName string, edgeC
 		return nil
 	}
 
+	// UML convention: left (source) mult = how many sources each target has;
+	// right (target) mult = how many targets each source has.
 	var errs []TraceError
-	errs = append(errs, checkSideCardinality(docs, edges, edgeName, edgeCfg.From, sourceMult, true)...)
-	errs = append(errs, checkSideCardinality(docs, edges, edgeName, edgeCfg.To, targetMult, false)...)
+	errs = append(errs, checkSideCardinality(docs, edges, edgeName, edgeCfg.From, targetMult, true)...)
+	errs = append(errs, checkSideCardinality(docs, edges, edgeName, edgeCfg.To, sourceMult, false)...)
 	return errs
 }
 

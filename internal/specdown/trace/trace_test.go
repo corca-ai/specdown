@@ -397,9 +397,9 @@ func TestCheckCardinality(t *testing.T) {
 		testutil.Len(t, errs, 0)
 	})
 	t.Run("violated source min", func(t *testing.T) {
-		// b.md has 0 outgoing covers edges but requires 1..*
+		// b.md has 0 outgoing covers edges but requires 1..* (right side in UML notation)
 		errs := checkCardinality(docs, edges, "covers", config.TraceEdge{
-			From: "spec", To: "goal", Count: "1..* -> 0..*",
+			From: "spec", To: "goal", Count: "0..* -> 1..*",
 		})
 		testutil.True(t, len(errs) > 0)
 		testutil.Contains(t, errs[0].Message, "b.md")
@@ -410,7 +410,7 @@ func TestCheckCardinality(t *testing.T) {
 			{Source: "b.md", Target: "g.md", EdgeName: "covers"},
 		}
 		errs := checkCardinality(docs, fullEdges, "covers", config.TraceEdge{
-			From: "spec", To: "goal", Count: "1..* -> 0..*",
+			From: "spec", To: "goal", Count: "0..* -> 1..*",
 		})
 		testutil.Len(t, errs, 0)
 	})

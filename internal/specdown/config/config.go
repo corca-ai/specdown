@@ -209,7 +209,10 @@ type Multiplicity struct {
 	Max int // -1 means unlimited (*)
 }
 
-// ParseCount parses a count string like "1..* → 1..*" into source and target multiplicities.
+// ParseCount parses a count string like "1..* → 1..*" into source-side and target-side
+// multiplicities using UML convention: the source-side number (left of →) describes how many
+// sources each target has; the target-side number (right of →) describes how many targets
+// each source has.
 func ParseCount(s string) (source, target Multiplicity, err error) {
 	// Normalize arrow
 	normalized := strings.ReplaceAll(s, "→", "->")

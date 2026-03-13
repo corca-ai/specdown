@@ -363,7 +363,7 @@ func TestLoadConfigWithTrace(t *testing.T) {
   "trace": {
     "types": ["spec", "goal"],
     "edges": {
-      "covers": {"from": "spec", "to": "goal", "count": "1..* -> 0..*"}
+      "covers": {"from": "spec", "to": "goal", "count": "0..* -> 1..*"}
     }
   }
 }`

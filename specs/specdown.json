@@ -18,7 +18,7 @@
     "ignore": [".tmp-test/**"],
     "edges": {
       "depends":  { "from": "spec",  "to": "spec",  "acyclic": true, "transitive": true },
-      "explains": { "from": "guide", "to": "spec",  "count": "1..* → 0..*" }
+      "explains": { "from": "guide", "to": "spec",  "count": "0..* → 1..*" }
     }
   }
 }

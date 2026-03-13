@@ -20,9 +20,9 @@ and specdown checks them automatically:
   "trace": {
     "types": ["theme", "epic", "story", "at"],
     "edges": {
-      "decomposes": { "from": "epic",  "to": "theme", "count": "1 → 1..*" },
-      "covers":     { "from": "story", "to": "epic",  "count": "1 → 1..*" },
-      "tests":      { "from": "at",    "to": "story", "count": "1 → 1..*" }
+      "decomposes": { "from": "epic",  "to": "theme", "count": "1..* → 1" },
+      "covers":     { "from": "story", "to": "epic",  "count": "1..* → 1" },
+      "tests":      { "from": "at",    "to": "story", "count": "1..* → 1" }
     }
   }
 }
@@ -128,7 +128,7 @@ The `trace` key in `specdown.json` configures traceability:
     "ignore": ["vendor/**", "third_party/**"],
     "edges": {
       "covers":   { "from": "feature", "to": "goal",    "count": "1..* → 1..*" },
-      "tests":    { "from": "test",    "to": "feature", "count": "1 → 1..*" },
+      "tests":    { "from": "test",    "to": "feature", "count": "1..* → 1" },
       "requires": { "from": "feature", "to": "feature", "acyclic": true, "transitive": true }
     }
   }
@@ -150,8 +150,8 @@ Both `→` (U+2192) and `->` (ASCII) are accepted.
 | `1..*` | one or more |
 | `0..1` | zero or one |
 
-Source side (left of `→`): how many targets each source document must link to.
-Target side (right of `→`): how many sources each target document must be linked from.
+Source side (left of `→`): how many sources each target document must be linked from.
+Target side (right of `→`): how many targets each source document must link to.
 
 Omitted `count` defaults to `0..* → 0..*` (no constraints).
 
@@ -223,7 +223,7 @@ must satisfy both source-side and target-side multiplicity.
 # Cardinality violation: feature with no incoming tests
 mkdir -p .tmp-test/trace/card
 cat <<'CFG' > .tmp-test/trace/card/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"test","to":"feature","count":"1 → 1..*"}}}}
+{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"test","to":"feature","count":"1..* → 1"}}}}
 CFG
 mkdir -p .tmp-test/trace/card/specs
 printf '# Index\n' > .tmp-test/trace/card/specs/index.spec.md
@@ -321,7 +321,7 @@ A trace error does not prevent spec execution.
 # specdown run reports trace errors
 mkdir -p .tmp-test/trace/run-int
 cat <<'CFG' > .tmp-test/trace/run-int/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"test","to":"feature","count":"1 → 1..*"}}}}
+{"entry":"specs/index.spec.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"test","to":"feature","count":"1..* → 1"}}}}
 CFG
 mkdir -p .tmp-test/trace/run-int/specs
 printf '# Index\n\n- [F](../f.md)\n' > .tmp-test/trace/run-int/specs/index.spec.md
