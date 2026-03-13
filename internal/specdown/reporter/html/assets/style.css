@@ -152,13 +152,18 @@ main {
 }
 .toc-spec:last-child { margin-bottom: 0; }
 
-.toc-spec-title {
-  display: block;
+.toc-spec-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
   margin-bottom: 0.35rem;
+  position: relative;
+}
+
+.toc-spec-title {
   font-weight: 600;
   color: var(--ink);
   text-decoration: none;
-  position: relative;
 }
 
 .toc-list {
@@ -194,8 +199,8 @@ main {
   line-height: 1.35;
 }
 
-.toc-spec-title.failed::before,
-.toc-spec-title.expected-fail::before,
+.toc-spec-header:has(.toc-spec-title.failed)::before,
+.toc-spec-header:has(.toc-spec-title.expected-fail)::before,
 .toc-link.failed::before,
 .toc-link.expected-fail::before {
   content: "";
@@ -208,7 +213,7 @@ main {
   border-radius: 50%;
   background: var(--fail-mark);
 }
-.toc-spec-title.expected-fail::before,
+.toc-spec-header:has(.toc-spec-title.expected-fail)::before,
 .toc-link.expected-fail::before {
   background: var(--xfail-mark);
 }
