@@ -152,7 +152,7 @@ func buildMainTestReport() core.Report {
 func writeAndReadReport(t *testing.T, report core.Report) string {
 	t.Helper()
 	outDir := filepath.Join(t.TempDir(), "report")
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 	// The first result is the entry; its HTML is at the root of outDir.
@@ -277,7 +277,7 @@ func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -353,7 +353,7 @@ func TestWriteRendersAlloyCounterexampleDetails(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -419,7 +419,7 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -544,7 +544,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -560,7 +560,7 @@ func TestWriteLeavesExecutableBlocksReadableWhenNoCaseResultExists(t *testing.T)
 func TestWriteCreatesSharedAssets(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "report")
 	report := buildMainTestReport()
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -594,7 +594,7 @@ func TestWriteRewritesMarkdownLinksToHTML(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -619,7 +619,7 @@ func TestWriteOverwritesStaleFile(t *testing.T) {
 	}
 
 	report := buildMainTestReport()
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("Write should overwrite stale file: %v", err)
 	}
 
@@ -693,7 +693,7 @@ func TestWriteTraceContextLinksUseCorrectRelativePaths(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -755,7 +755,7 @@ func TestWriteAutoGroupsByDirectory(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -819,7 +819,7 @@ func TestWriteExplicitTOCConfig(t *testing.T) {
 		{Doc: "specs/overview.spec.md"},
 	}
 
-	if err := Write(report, outDir, tocCfg); err != nil {
+	if _, err := Write(report, outDir, tocCfg); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 
@@ -831,6 +831,104 @@ func TestWriteExplicitTOCConfig(t *testing.T) {
 
 	assertContains(t, html, ">Reference</button>", "explicit group name")
 	assertContains(t, html, "toc-group", "should have toc group")
+}
+
+func TestWriteTOCWarnsOnMissingDoc(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+					},
+				},
+			},
+		},
+	}
+
+	tocCfg := []config.TOCEntry{
+		{Doc: "specs/overview.spec.md"},
+		{Doc: "specs/nonexistent.spec.md"},
+		{Group: "Missing", Docs: []string{"specs/also-missing.spec.md"}},
+	}
+
+	warnings, err := Write(report, outDir, tocCfg)
+	if err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %v", len(warnings), warnings)
+	}
+	assertContains(t, warnings[0], "nonexistent.spec.md", "standalone warning should mention missing path")
+	assertContains(t, warnings[1], "also-missing.spec.md", "group warning should mention missing path")
+}
+
+func TestWriteAutoGroupEntryDirWithExplicitClaim(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 3, SpecsPassed: 3},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Add Item",
+					RelativeTo: "specs/stories/add-item.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Add Item", Raw: "# Add Item\n", HeadingPath: []string{"Add Item"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Internals",
+					RelativeTo: "specs/internals/arch.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Internals", Raw: "# Internals\n", HeadingPath: []string{"Internals"}},
+					},
+				},
+			},
+		},
+	}
+
+	// Explicitly claim the root-level doc; stories and internals should still auto-group correctly.
+	tocCfg := []config.TOCEntry{
+		{Doc: "specs/overview.spec.md"},
+	}
+
+	if _, err := Write(report, outDir, tocCfg); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(outDir, "overview.html"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	html := string(body)
+
+	// Both subdirectories should form separate groups, not standalone entries.
+	assertContains(t, html, ">Stories</button>", "stories should be a group")
+	assertContains(t, html, ">Internals</button>", "internals should be a group")
 }
 
 func TestWriteDocTypeBadgeInTOC(t *testing.T) {
@@ -854,7 +952,7 @@ func TestWriteDocTypeBadgeInTOC(t *testing.T) {
 		},
 	}
 
-	if err := Write(report, outDir); err != nil {
+	if _, err := Write(report, outDir); err != nil {
 		t.Fatalf("write report: %v", err)
 	}
 

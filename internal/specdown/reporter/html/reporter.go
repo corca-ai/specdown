@@ -90,7 +90,7 @@ type docTOC struct {
 // tocConfig optionally defines TOC grouping; pass nil for flat (ungrouped) layout.
 //
 //nolint:gocognit // orchestrator function
-func Write(report core.Report, outDir string, tocConfig ...[]config.TOCEntry) error {
+func Write(report core.Report, outDir string, tocConfig ...[]config.TOCEntry) ([]string, error) {
 	var tocCfg []config.TOCEntry
 	if len(tocConfig) > 0 {
 		tocCfg = tocConfig[0]
@@ -99,23 +99,23 @@ func Write(report core.Report, outDir string, tocConfig ...[]config.TOCEntry) er
 }
 
 //nolint:gocognit // orchestrator function
-func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) error {
+func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) ([]string, error) {
 	// Remove any existing non-directory at outDir so MkdirAll succeeds.
 	if info, err := os.Stat(outDir); err == nil && !info.IsDir() {
 		if err := os.Remove(outDir); err != nil {
-			return fmt.Errorf("remove stale file at output dir: %w", err)
+			return nil, fmt.Errorf("remove stale file at output dir: %w", err)
 		}
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("create output dir: %w", err)
+		return nil, fmt.Errorf("create output dir: %w", err)
 	}
 
 	// Write shared assets.
 	if err := os.WriteFile(filepath.Join(outDir, "style.css"), []byte(styleCSS), 0o644); err != nil {
-		return fmt.Errorf("write style.css: %w", err)
+		return nil, fmt.Errorf("write style.css: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(outDir, "script.js"), []byte(scriptJS), 0o644); err != nil {
-		return fmt.Errorf("write script.js: %w", err)
+		return nil, fmt.Errorf("write script.js: %w", err)
 	}
 
 	// Determine entry path for relative path computation.
@@ -127,6 +127,7 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) er
 
 	docs := collectDocTOCs(report.Results, entryDir)
 
+	var allWarnings []string
 	for i := range report.Results {
 		docType := report.Results[i].Document.Frontmatter.Type
 		meta := buildDocMeta(report.Results[i], report.GeneratedAt, docType)
@@ -136,17 +137,21 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) er
 		assetRoot := computeAssetRoot(path.Dir(docs[i].htmlPath))
 		var tocView globalTOCView
 		if len(tocCfg) > 0 || hasSubdirectories(docs) {
-			tocView = buildGroupedTOC(docs, i, assetRoot, tocCfg)
+			var warnings []string
+			tocView, warnings = buildGroupedTOC(docs, i, assetRoot, tocCfg, entryDir)
+			if i == 0 {
+				allWarnings = warnings
+			}
 		} else {
 			tocView = flatTOC(docs, i, assetRoot)
 		}
 
 		if err := writePage(outDir, entryDir, report.Results[i], meta, tocView, report.TraceGraph); err != nil {
-			return err
+			return allWarnings, err
 		}
 	}
 
-	return nil
+	return allWarnings, nil
 }
 
 //nolint:gocognit // page assembly with conditional trace panel

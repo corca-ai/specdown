@@ -548,7 +548,11 @@ Only executable blocks and check tables are run.
 
 func writeArtifacts(report core.Report, reportPath, baseDir string, cfg config.Config) error {
 	if reportPath != "" {
-		if err := htmlreport.Write(report, reportPath, cfg.TOC); err != nil {
+		warnings, err := htmlreport.Write(report, reportPath, cfg.TOC)
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "specdown: warning: %s\n", w)
+		}
+		if err != nil {
 			return err
 		}
 	}

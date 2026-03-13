@@ -1,6 +1,7 @@
 package html
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"strings"
@@ -68,20 +69,20 @@ func flatTOC(docs []docTOC, currentIdx int, assetRoot string) globalTOCView {
 
 // buildGroupedTOC organizes documents into an ordered list of sections.
 // Config entries are placed in order; unclaimed documents are auto-grouped by directory.
-func buildGroupedTOC(docs []docTOC, currentIdx int, assetRoot string, tocConfig []config.TOCEntry) globalTOCView {
+// entryDir is the directory of the entry document, used as the root for auto-grouping.
+func buildGroupedTOC(docs []docTOC, currentIdx int, assetRoot string, tocConfig []config.TOCEntry, entryDir string) (sections globalTOCView, warnings []string) {
 	pathIndex := make(map[string]int, len(docs))
 	for i, d := range docs {
 		pathIndex[d.relPath] = i
 	}
 	claimed := make(map[int]bool)
 
-	var sections globalTOCView
-
 	// Phase 1: process explicit TOC config entries in order.
 	for _, entry := range tocConfig {
 		if entry.Doc != "" {
 			idx, ok := pathIndex[entry.Doc]
 			if !ok {
+				warnings = append(warnings, fmt.Sprintf("toc: %q not found in discovered documents", entry.Doc))
 				continue
 			}
 			claimed[idx] = true
@@ -89,22 +90,25 @@ func buildGroupedTOC(docs []docTOC, currentIdx int, assetRoot string, tocConfig 
 				Entries: []globalTocEntry{buildTocEntry(docs[idx], idx == currentIdx, assetRoot)},
 			})
 		} else {
-			sections = append(sections, buildExplicitGroup(entry, docs, pathIndex, currentIdx, assetRoot, claimed))
+			sec, w := buildExplicitGroup(entry, docs, pathIndex, currentIdx, assetRoot, claimed)
+			sections = append(sections, sec)
+			warnings = append(warnings, w...)
 		}
 	}
 
 	// Phase 2: auto-group unclaimed documents by directory.
-	sections = append(sections, autoGroupUnclaimed(docs, claimed, currentIdx, assetRoot)...)
+	sections = append(sections, autoGroupUnclaimed(docs, claimed, currentIdx, assetRoot, entryDir)...)
 
-	return sections
+	return
 }
 
-func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[string]int, currentIdx int, assetRoot string, claimed map[int]bool) tocSection {
+func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[string]int, currentIdx int, assetRoot string, claimed map[int]bool) (section tocSection, warnings []string) {
 	var entries []globalTocEntry
 	hasCurrent := false
 	for _, docPath := range entry.Docs {
 		idx, ok := pathIndex[docPath]
 		if !ok {
+			warnings = append(warnings, fmt.Sprintf("toc: group %q references %q which was not found in discovered documents", entry.Group, docPath))
 			continue
 		}
 		claimed[idx] = true
@@ -113,16 +117,17 @@ func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[stri
 		}
 		entries = append(entries, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
 	}
-	return tocSection{
+	section = tocSection{
 		Name:     entry.Group,
 		Status:   groupStatus(entries),
 		Expanded: hasCurrent,
 		Entries:  entries,
 	}
+	return
 }
 
-func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, assetRoot string) []tocSection {
-	dirBuckets, rootIndices := bucketByDirectory(docs, claimed)
+func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, assetRoot, entryDir string) []tocSection {
+	dirBuckets, rootIndices := bucketByDirectory(docs, claimed, entryDir)
 
 	var sections []tocSection
 
@@ -160,34 +165,25 @@ type dirBucket struct {
 }
 
 // bucketByDirectory partitions unclaimed docs into directory buckets and root-level indices.
-func bucketByDirectory(docs []docTOC, claimed map[int]bool) (buckets []dirBucket, rootIndices []int) {
-	type dirEntry struct {
-		idx int
-		dir string
-	}
-	var unclaimed []dirEntry
-	for i, d := range docs {
-		if !claimed[i] {
-			unclaimed = append(unclaimed, dirEntry{idx: i, dir: path.Dir(d.relPath)})
-		}
-	}
-	if len(unclaimed) == 0 {
-		return nil, nil
-	}
-
-	entryDir := unclaimed[0].dir
+// entryDir is the canonical root directory; docs in this directory become standalone,
+// docs in subdirectories are grouped.
+func bucketByDirectory(docs []docTOC, claimed map[int]bool, entryDir string) (buckets []dirBucket, rootIndices []int) {
 	dirMap := make(map[string]int)
 
-	for _, ue := range unclaimed {
-		if ue.dir == entryDir {
-			rootIndices = append(rootIndices, ue.idx)
+	for i, d := range docs {
+		if claimed[i] {
 			continue
 		}
-		if gi, ok := dirMap[ue.dir]; ok {
-			buckets[gi].indices = append(buckets[gi].indices, ue.idx)
+		dir := path.Dir(d.relPath)
+		if dir == entryDir {
+			rootIndices = append(rootIndices, i)
+			continue
+		}
+		if gi, ok := dirMap[dir]; ok {
+			buckets[gi].indices = append(buckets[gi].indices, i)
 		} else {
-			dirMap[ue.dir] = len(buckets)
-			buckets = append(buckets, dirBucket{dir: ue.dir, indices: []int{ue.idx}})
+			dirMap[dir] = len(buckets)
+			buckets = append(buckets, dirBucket{dir: dir, indices: []int{i}})
 		}
 	}
 	return buckets, rootIndices
