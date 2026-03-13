@@ -314,9 +314,9 @@ func buildMeta(report core.Report, docType string) string {
 
 var tocEntryTmpl = `
           <section class="toc-spec{{ if .Current }} current{{ end }}">
-            {{ if .Current }}<span class="toc-spec-title {{ .Status }}">{{ .Title }}</span>
+            {{ if .DocType }}<span class="toc-type-badge" style="--type-hue:{{ typeHue .DocType }}">{{ .DocType }}</span>{{ end }}{{ if .Current }}<span class="toc-spec-title {{ .Status }}">{{ .Title }}</span>
             {{ else }}<a class="toc-spec-title {{ .Status }}" href="{{ .Href }}">{{ .Title }}</a>
-            {{ end }}{{ if .DocType }}<span class="toc-type-badge" style="--type-hue:{{ typeHue .DocType }}">{{ .DocType }}</span>{{ end }}
+            {{ end }}
             {{ if .Snippet }}<p class="toc-snippet">{{ .Snippet }}</p>{{ end }}
             {{ if and .Current .Children }}
             <ul class="toc-list">
