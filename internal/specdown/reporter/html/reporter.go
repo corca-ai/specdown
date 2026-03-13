@@ -118,7 +118,8 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 	// Build per-page trace context panel if trace data exists.
 	var traceCtx string
 	if traceGraph != nil {
-		traceCtx = renderPageTraceContext(result.Document.RelativeTo, result.Document.Title, traceGraph, entryDir)
+		assetRoot := computeAssetRoot(path.Dir(htmlPath))
+		traceCtx = renderPageTraceContext(result.Document.RelativeTo, result.Document.Title, traceGraph, entryDir, assetRoot)
 	}
 
 	title := result.Document.Title

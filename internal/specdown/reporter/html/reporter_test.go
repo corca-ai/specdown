@@ -630,3 +630,80 @@ func TestWriteOverwritesStaleFile(t *testing.T) {
 		t.Fatal("expected outDir to be a directory after Write")
 	}
 }
+
+func TestWriteTraceContextLinksUseCorrectRelativePaths(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 4, SpecsPassed: 4},
+		TraceGraph: &core.TraceGraphData{
+			Documents: []core.TraceDocument{
+				{Path: "specs/at/add-multiple.spec.md", Type: "at"},
+				{Path: "specs/stories/add-todo.md", Type: "story"},
+				{Path: "specs/epics/todo-management.md", Type: "epic"},
+			},
+			Edges: []core.TraceEdge{
+				{Source: "specs/stories/add-todo.md", Target: "specs/at/add-multiple.spec.md", EdgeName: "covered_by"},
+				{Source: "specs/epics/todo-management.md", Target: "specs/stories/add-todo.md", EdgeName: "decomposes"},
+			},
+		},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Add Multiple",
+					RelativeTo: "specs/at/add-multiple.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Add Multiple", Raw: "# Add Multiple\n", HeadingPath: []string{"Add Multiple"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Add Todo",
+					RelativeTo: "specs/stories/add-todo.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Add Todo", Raw: "# Add Todo\n", HeadingPath: []string{"Add Todo"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Todo Management",
+					RelativeTo: "specs/epics/todo-management.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Todo Management", Raw: "# Todo Management\n", HeadingPath: []string{"Todo Management"}},
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	// Read the page in at/ subdirectory and check trace links use ../ prefix.
+	body, err := os.ReadFile(filepath.Join(outDir, "at", "add-multiple.html"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	html := string(body)
+
+	// The trace panel link to stories/add-todo.html should use ../stories/add-todo.html
+	assertContains(t, html, `href="../stories/add-todo.html"`, "trace link should use ../ for sibling directory")
+	assertNotContains(t, html, `href="stories/add-todo.html"`, "trace link should not omit ../ prefix")
+}

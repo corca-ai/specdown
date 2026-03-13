@@ -50,7 +50,8 @@ func sortTraceLinks(links []traceLink) {
 }
 
 // renderPageTraceContext builds a right-side traceability panel showing parents → current → children.
-func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, entryDir string) string {
+// assetRoot is the relative path from the current page's directory to the output root (e.g. ".." for a page in a subdirectory).
+func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, entryDir, assetRoot string) string {
 	// Build type lookup.
 	typeOf := make(map[string]string, len(tg.Documents))
 	for _, d := range tg.Documents {
@@ -62,13 +63,13 @@ func renderPageTraceContext(docPath, docTitle string, tg *core.TraceGraphData, e
 		if e.Target == docPath {
 			incoming = append(incoming, traceLink{
 				edge: e.EdgeName, doc: e.Source,
-				docType: typeOf[e.Source], href: docToHTMLPath(e.Source, entryDir),
+				docType: typeOf[e.Source], href: assetRoot + "/" + docToHTMLPath(e.Source, entryDir),
 			})
 		}
 		if e.Source == docPath {
 			outgoing = append(outgoing, traceLink{
 				edge: e.EdgeName, doc: e.Target,
-				docType: typeOf[e.Target], href: docToHTMLPath(e.Target, entryDir),
+				docType: typeOf[e.Target], href: assetRoot + "/" + docToHTMLPath(e.Target, entryDir),
 			})
 		}
 	}
