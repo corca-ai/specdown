@@ -155,6 +155,50 @@ within the same prefix but the result is the union of all filters.
 specdown run -dry-run -filter "NoSuchHeading" 2>&1 | grep -q '0 case'
 ```
 
+## Install Skills
+
+`specdown install skills` creates a `.claude/skills/specdown/` directory
+with a `SKILL.md` and all reference specs so that Claude Code can write,
+run, and fix specs without leaving the editor.
+
+```run:shell
+# Install skills into a fresh directory and list created files
+rm -rf .tmp-test/skill-install && mkdir -p .tmp-test/skill-install
+cd .tmp-test/skill-install && specdown install skills 2>/dev/null
+```
+
+The installed files are the skill definition plus one reference per spec:
+
+```run:shell
+$ ls .tmp-test/skill-install/.claude/skills/specdown/ | sort
+SKILL.md
+adapter-protocol.md
+alloy.md
+best-practices.md
+cli.md
+config.md
+internals.md
+overview.md
+report.md
+syntax.md
+traceability.md
+validation.md
+```
+
+Running the command again without `--overwrite` is rejected:
+
+```run:shell
+$ cd .tmp-test/skill-install && specdown install skills 2>&1 | grep -q 'already exists' && echo "blocked"
+blocked
+```
+
+With `--overwrite`, existing files are replaced:
+
+```run:shell
+# Overwrite succeeds
+cd .tmp-test/skill-install && specdown install skills --overwrite 2>/dev/null
+```
+
 ## Error Messages
 
 The CLI reports clear errors for common mistakes.
