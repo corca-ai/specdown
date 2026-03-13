@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
@@ -706,4 +707,163 @@ func TestWriteTraceContextLinksUseCorrectRelativePaths(t *testing.T) {
 	// The trace panel link to stories/add-todo.html should use ../stories/add-todo.html
 	assertContains(t, html, `href="../stories/add-todo.html"`, "trace link should use ../ for sibling directory")
 	assertNotContains(t, html, `href="stories/add-todo.html"`, "trace link should not omit ../ prefix")
+}
+
+func TestWriteAutoGroupsByDirectory(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 3, SpecsPassed: 3},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Add Item",
+					RelativeTo: "specs/stories/add-item.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Add Item", Raw: "# Add Item\n", HeadingPath: []string{"Add Item"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusFailed,
+				Document: core.Document{
+					Title:      "Delete Item",
+					RelativeTo: "specs/stories/delete-item.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Delete Item", Raw: "# Delete Item\n", HeadingPath: []string{"Delete Item"}},
+					},
+				},
+				Cases: []core.CaseResult{
+					{
+						ID:     core.SpecID{File: "specs/stories/delete-item.spec.md", HeadingPath: []string{"Delete Item"}},
+						Status: core.StatusFailed,
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(outDir, "overview.html"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	html := string(body)
+
+	// Should have a group for the "stories" subdirectory.
+	assertContains(t, html, "toc-group", "should have toc group for subdirectory")
+	assertContains(t, html, ">Stories</button>", "group name derived from directory")
+	// Group should show failed status since delete-item is failed.
+	assertContains(t, html, `toc-group-title failed`, "group status should propagate failure")
+	// Overview should be ungrouped (at root level).
+	assertContains(t, html, `>Overview</span>`, "root doc should be ungrouped")
+}
+
+func TestWriteExplicitTOCConfig(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 3, SpecsPassed: 3},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Syntax",
+					RelativeTo: "specs/syntax.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Syntax", Raw: "# Syntax\n", HeadingPath: []string{"Syntax"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "CLI",
+					RelativeTo: "specs/cli.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "CLI", Raw: "# CLI\n", HeadingPath: []string{"CLI"}},
+					},
+				},
+			},
+		},
+	}
+
+	tocCfg := []config.TOCEntry{
+		{Group: "Reference", Docs: []string{"specs/syntax.spec.md", "specs/cli.spec.md"}},
+		{Doc: "specs/overview.spec.md"},
+	}
+
+	if err := Write(report, outDir, tocCfg); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(outDir, "overview.html"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	html := string(body)
+
+	assertContains(t, html, ">Reference</button>", "explicit group name")
+	assertContains(t, html, "toc-group", "should have toc group")
+}
+
+func TestWriteDocTypeBadgeInTOC(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "report")
+
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.spec.md",
+					Frontmatter: core.Frontmatter{Type: "spec"},
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+					},
+				},
+			},
+		},
+	}
+
+	if err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(outDir, "overview.html"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	html := string(body)
+
+	assertContains(t, html, `toc-type-badge`, "type badge in TOC")
+	assertContains(t, html, `>spec</span>`, "type value in badge")
 }

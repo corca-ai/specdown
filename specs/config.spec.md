@@ -91,6 +91,7 @@ the user adapter takes precedence over the built-in.
 | `models` | Alloy model verification. Can be omitted if not used |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
 | `trace` | Traceability configuration. See [Traceability](traceability.spec.md) |
+| `toc` | Sidebar table-of-contents grouping. See [TOC Grouping](#toc-grouping) below |
 | `setup` | Shell command to run once before any specs execute |
 | `teardown` | Shell command to run once after all specs finish (runs even on failure) |
 
@@ -196,6 +197,7 @@ When fields are omitted from a config file, sensible defaults are applied:
 | `reporters` | `[{"builtin":"html","outFile":"specs/report"}, {"builtin":"json","outFile":"specs/report.json"}]` |
 | `ignorePrefixes` | `[]` (empty) |
 | `trace` | not set (traceability disabled) |
+| `toc` | not set (auto-group by directory when subdirectories exist; flat otherwise) |
 | `setup` | not set (no pre-run command) |
 | `teardown` | not set (no post-run command) |
 | `checksDir` (adapter) | `"./checks"` (directory for shell check scripts) |
@@ -222,6 +224,41 @@ printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/no-config-test/specs/index.spec.m
 printf '# S\n\nProse.\n' > .tmp-test/no-config-test/specs/s.spec.md
 cd .tmp-test/no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ```
+
+## TOC Grouping
+
+The `toc` field controls how documents are organized in the HTML report sidebar.
+Each entry is either a string (standalone document) or a group object with a name
+and a list of document paths.
+
+```json
+{
+  "toc": [
+    { "group": "Core", "docs": ["specs/syntax.spec.md", "specs/cli.spec.md"] },
+    { "group": "Advanced", "docs": ["specs/alloy.spec.md", "specs/traceability.spec.md"] },
+    "specs/overview.spec.md"
+  ]
+}
+```
+
+String entries appear as ungrouped items. Group entries render as collapsible
+sections in the sidebar. The current document's group is expanded by default;
+others are collapsed.
+
+**Status propagation**: if any document in a group has a failed test case,
+the group header shows a red status dot. Expected-fail propagates similarly.
+
+**Type badges**: when a document has a frontmatter `type` field, a small
+colored badge appears next to its title in the sidebar.
+
+**Auto-grouping fallback**: documents not listed in `toc` are automatically
+grouped by their directory. Documents in the same directory as the entry file
+remain ungrouped; documents in subdirectories form groups named after the
+directory (e.g., `specs/stories/` becomes "Stories").
+
+When `toc` is omitted entirely, auto-grouping by directory is applied if the
+spec tree spans multiple directories. If all documents are in a single
+directory, the sidebar renders as a flat list (backward-compatible).
 
 ## Validation
 

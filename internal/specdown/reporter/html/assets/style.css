@@ -77,6 +77,76 @@ main {
   text-transform: uppercase;
 }
 
+/* -- TOC groups -- */
+.toc-group { margin-bottom: 0.6rem; }
+
+.toc-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.25rem 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  position: relative;
+}
+
+.toc-group-title::before {
+  content: ">";
+  font-size: 0.65rem;
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.toc-group.expanded > .toc-group-title::before {
+  transform: rotate(90deg);
+}
+
+.toc-group-body {
+  display: none;
+  padding-left: 0.5rem;
+}
+
+.toc-group.expanded > .toc-group-body {
+  display: block;
+}
+
+.toc-group-title.failed::after,
+.toc-group-title.expected-fail::after {
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: var(--fail-mark);
+  margin-left: auto;
+}
+.toc-group-title.expected-fail::after {
+  background: var(--xfail-mark);
+}
+
+/* -- TOC type badge -- */
+.toc-type-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.12rem;
+  vertical-align: baseline;
+  background: hsl(var(--type-hue) 55% 92%);
+  color: hsl(var(--type-hue) 50% 35%);
+  border: 1px solid hsl(var(--type-hue) 40% 82%);
+}
+
 .toc-spec {
   margin-bottom: 0.5rem;
 }

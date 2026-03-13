@@ -1,4 +1,14 @@
 (() => {
+  // TOC group collapse/expand toggle.
+  document.querySelectorAll('.toc-group-title').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const group = btn.closest('.toc-group');
+      group.classList.toggle('expanded');
+      btn.setAttribute('aria-expanded',
+        group.classList.contains('expanded') ? 'true' : 'false');
+    });
+  });
+
   const resolve = (href) => {
     const id = decodeURIComponent(href.slice(1));
     return document.getElementById(id);

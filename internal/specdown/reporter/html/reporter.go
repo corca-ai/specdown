@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
@@ -23,7 +24,7 @@ type pageView struct {
 	Title        string
 	Meta         template.HTML
 	AssetRoot    string
-	GlobalTOC    []globalTocEntry
+	TOCView      globalTOCView
 	Headings     []tocItemView
 	Body         template.HTML
 	TraceContext template.HTML
@@ -44,6 +45,41 @@ type globalTocEntry struct {
 	Status   string
 	Current  bool
 	Children []tocItemView
+	DocType  string
+}
+
+type tocGroupView struct {
+	Name     string
+	Status   string
+	Expanded bool
+	Entries  []globalTocEntry
+}
+
+type globalTOCView struct {
+	Groups    []tocGroupView
+	Ungrouped []globalTocEntry
+}
+
+// HasGroups returns true if there are any groups in the TOC.
+func (v globalTOCView) HasGroups() bool {
+	return len(v.Groups) > 0
+}
+
+// currentHeadings returns the heading children for the current page.
+func (v globalTOCView) currentHeadings() []tocItemView {
+	for _, entry := range v.Ungrouped {
+		if entry.Current {
+			return entry.Children
+		}
+	}
+	for _, g := range v.Groups {
+		for _, entry := range g.Entries {
+			if entry.Current {
+				return entry.Children
+			}
+		}
+	}
+	return nil
 }
 
 type docTOC struct {
@@ -52,14 +88,26 @@ type docTOC struct {
 	status   string
 	snippet  string
 	headings []tocItemView
+	docType  string
+	relPath  string
 }
 
 // Write generates a multi-page HTML site in outDir.
 // outDir is the output directory. Each document result becomes a separate HTML page.
 // Shared CSS and JS are written as style.css and script.js.
+// tocConfig optionally defines TOC grouping; pass nil for flat (ungrouped) layout.
 //
 //nolint:gocognit // orchestrator function
-func Write(report core.Report, outDir string) error {
+func Write(report core.Report, outDir string, tocConfig ...[]config.TOCEntry) error {
+	var tocCfg []config.TOCEntry
+	if len(tocConfig) > 0 {
+		tocCfg = tocConfig[0]
+	}
+	return writeReport(report, outDir, tocCfg)
+}
+
+//nolint:gocognit // orchestrator function
+func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) error {
 	// Remove any existing non-directory at outDir so MkdirAll succeeds.
 	if info, err := os.Stat(outDir); err == nil && !info.IsDir() {
 		if err := os.Remove(outDir); err != nil {
@@ -94,9 +142,14 @@ func Write(report core.Report, outDir string) error {
 			meta = buildMeta(report, docType)
 		}
 		assetRoot := computeAssetRoot(path.Dir(docs[i].htmlPath))
-		globalTOC := buildGlobalTOC(docs, i, assetRoot)
+		var tocView globalTOCView
+		if len(tocCfg) > 0 || hasSubdirectories(docs) {
+			tocView = buildGroupedTOC(docs, i, assetRoot, tocCfg)
+		} else {
+			tocView = globalTOCView{Ungrouped: buildGlobalTOC(docs, i, assetRoot)}
+		}
 
-		if err := writePage(outDir, entryDir, report.Results[i], meta, globalTOC, report.TraceGraph); err != nil {
+		if err := writePage(outDir, entryDir, report.Results[i], meta, tocView, report.TraceGraph); err != nil {
 			return err
 		}
 	}
@@ -104,7 +157,8 @@ func Write(report core.Report, outDir string) error {
 	return nil
 }
 
-func writePage(outDir, entryDir string, result core.DocumentResult, meta string, globalTOC []globalTocEntry, traceGraph *core.TraceGraphData) error {
+//nolint:gocognit // page assembly with conditional trace panel
+func writePage(outDir, entryDir string, result core.DocumentResult, meta string, tocView globalTOCView, traceGraph *core.TraceGraphData) error {
 	htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
 	fullPath := filepath.Join(outDir, filepath.FromSlash(htmlPath))
 
@@ -127,20 +181,13 @@ func writePage(outDir, entryDir string, result core.DocumentResult, meta string,
 		title = "Specification"
 	}
 
-	// Find current page headings from globalTOC.
-	var headings []tocItemView
-	for _, entry := range globalTOC {
-		if entry.Current {
-			headings = entry.Children
-			break
-		}
-	}
+	headings := tocView.currentHeadings()
 
 	view := pageView{
 		Title:        title,
 		Meta:         template.HTML(meta), //nolint:gosec // meta is internally generated
 		AssetRoot:    computeAssetRoot(path.Dir(htmlPath)),
-		GlobalTOC:    globalTOC,
+		TOCView:      tocView,
 		Headings:     headings,
 		Body:         template.HTML(body),     //nolint:gosec // body is internally generated
 		TraceContext: template.HTML(traceCtx), //nolint:gosec // internally generated
@@ -193,6 +240,20 @@ func computeAssetRoot(pageDir string) string {
 		parts[i] = ".."
 	}
 	return strings.Join(parts, "/")
+}
+
+// hasSubdirectories returns true if docs span more than one directory.
+func hasSubdirectories(docs []docTOC) bool {
+	if len(docs) == 0 {
+		return false
+	}
+	first := path.Dir(docs[0].relPath)
+	for _, d := range docs[1:] {
+		if path.Dir(d.relPath) != first {
+			return true
+		}
+	}
+	return false
 }
 
 func writePills(b *strings.Builder, passed, failed, xfail int) {
@@ -251,25 +312,11 @@ func buildMeta(report core.Report, docType string) string {
 	return b.String()
 }
 
-var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>{{ .Title }}</title>
-  <link rel="stylesheet" href="{{ .AssetRoot }}/style.css">
-</head>
-<body>
-  <main>
-    <div class="layout">
-      <aside class="toc" aria-label="Table of contents">
-        <div class="toc-inner">
-          <p class="toc-title">Contents</p>
-          {{ range .GlobalTOC }}
+var tocEntryTmpl = `
           <section class="toc-spec{{ if .Current }} current{{ end }}">
             {{ if .Current }}<span class="toc-spec-title {{ .Status }}">{{ .Title }}</span>
             {{ else }}<a class="toc-spec-title {{ .Status }}" href="{{ .Href }}">{{ .Title }}</a>
-            {{ end }}
+            {{ end }}{{ if .DocType }}<span class="toc-type-badge" style="--type-hue:{{ typeHue .DocType }}">{{ .DocType }}</span>{{ end }}
             {{ if .Snippet }}<p class="toc-snippet">{{ .Snippet }}</p>{{ end }}
             {{ if and .Current .Children }}
             <ul class="toc-list">
@@ -289,7 +336,34 @@ var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
               {{ end }}
             </ul>
             {{ end }}
+          </section>`
+
+var pageTemplate = template.Must(template.New("page").Funcs(template.FuncMap{
+	"typeHue": typeHue,
+}).Parse(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="{{ .AssetRoot }}/style.css">
+</head>
+<body>
+  <main>
+    <div class="layout">
+      <aside class="toc" aria-label="Table of contents">
+        <div class="toc-inner">
+          <p class="toc-title">Contents</p>
+          {{ range .TOCView.Groups }}
+          <section class="toc-group{{ if .Expanded }} expanded{{ end }}">
+            <button class="toc-group-title {{ .Status }}" aria-expanded="{{ if .Expanded }}true{{ else }}false{{ end }}">{{ .Name }}</button>
+            <div class="toc-group-body">
+              {{ range .Entries }}` + tocEntryTmpl + `
+              {{ end }}
+            </div>
           </section>
+          {{ end }}
+          {{ range .TOCView.Ungrouped }}` + tocEntryTmpl + `
           {{ end }}
         </div>
       </aside>

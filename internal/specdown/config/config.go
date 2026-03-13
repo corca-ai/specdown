@@ -17,8 +17,43 @@ type Config struct {
 	Reporters      []Reporter      `json:"reporters"`
 	IgnorePrefixes []string        `json:"ignorePrefixes,omitempty"`
 	Trace          *TraceConfig    `json:"trace,omitempty"`
+	TOC            []TOCEntry      `json:"toc,omitempty"`
 	Setup          string          `json:"setup,omitempty"`
 	Teardown       string          `json:"teardown,omitempty"`
+}
+
+// TOCEntry represents a single item in the toc config array.
+// It is either a standalone document reference (Doc is set) or a named group (Group and Docs are set).
+type TOCEntry struct {
+	Group string   // non-empty for group entries
+	Docs  []string // document paths within a group
+	Doc   string   // non-empty for standalone doc references
+}
+
+func (e *TOCEntry) UnmarshalJSON(data []byte) error {
+	// Try string first (standalone doc reference).
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		e.Doc = s
+		return nil
+	}
+	// Try object (group).
+	var obj struct {
+		Group string   `json:"group"`
+		Docs  []string `json:"docs"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("toc entry must be a string or {\"group\":..., \"docs\":[...]}: %w", err)
+	}
+	if obj.Group == "" {
+		return fmt.Errorf("toc group entry must have a non-empty \"group\" field")
+	}
+	if len(obj.Docs) == 0 {
+		return fmt.Errorf("toc group %q must have at least one doc", obj.Group)
+	}
+	e.Group = obj.Group
+	e.Docs = obj.Docs
+	return nil
 }
 
 type TraceConfig struct {

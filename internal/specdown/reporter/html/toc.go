@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
@@ -27,6 +28,8 @@ func collectDocTOCs(results []core.DocumentResult, entryDir string) []docTOC {
 			status:   docStatusClass(results[i]),
 			snippet:  snippet,
 			headings: headings,
+			docType:  results[i].Document.Frontmatter.Type,
+			relPath:  results[i].Document.RelativeTo,
 		}
 	}
 	return docs
@@ -35,25 +38,188 @@ func collectDocTOCs(results []core.DocumentResult, entryDir string) []docTOC {
 func buildGlobalTOC(docs []docTOC, currentIdx int, assetRoot string) []globalTocEntry {
 	toc := make([]globalTocEntry, len(docs))
 	for j, d := range docs {
-		isCurrent := j == currentIdx
-		href := ""
-		if !isCurrent {
-			href = assetRoot + "/" + d.htmlPath
-		}
-		var children []tocItemView
-		if isCurrent {
-			children = d.headings
-		}
-		toc[j] = globalTocEntry{
-			Title:    d.title,
-			Snippet:  d.snippet,
-			Href:     href,
-			Status:   d.status,
-			Current:  isCurrent,
-			Children: children,
-		}
+		toc[j] = buildTocEntry(d, j == currentIdx, assetRoot)
 	}
 	return toc
+}
+
+func buildTocEntry(d docTOC, isCurrent bool, assetRoot string) globalTocEntry {
+	href := ""
+	if !isCurrent {
+		href = assetRoot + "/" + d.htmlPath
+	}
+	var children []tocItemView
+	if isCurrent {
+		children = d.headings
+	}
+	return globalTocEntry{
+		Title:    d.title,
+		Snippet:  d.snippet,
+		Href:     href,
+		Status:   d.status,
+		Current:  isCurrent,
+		Children: children,
+		DocType:  d.docType,
+	}
+}
+
+// buildGroupedTOC organizes documents into groups based on tocConfig and directory structure.
+// Documents listed in tocConfig are placed according to that config; remaining documents
+// are auto-grouped by directory. Root-level documents remain ungrouped.
+func buildGroupedTOC(docs []docTOC, currentIdx int, assetRoot string, tocConfig []config.TOCEntry) globalTOCView {
+	// Build lookup by relative path.
+	pathIndex := make(map[string]int, len(docs))
+	for i, d := range docs {
+		pathIndex[d.relPath] = i
+	}
+	claimed := make(map[int]bool)
+
+	var groups []tocGroupView
+	var ungrouped []globalTocEntry
+
+	// Phase 1: process explicit TOC config entries.
+	for _, entry := range tocConfig {
+		if entry.Doc != "" {
+			idx, ok := pathIndex[entry.Doc]
+			if !ok {
+				continue
+			}
+			claimed[idx] = true
+			ungrouped = append(ungrouped, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
+		} else {
+			group := buildExplicitGroup(entry, docs, pathIndex, currentIdx, assetRoot, claimed)
+			groups = append(groups, group)
+		}
+	}
+
+	// Phase 2: auto-group unclaimed documents by directory.
+	autoGroups, autoUngrouped := autoGroupUnclaimed(docs, claimed, currentIdx, assetRoot)
+	groups = append(groups, autoGroups...)
+	ungrouped = append(ungrouped, autoUngrouped...)
+
+	return globalTOCView{
+		Groups:    groups,
+		Ungrouped: ungrouped,
+	}
+}
+
+func buildExplicitGroup(entry config.TOCEntry, docs []docTOC, pathIndex map[string]int, currentIdx int, assetRoot string, claimed map[int]bool) tocGroupView {
+	var entries []globalTocEntry
+	hasCurrent := false
+	for _, docPath := range entry.Docs {
+		idx, ok := pathIndex[docPath]
+		if !ok {
+			continue
+		}
+		claimed[idx] = true
+		if idx == currentIdx {
+			hasCurrent = true
+		}
+		entries = append(entries, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
+	}
+	return tocGroupView{
+		Name:     entry.Group,
+		Status:   groupStatus(entries),
+		Expanded: hasCurrent,
+		Entries:  entries,
+	}
+}
+
+func autoGroupUnclaimed(docs []docTOC, claimed map[int]bool, currentIdx int, assetRoot string) ([]tocGroupView, []globalTocEntry) {
+	dirBuckets, rootIndices := bucketByDirectory(docs, claimed)
+
+	var groups []tocGroupView
+	for _, bucket := range dirBuckets {
+		var entries []globalTocEntry
+		hasCurrent := false
+		for _, idx := range bucket.indices {
+			if idx == currentIdx {
+				hasCurrent = true
+			}
+			entries = append(entries, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
+		}
+		groups = append(groups, tocGroupView{
+			Name:     dirGroupName(bucket.dir),
+			Status:   groupStatus(entries),
+			Expanded: hasCurrent,
+			Entries:  entries,
+		})
+	}
+
+	var ungrouped []globalTocEntry
+	for _, idx := range rootIndices {
+		ungrouped = append(ungrouped, buildTocEntry(docs[idx], idx == currentIdx, assetRoot))
+	}
+
+	return groups, ungrouped
+}
+
+type dirBucket struct {
+	dir     string
+	indices []int
+}
+
+// bucketByDirectory partitions unclaimed docs into directory buckets and root-level indices.
+func bucketByDirectory(docs []docTOC, claimed map[int]bool) (buckets []dirBucket, rootIndices []int) {
+	type dirEntry struct {
+		idx int
+		dir string
+	}
+	var unclaimed []dirEntry
+	for i, d := range docs {
+		if !claimed[i] {
+			unclaimed = append(unclaimed, dirEntry{idx: i, dir: path.Dir(d.relPath)})
+		}
+	}
+	if len(unclaimed) == 0 {
+		return nil, nil
+	}
+
+	entryDir := unclaimed[0].dir
+	dirMap := make(map[string]int)
+
+	for _, ue := range unclaimed {
+		if ue.dir == entryDir {
+			rootIndices = append(rootIndices, ue.idx)
+			continue
+		}
+		if gi, ok := dirMap[ue.dir]; ok {
+			buckets[gi].indices = append(buckets[gi].indices, ue.idx)
+		} else {
+			dirMap[ue.dir] = len(buckets)
+			buckets = append(buckets, dirBucket{dir: ue.dir, indices: []int{ue.idx}})
+		}
+	}
+	return buckets, rootIndices
+}
+
+// dirGroupName derives a human-readable group name from a directory path.
+func dirGroupName(dir string) string {
+	base := path.Base(dir)
+	words := strings.Split(base, "-")
+	for i, w := range words {
+		if w != "" {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// groupStatus returns the worst status among entries in a group.
+func groupStatus(entries []globalTocEntry) string {
+	hasXFail := false
+	for _, e := range entries {
+		if e.Status == "failed" {
+			return "failed"
+		}
+		if e.Status == "expected-fail" {
+			hasXFail = true
+		}
+	}
+	if hasXFail {
+		return "expected-fail"
+	}
+	return ""
 }
 
 func collectHeadings(result core.DocumentResult) []tocItemView {
