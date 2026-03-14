@@ -10,7 +10,7 @@ Write, run, and fix executable specifications.
 
 ## Project Context
 
-- Config: !`d="$PWD"; while [ "$d" != "/" ]; do if [ -f "$d/specdown.json" ]; then echo "path: $d/specdown.json"; cat "$d/specdown.json"; break; fi; d="$(dirname "$d")"; done; [ "$d" = "/" ] && echo "no specdown.json found"`
+- Config: !`d="$PWD"; while [ "$d" != "/" ]; do if [ -f "$d/specdown.json" ]; then echo "path: $d/specdown.json"; cat "$d/specdown.json"; break; fi; d="$(dirname "$d")"; done; if [ "$d" = "/" ]; then echo "no specdown.json found"; fi`
 - Specs: !`specdown run -dry-run 2>&1 | head -50`
 
 ## Authoring Specs
