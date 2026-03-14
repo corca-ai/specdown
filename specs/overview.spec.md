@@ -35,7 +35,9 @@ brew install corca-ai/tap/specdown
 specdown init
 ```
 
-This creates a [explains::configuration file](config.spec.md) and example specs.
+This creates a [explains::configuration file](config.spec.md) and example specs
+in the current directory. Run this from the project root so that
+`specdown.json` sits next to `.git/`.
 
 ```run:shell
 # Scaffold a fresh project and verify files exist

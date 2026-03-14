@@ -1,21 +1,21 @@
 {
-  "entry": "index.spec.md",
+  "entry": "specs/index.spec.md",
   "adapters": [
     {
       "name": "shell-fixtures",
-      "command": ["../bin/specdown-adapter-shell", "-checks-dir", "./fixtures"],
+      "command": ["./bin/specdown-adapter-shell", "-checks-dir", "specs/fixtures"],
       "blocks": [],
       "checks": ["block-kind", "cell-escape", "echo-value"]
     }
   ],
   "reporters": [
-    { "builtin": "html", "outFile": "report" },
-    { "builtin": "json", "outFile": "report.json" }
+    { "builtin": "html", "outFile": "specs/report" },
+    { "builtin": "json", "outFile": "specs/report.json" }
   ],
   "models": { "builtin": "alloy" },
   "trace": {
     "types": ["spec", "guide"],
-    "ignore": [".tmp-test/**"],
+    "ignore": [".tmp-test/**", "specs/.tmp-test/**", ".claude/**", "cmd/**", "docs/**", "examples/**", "internal/**"],
     "edges": {
       "depends":  { "from": "spec",  "to": "spec",  "acyclic": true, "transitive": true },
       "explains": { "from": "guide", "to": "spec",  "count": "0..* → 1..*" }

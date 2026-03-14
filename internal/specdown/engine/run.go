@@ -297,6 +297,14 @@ func buildRegistry(adapters []config.AdapterConfig) (adapterRegistry, error) {
 		}
 	}
 
+	// Auto-register built-in jq check adapter for unclaimed jq checks.
+	if _, exists := registry.checks["jq"]; !exists {
+		registry.checks["jq"] = adapterEntry{Config: config.AdapterConfig{
+			Name:      "__builtin_jq",
+			BuiltinJQ: true,
+		}}
+	}
+
 	return registry, nil
 }
 
@@ -890,6 +898,7 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 
 var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 
+//nolint:gocognit // switch per case kind with template rendering
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {
 	prepared := specCase
 	switch specCase.Kind {
@@ -928,6 +937,17 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 			rendered = append(rendered, core.UnescapeCell(value))
 		}
 		trCopy.Cells = rendered
+		if len(trCopy.CheckParams) > 0 {
+			renderedParams := make(map[string]string, len(trCopy.CheckParams))
+			for k, v := range trCopy.CheckParams {
+				rv, err := renderTemplate(v, bindings)
+				if err != nil {
+					return core.CaseSpec{}, err
+				}
+				renderedParams[k] = rv
+			}
+			trCopy.CheckParams = renderedParams
+		}
 		prepared.TableRow = &trCopy
 		return prepared, nil
 	default:

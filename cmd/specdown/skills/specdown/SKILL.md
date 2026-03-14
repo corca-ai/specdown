@@ -10,20 +10,10 @@ Write, run, and fix executable specifications.
 
 ## Project Context
 
-- Config: !`cat specdown.json 2>/dev/null || cat specs/specdown.json 2>/dev/null || echo "no specdown.json found"`
+- Config: !`d="$PWD"; while [ "$d" != "/" ]; do if [ -f "$d/specdown.json" ]; then echo "path: $d/specdown.json"; cat "$d/specdown.json"; break; fi; d="$(dirname "$d")"; done; [ "$d" = "/" ] && echo "no specdown.json found"`
 - Specs: !`specdown run -dry-run 2>&1 | head -50`
 
-## Running and Fixing Specs
-
-1. Run specs with `specdown run`. If $ARGUMENTS is provided, pass it as `-filter "$ARGUMENTS"`.
-2. If all specs pass, report the result and stop.
-3. If specs fail, read the failing spec file to understand the intent.
-4. Fix the implementation to make the spec pass. Do NOT modify the spec unless the spec itself is wrong.
-5. Re-run `specdown run` to confirm the fix.
-
-Useful filters: `-filter type:alloy` (Alloy only), `-filter type:code` (code blocks only), `-filter type:table` (check tables only), `-filter block:shell` (shell blocks only), `-filter check:<name>` (specific check).
-
-## Writing New Specs
+## Authoring Specs
 
 Before writing, read the reference specs below — they are the authoritative source of truth for specdown's syntax and behavior. Start with **Overview** and **Spec Syntax** for the basics.
 
@@ -34,6 +24,28 @@ Before writing, read the reference specs below — they are the authoritative so
 5. Run `specdown run` to verify.
 
 Do NOT modify the spec unless the spec itself is wrong.
+
+### Choosing the right verification approach
+
+Before reaching for `run:shell`, check whether the project already has adapter-defined checks (`specdown.json` → `adapters[].checks`). Use the highest-level tool that fits:
+
+| Situation | Use | Why |
+|-----------|-----|-----|
+| Project has a check that matches (e.g. `check:user-exists`) | `> check:name` table or inline `check:name(params)` | Document shows inputs and expected results only — no plumbing |
+| Same `jq` / extraction pattern repeated 3+ times | Extract into an adapter check, then use `> check:name` table | Keeps specs clean; moves implementation detail into the adapter |
+| One-off shell verification or setup | `run:shell` block | Simple and direct when not repeated |
+
+Prefer check tables over `run:shell` + `jq` for public-facing specs — they read as data, not as scripts.
+
+## Running and Fixing Specs
+
+1. Run specs with `specdown run`. If $ARGUMENTS is provided, pass it as `-filter "$ARGUMENTS"`.
+2. If all specs pass, report the result and stop.
+3. If specs fail, read the failing spec file to understand the intent.
+4. Fix the implementation to make the spec pass. Do NOT modify the spec unless the spec itself is wrong.
+5. Re-run `specdown run` to confirm the fix.
+
+Useful filters: `-filter type:alloy` (Alloy only), `-filter type:code` (code blocks only), `-filter type:table` (check tables only), `-filter block:shell` (shell blocks only), `-filter check:<name>` (specific check).
 
 ## Reference Specs
 

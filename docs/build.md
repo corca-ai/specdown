@@ -30,10 +30,10 @@ go build -trimpath -ldflags="-s -w -X main.version=v0.7.0" -o bin/specdown ./cmd
 
 ## Run
 
-Run from the project root. Config lives next to the specs it governs.
+Run from the project root. Config lives at the project root (`specdown.json`).
 
 ```sh
-specdown run -config specs/specdown.json
+specdown run
 specdown version          # print build version
 specdown alloy dump       # generate only Alloy model .als files
 ```
@@ -53,7 +53,7 @@ binaries, run them from the project root. Selfspecs invoke `specdown`
 recursively, so `bin/` must be on `PATH`:
 
 ```sh
-PATH="$(pwd)/bin:$PATH" bin/specdown run -config specs/specdown.json
+PATH="$(pwd)/bin:$PATH" bin/specdown run
 ```
 
 Reports are generated in `specs/report/`.

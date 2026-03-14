@@ -14,6 +14,7 @@ import (
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/config"
+	"github.com/corca-ai/specdown/internal/specdown/jqadapter"
 	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
 )
 
@@ -94,6 +95,47 @@ func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, 
 		builtin: true,
 		done:    done,
 	}, nil
+}
+
+func (h Host) StartBuiltinJQSession(adapter config.AdapterConfig) (*Session, error) {
+	stdinReader, stdinWriter := io.Pipe()
+	stdoutReader, stdoutWriter := io.Pipe()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		builtinJQLoop(stdinReader, stdoutWriter)
+		_ = stdoutWriter.Close()
+	}()
+
+	scanner := bufio.NewScanner(stdoutReader)
+	scanner.Buffer(make([]byte, 1024), 1024*1024)
+
+	return &Session{
+		adapter: adapter,
+		stdin:   stdinWriter,
+		scanner: scanner,
+		encoder: json.NewEncoder(stdinWriter),
+		stderr:  &bytes.Buffer{},
+		builtin: true,
+		done:    done,
+	}, nil
+}
+
+func builtinJQLoop(reader io.Reader, writer io.Writer) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 1024), 1024*1024)
+	encoder := json.NewEncoder(writer)
+
+	for scanner.Scan() {
+		var req adapterprotocol.AssertRequest
+		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+			return
+		}
+		if err := encoder.Encode(jqadapter.Assert(req.ID, &req)); err != nil {
+			return
+		}
+	}
 }
 
 func builtinShellLoop(reader io.Reader, writer io.Writer, checksDir string) {

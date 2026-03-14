@@ -26,9 +26,12 @@ func (m *sessionManager) For(adapter config.AdapterConfig) (*adapterhost.Session
 	}
 	var session *adapterhost.Session
 	var err error
-	if adapter.BuiltinShell {
+	switch {
+	case adapter.BuiltinShell:
 		session, err = m.host.StartBuiltinShellSession(adapter)
-	} else {
+	case adapter.BuiltinJQ:
+		session, err = m.host.StartBuiltinJQSession(adapter)
+	default:
 		session, err = m.host.StartSession(adapter)
 	}
 	if err != nil {

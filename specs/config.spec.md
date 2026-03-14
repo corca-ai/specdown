@@ -8,6 +8,13 @@ Every project needs a `specdown.json`. It tells specdown where specs live,
 which [depends::adapters](adapter-protocol.spec.md) to launch, and what
 [reporters](report.spec.md) to generate.
 
+Place `specdown.json` at the project root, next to `.git/`. All paths
+inside the config are resolved relative to the config file's directory,
+so a root-level config can reference specs in any subdirectory (e.g.
+`"entry": "docs/specs/index.spec.md"`). This also makes the config easy
+to find for both humans and tools — `specdown run` looks for
+`specdown.json` in the current directory by default.
+
 The config is data-only JSON — no scripting, no language runtime dependency.
 For v1, a single file is sufficient.
 
@@ -80,6 +87,60 @@ PASS 2 spec(s), 1 case(s)
 
 If a user adapter explicitly claims a shell block (e.g., `"blocks": ["run:shell"]`),
 the user adapter takes precedence over the built-in.
+
+## Built-in jq Check
+
+The `check:jq` check is built into specdown. It evaluates
+[jq](https://jqlang.github.io/jq/) expressions against JSON data and
+compares the result with an expected value. No adapter configuration is
+required.
+
+Columns (or check parameters):
+
+| Column | Description |
+|--------|-------------|
+| `input` | JSON string to evaluate against |
+| `expr` | jq expression |
+| `expected` | Expected result |
+
+Use `input` as a check parameter when every row operates on the same JSON:
+
+```run:shell -> $jq_data
+echo '{"name":"Alice","age":30,"tags":["admin","user"]}'
+```
+
+> check:jq(input=${jq_data})
+| expr | expected |
+|------|----------|
+| .name | Alice |
+| .age | 30 |
+| .tags | ["admin","user"] |
+
+Or use `input` as a column when rows have different inputs:
+
+```run:shell -> $jq_other
+echo '{"city":"Seoul"}'
+```
+
+> check:jq
+| input | expr | expected |
+|-------|------|----------|
+| ${jq_data} | .name | Alice |
+| ${jq_other} | .city | Seoul |
+
+Full jq expressions are supported — pipes, filters, and boolean conditions
+all work:
+
+> check:jq(input=${jq_data})
+| expr | expected |
+|------|----------|
+| .tags \| length | 2 |
+| .age > 18 | true |
+
+Array and object comparisons are whitespace-insensitive and key-order-insensitive.
+
+If a user adapter explicitly claims `check:jq`, the user adapter takes
+precedence over the built-in.
 
 ## Config Fields
 
@@ -228,31 +289,22 @@ cd .tmp-test/no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ## TOC Grouping
 
 The `toc` field controls how documents are organized in the HTML report sidebar.
-It is an ordered array — entries render in the exact order they appear. Each
-entry is one of two forms:
-
-| Form | Meaning |
-|------|---------|
-| `"path/to/doc.spec.md"` | A standalone document link |
-| `{"group": "Name", "docs": ["a.spec.md", ...]}` | A collapsible group containing one or more documents |
-
-Both forms are first-class citizens; they can be freely mixed in any order.
+Each entry is either a string (standalone document) or a group object with a name
+and a list of document paths.
 
 ```json
 {
   "toc": [
-    "specs/overview.spec.md",
     { "group": "Core", "docs": ["specs/syntax.spec.md", "specs/cli.spec.md"] },
-    "specs/best-practices.spec.md",
-    { "group": "Advanced", "docs": ["specs/alloy.spec.md", "specs/traceability.spec.md"] }
+    { "group": "Advanced", "docs": ["specs/alloy.spec.md", "specs/traceability.spec.md"] },
+    "specs/overview.spec.md"
   ]
 }
 ```
 
-The example above renders four sidebar entries in order: Overview (standalone),
-Core (collapsible group), Best Practices (standalone), Advanced (collapsible
-group). The group containing the current page is expanded by default; others
-are collapsed.
+String entries appear as ungrouped items. Group entries render as collapsible
+sections in the sidebar. The current document's group is expanded by default;
+others are collapsed.
 
 **Status propagation**: if any document in a group has a failed test case,
 the group header shows a red status dot. Expected-fail propagates similarly.
@@ -260,15 +312,14 @@ the group header shows a red status dot. Expected-fail propagates similarly.
 **Type badges**: when a document has a frontmatter `type` field, a small
 colored badge appears next to its title in the sidebar.
 
-**Auto-grouping fallback**: documents not listed in `toc` are appended after
-the explicit entries, automatically grouped by their directory. Documents in
-the same directory as the entry file appear as standalone entries; documents
-in subdirectories form collapsible groups named after the directory (e.g.,
-`specs/stories/` becomes "Stories").
+**Auto-grouping fallback**: documents not listed in `toc` are automatically
+grouped by their directory. Documents in the same directory as the entry file
+remain ungrouped; documents in subdirectories form groups named after the
+directory (e.g., `specs/stories/` becomes "Stories").
 
 When `toc` is omitted entirely, auto-grouping by directory is applied if the
 spec tree spans multiple directories. If all documents are in a single
-directory, the sidebar renders as a flat list.
+directory, the sidebar renders as a flat list (backward-compatible).
 
 ## Validation
 

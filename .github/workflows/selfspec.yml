@@ -39,7 +39,7 @@ jobs:
       - name: Run self-spec
         run: |
           export PATH="$(pwd)/bin:$PATH"
-          bin/specdown run -config specs/specdown.json
+          bin/specdown run
 
       - name: Prepare Pages artifact
         if: github.ref == 'refs/heads/main'
