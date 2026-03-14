@@ -155,6 +155,7 @@ precedence over the built-in.
 | `toc` | Sidebar table-of-contents grouping. See [TOC Grouping](#toc-grouping) below |
 | `setup` | Shell command to run once before any specs execute |
 | `teardown` | Shell command to run once after all specs finish (runs even on failure) |
+| `defaultTimeoutMsec` | Default adapter request timeout in milliseconds (default: `30000`) |
 
 ## Global Setup and Teardown
 
@@ -261,6 +262,7 @@ When fields are omitted from a config file, sensible defaults are applied:
 | `toc` | not set (auto-group by directory when subdirectories exist; flat otherwise) |
 | `setup` | not set (no pre-run command) |
 | `teardown` | not set (no post-run command) |
+| `defaultTimeoutMsec` | `30000` (30 seconds) |
 | `checksDir` (adapter) | `""` (empty — must be set explicitly when using shell check scripts) |
 
 An empty config `{}` is valid — all fields are defaulted.

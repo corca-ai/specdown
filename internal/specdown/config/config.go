@@ -10,16 +10,21 @@ import (
 	"strings"
 )
 
+// DefaultTimeoutMsec is the global default timeout applied to adapter requests
+// when no per-document frontmatter timeout is set. 30 seconds.
+const DefaultTimeoutMsec = 30_000
+
 type Config struct {
-	Entry          string          `json:"entry"`
-	Adapters       []AdapterConfig `json:"adapters"`
-	Models         ModelConfig     `json:"models"`
-	Reporters      []Reporter      `json:"reporters"`
-	IgnorePrefixes []string        `json:"ignorePrefixes,omitempty"`
-	Trace          *TraceConfig    `json:"trace,omitempty"`
-	TOC            []TOCEntry      `json:"toc,omitempty"`
-	Setup          string          `json:"setup,omitempty"`
-	Teardown       string          `json:"teardown,omitempty"`
+	Entry             string          `json:"entry"`
+	Adapters          []AdapterConfig `json:"adapters"`
+	Models            ModelConfig     `json:"models"`
+	Reporters         []Reporter      `json:"reporters"`
+	IgnorePrefixes    []string        `json:"ignorePrefixes,omitempty"`
+	Trace             *TraceConfig    `json:"trace,omitempty"`
+	TOC               []TOCEntry      `json:"toc,omitempty"`
+	Setup             string          `json:"setup,omitempty"`
+	Teardown          string          `json:"teardown,omitempty"`
+	DefaultTimeoutPtr *int            `json:"defaultTimeoutMsec,omitempty"`
 }
 
 // TOCEntry represents a single item in the toc config array.
@@ -282,6 +287,15 @@ func parseMultiplicity(s string) (Multiplicity, error) {
 	default:
 		return Multiplicity{}, fmt.Errorf("unsupported multiplicity %q (expected 1, 0..1, 1..*, or 0..*)", s)
 	}
+}
+
+// EffectiveDefaultTimeout returns the configured default timeout, or
+// DefaultTimeoutMsec (30s) when not explicitly set in the config file.
+func (c Config) EffectiveDefaultTimeout() int {
+	if c.DefaultTimeoutPtr != nil {
+		return *c.DefaultTimeoutPtr
+	}
+	return DefaultTimeoutMsec
 }
 
 func (c Config) HTMLReportOutFile() string {

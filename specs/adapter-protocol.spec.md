@@ -281,9 +281,13 @@ human-readable row identifier; if omitted, specdown uses the default
 
 ## Timeouts
 
-When a spec document declares a `timeout` in its frontmatter, each
-request to the adapter is subject to that time limit. If the adapter
-does not respond within the timeout:
+Every adapter request is subject to a time limit. The timeout is
+determined by (in priority order):
+
+1. Per-document `timeout` in frontmatter (milliseconds)
+2. `defaultTimeoutMsec` in `specdown.json` (default: `30000`)
+
+If the adapter does not respond within the timeout:
 
 - **Exec requests**: the engine synthesizes an error response with the message `timeout after Nms`
 - **Assert requests**: the engine synthesizes a failed response with the message `timeout after Nms`

@@ -297,7 +297,7 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 				Status:    core.StatusPassed,
 			},
 		},
-	}, RunOptions{})
+	}, RunOptions{}, config.DefaultTimeoutMsec)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

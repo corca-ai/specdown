@@ -65,7 +65,8 @@ func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts R
 		return core.Report{}, err
 	}
 	host := adapterhost.Host{BaseDir: baseDir}
-	report, err := runWithDocs(title, docs, cfg, host, modelRunner, opts)
+	defaultTimeout := cfg.EffectiveDefaultTimeout()
+	report, err := runWithDocs(title, docs, cfg, host, modelRunner, opts, defaultTimeout)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -113,7 +114,7 @@ func DumpModels(baseDir string, cfg config.Config, dumper ModelDumper) ([]string
 	return paths, nil
 }
 
-func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
+func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions, defaultTimeout int) (core.Report, error) {
 	plan, err := core.CompileDocuments(docs)
 	if err != nil {
 		return core.Report{}, err
@@ -139,7 +140,7 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 		jobs = 1
 	}
 
-	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner)
+	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner, defaultTimeout)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -157,11 +158,11 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	}, nil
 }
 
-func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner) ([]core.DocumentResult, error) {
+func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
 	if jobs == 1 {
 		for i := range documents {
-			result, err := runDocument(documents[i], registry, host, alloyRunner)
+			result, err := runDocument(documents[i], registry, host, alloyRunner, defaultTimeout)
 			if err != nil {
 				return nil, err
 			}
@@ -179,7 +180,7 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := runDocument(dp, registry, host, alloyRunner)
+			result, err := runDocument(dp, registry, host, alloyRunner, defaultTimeout)
 			results[i] = result
 			errs[i] = err
 		}(i, documents[i])
@@ -329,7 +330,7 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 	}
 }
 
-func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner) (core.DocumentResult, error) {
+func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int) (core.DocumentResult, error) {
 	if len(plan.Cases) == 0 {
 		return core.DocumentResult{
 			Document: plan.Document,
@@ -339,7 +340,7 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 
 	sm := newSessionManager(host)
 
-	cases, err := runDocumentCases(plan, registry, sm)
+	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout)
 	if err != nil {
 		if closeErr := sm.CloseAll(); closeErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: closing adapter sessions: %v\n", closeErr)
@@ -394,12 +395,16 @@ func mergeAlloyResults(cases, alloyResults []core.CaseResult) []core.CaseResult 
 	return cases
 }
 
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager) ([]core.CaseResult, error) {
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int) ([]core.CaseResult, error) {
+	timeout := plan.Document.Frontmatter.Timeout
+	if timeout == 0 {
+		timeout = defaultTimeout
+	}
 	ctx := &caseRunContext{
 		registry:  registry,
 		sessions:  sm,
 		bindings:  newBindingsManager(),
-		timeoutMs: plan.Document.Frontmatter.Timeout,
+		timeoutMs: timeout,
 		hooks:     plan.Hooks,
 		results:   make([]core.CaseResult, 0, len(plan.Cases)),
 	}

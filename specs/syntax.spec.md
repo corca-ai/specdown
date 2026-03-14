@@ -460,10 +460,10 @@ An optional YAML frontmatter can be placed at the top of a spec file.
 
 | Key | Description |
 |-----|-------------|
-| `timeout` | Per-case execution time limit in milliseconds. 0 means unlimited |
+| `timeout` | Per-case execution time limit in milliseconds. Overrides `defaultTimeoutMsec` from config |
 | `type` | Document type for [traceability](traceability.spec.md) (e.g. `spec`, `goal`, `feature`) |
 
-If frontmatter is absent, defaults (unlimited) apply.
+If frontmatter is absent, the global `defaultTimeoutMsec` from `specdown.json` applies (default: 30 seconds).
 
 A spec with a timeout must still pass when the adapter responds quickly.
 

@@ -142,6 +142,36 @@ func TestDefault(t *testing.T) {
 	testutil.Equal(t, cfg.JSONReportOutFile(), "specs/report.json")
 }
 
+// --- EffectiveDefaultTimeout ---
+
+func TestEffectiveDefaultTimeoutUsesConstantWhenNotSet(t *testing.T) {
+	cfg := Config{}
+	testutil.Equal(t, cfg.EffectiveDefaultTimeout(), DefaultTimeoutMsec)
+}
+
+func TestEffectiveDefaultTimeoutUsesConfigValue(t *testing.T) {
+	v := 60000
+	cfg := Config{DefaultTimeoutPtr: &v}
+	testutil.Equal(t, cfg.EffectiveDefaultTimeout(), 60000)
+}
+
+func TestEffectiveDefaultTimeoutAllowsZero(t *testing.T) {
+	v := 0
+	cfg := Config{DefaultTimeoutPtr: &v}
+	testutil.Equal(t, cfg.EffectiveDefaultTimeout(), 0)
+}
+
+func TestLoadConfigWithDefaultTimeoutMsec(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "specdown.json")
+	body := `{"defaultTimeoutMsec": 90000}`
+	testutil.NilErr(t, os.WriteFile(configPath, []byte(body), 0o644))
+
+	cfg, _, err := Load(configPath)
+	testutil.NilErr(t, err)
+	testutil.Equal(t, cfg.EffectiveDefaultTimeout(), 90000)
+}
+
 // --- HTMLReportOutFile / JSONReportOutFile ---
 
 func TestJSONReportOutFile(t *testing.T) {
