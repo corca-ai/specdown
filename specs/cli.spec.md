@@ -122,7 +122,7 @@ A `type:` prefix selects cases by kind.
 | Filter | Matches |
 |--------|---------|
 | `type:code` | Code blocks (`run:*`) |
-| `type:table` | Check table rows and inline checks |
+| `type:table` | Check table rows |
 | `type:expect` | Inline expect assertions |
 | `type:alloy` | Alloy model checks only |
 
@@ -147,8 +147,8 @@ A `check:` prefix matches check table rows by check name.
 
 ### Combining Filters
 
-Multiple `-filter` flags narrow the selection. Each flag is additive
-within the same prefix but the result is the union of all filters.
+A single `-filter` flag selects cases. Only one filter can be active
+at a time — if `-filter` is passed multiple times, the last value wins.
 
 ```run:shell
 # A filter that matches nothing produces zero cases

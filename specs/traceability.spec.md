@@ -187,6 +187,7 @@ specdown validates every trace link against the configured edge definitions.
 |-------|-------|
 | Unknown edge name | Link uses an edge name not declared in config |
 | Untyped source | Source document has no `type` in frontmatter |
+| Untyped target | Target document has no `type` in frontmatter |
 | Type mismatch | Source type doesn't match the edge's `from` type |
 | Dangling reference | Target file doesn't exist |
 | Self-loop | Document links to itself |

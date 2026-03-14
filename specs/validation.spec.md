@@ -14,13 +14,18 @@ before any adapter is invoked.
 |------|-----------|
 | Unclosed code block | Fenced block without closing `` ``` `` |
 | Check without table | `> check:name` with no params and no table following |
-| Hook without code block | `> setup` or `> teardown` not followed by an executable block |
+| Hook without code block | `> setup` or `> teardown` not followed by a code block |
+| Hook without executable block | Hook followed by a non-executable code block (e.g. ` ```json`) |
 | Table needs columns | Header row must define at least one column |
 | Table needs rows | At least one data row must follow the header |
+| Table row/column mismatch | Data row has a different number of cells than the header |
 | Block needs target | `run:` without a target name (e.g. `run:shell`) |
+| Invalid capture syntax | Capture name doesn't match `$VarName` pattern |
 | No duplicate captures | `-> $a, $a` on a single block |
 | No capture on `!fail` | `!fail` and `-> $var` are mutually exclusive |
 | Alloy ref exists | `alloy:ref` must reference a model defined in the same document |
+| Alloy module redeclaration | A model fragment redeclares `module` after its first fragment |
+| Invalid alloy ref syntax | Malformed `alloy:ref` directive |
 | Variables resolved | Every `${name}` in blocks and prose must trace to a prior capture |
 
 ## Example: Validation Error

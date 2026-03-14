@@ -261,7 +261,7 @@ When fields are omitted from a config file, sensible defaults are applied:
 | `toc` | not set (auto-group by directory when subdirectories exist; flat otherwise) |
 | `setup` | not set (no pre-run command) |
 | `teardown` | not set (no post-run command) |
-| `checksDir` (adapter) | `"./checks"` (directory for shell check scripts) |
+| `checksDir` (adapter) | `""` (empty — must be set explicitly when using shell check scripts) |
 
 An empty config `{}` is valid — all fields are defaulted.
 

@@ -126,7 +126,8 @@ Capabilities are declared in config, not negotiated at runtime.
 
 ## Built-in Shell Adapter
 
-The shell adapter is the only built-in adapter. It handles `run:shell`
+The shell adapter is one of two built-in adapters (the other is the
+[jq check](config.spec.md#built-in-jq-check)). It handles `run:shell`
 blocks without any adapter configuration.
 
 ### Execution Model
@@ -277,6 +278,22 @@ human-readable row identifier; if omitted, specdown uses the default
   "label": "list: empty middle splits"
 }
 ```
+
+## Timeouts
+
+When a spec document declares a `timeout` in its frontmatter, each
+request to the adapter is subject to that time limit. If the adapter
+does not respond within the timeout:
+
+- **Exec requests**: the engine synthesizes an error response with the message `timeout after Nms`
+- **Assert requests**: the engine synthesizes a failed response with the message `timeout after Nms`
+
+The adapter process is not killed — only the pending request is abandoned.
+
+## Response Size Limit
+
+Adapter responses are limited to 1 MB per line. If a single response
+line exceeds this limit, the engine treats it as a read error.
 
 ## Error Handling
 

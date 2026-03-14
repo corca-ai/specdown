@@ -20,6 +20,8 @@ Executable blocks are fenced code blocks whose info string starts with a recogni
 | Prefix | Meaning |
 |--------|---------|
 | `run:<target>` | Executable block |
+| `alloy:model(<name>)` | Alloy model definition (see [Alloy](alloy.spec.md)) |
+| `alloy:ref(<model>#<assertion>)` | Alloy model reference (see [Alloy](alloy.spec.md)) |
 
 The `<target>` is defined by the adapter, not the core.
 Blocks whose content starts with `$ ` lines are auto-detected as doctest-style
@@ -90,7 +92,9 @@ test 1 -eq 1
 
 ## Variable Capture
 
-A block can capture its output into a variable with `-> $varName`.
+A block can capture its output into one or more variables with `-> $varName`.
+Multiple captures use comma-separated names: `-> $var1, $var2`.
+Each output line is bound to the corresponding capture name in order.
 
 > check:block-kind
 | info | kind | target |
@@ -457,6 +461,7 @@ An optional YAML frontmatter can be placed at the top of a spec file.
 | Key | Description |
 |-----|-------------|
 | `timeout` | Per-case execution time limit in milliseconds. 0 means unlimited |
+| `type` | Document type for [traceability](traceability.spec.md) (e.g. `spec`, `goal`, `feature`) |
 
 If frontmatter is absent, defaults (unlimited) apply.
 
