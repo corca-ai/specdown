@@ -64,6 +64,16 @@ Reports are generated in `specs/report/`.
 cd examples/pocket-board && PATH="$(pwd)/../../bin:$PATH" ../../bin/specdown run
 ```
 
+### Pre-commit hook
+
+The repository includes a pre-commit hook in `.githooks/`. Enable it once after cloning:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook runs tests, lint, build, selfspecs, and example specs.
+
 ## Lint
 
 The project uses [golangci-lint](https://golangci-lint.run/) with the configuration in `.golangci.yml`.
