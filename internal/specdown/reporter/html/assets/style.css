@@ -251,8 +251,6 @@ main {
 .pill.fail { color: var(--fail-ink); }
 .pill.xfail { color: var(--xfail-ink); }
 
-.meta-date { color: var(--muted); margin-left: auto; }
-
 /* ── Spec articles ── */
 .spec + .spec { padding-top: 2rem; }
 

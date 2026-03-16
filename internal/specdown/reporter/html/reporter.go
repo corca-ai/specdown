@@ -8,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
@@ -130,7 +129,7 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) ([
 	var allWarnings []string
 	for i := range report.Results {
 		docType := report.Results[i].Document.Frontmatter.Type
-		meta := buildDocMeta(report.Results[i], report.GeneratedAt, docType)
+		meta := buildDocMeta(report.Results[i], docType)
 		if i == 0 {
 			meta = buildMeta(report, docType)
 		}
@@ -271,7 +270,7 @@ func writeTypeBadge(b *strings.Builder, docType string) {
 		hue, template.HTMLEscapeString(docType))
 }
 
-func buildDocMeta(result core.DocumentResult, generatedAt time.Time, docType string) string {
+func buildDocMeta(result core.DocumentResult, docType string) string {
 	passed := 0
 	failed := 0
 	xfail := 0
@@ -289,8 +288,6 @@ func buildDocMeta(result core.DocumentResult, generatedAt time.Time, docType str
 	b.WriteString(`<p class="content-meta">`)
 	writeTypeBadge(&b, docType)
 	writePills(&b, passed, failed, xfail)
-	fmt.Fprintf(&b, `<span class="meta-date">%s</span>`,
-		template.HTMLEscapeString(generatedAt.Format("2 Jan 2006 15:04")))
 	b.WriteString(`</p>`)
 	return b.String()
 }
@@ -303,8 +300,6 @@ func buildMeta(report core.Report, docType string) string {
 	b.WriteString(`<p class="content-meta">`)
 	writeTypeBadge(&b, docType)
 	writePills(&b, passed, failed, xfail)
-	fmt.Fprintf(&b, `<span class="meta-date">%s</span>`,
-		template.HTMLEscapeString(report.GeneratedAt.Format("2 Jan 2006 15:04")))
 	b.WriteString(`</p>`)
 	return b.String()
 }
