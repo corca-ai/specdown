@@ -5,6 +5,8 @@ One document is the spec, the test, and the report.
 
 This page is itself a spec — it was executed by `specdown run` to produce the report you are reading. Separate docs and tests always drift apart. specdown weaves natural language and executable acceptance tests into one Markdown file, and adapters connect those tests to real code — so prose, verification, and implementation stay linked by construction.
 
+Inspired by Ward Cunningham's [FIT](https://en.wikipedia.org/wiki/Framework_for_integrated_test) and Donald Knuth's [Literate Programming](https://en.wikipedia.org/wiki/Literate_programming).
+
 ## See It Work
 
 A passing block renders with a green left border:
