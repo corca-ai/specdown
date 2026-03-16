@@ -1,0 +1,75 @@
+/* Minimal subset of report styles for notch testing */
+:root {
+  color-scheme: light;
+  --bg: #f3f3f0;
+  --paper: #fcfcfa;
+  --ink: #1f1f1b;
+  --muted: #66665f;
+  --rule: #d6d6cf;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+html { background: var(--bg); }
+body {
+  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+main {
+  max-width: 54rem;
+  margin-inline: auto;
+  padding:
+    calc(2.75rem + var(--safe-top))
+    calc(1.5rem + var(--safe-right))
+    calc(4rem + var(--safe-bottom))
+    calc(1.5rem + var(--safe-left));
+}
+
+h2 {
+  font-family: serif;
+  font-size: 2.5rem;
+  line-height: 1.15;
+  padding: 0.5em 0 0.35em;
+  padding-top: calc(0.5em + var(--safe-top));
+  margin-top: 0.75em;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+  z-index: 4;
+}
+
+h3 {
+  font-family: serif;
+  font-size: 1.85rem;
+  line-height: 1.15;
+  padding: 0.5em 0 0.35em;
+  margin-top: 0.75em;
+  position: sticky;
+  top: calc(5rem + 1px + var(--safe-top));
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+  z-index: 3;
+}
+
+p { margin: 1.25rem 0; line-height: 1.9; }
+
+.label {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #222;
+  color: #fff;
+  text-align: center;
+  padding: 0.75rem;
+  padding-bottom: calc(0.75rem + var(--safe-bottom));
+  font-size: 0.85rem;
+  font-weight: 600;
+  z-index: 100;
+}
