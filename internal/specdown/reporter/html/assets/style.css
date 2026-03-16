@@ -824,6 +824,10 @@ code, pre, kbd, samp {
     margin-bottom: 3rem;
   }
 
+  .spec-body :is(h2, h3, h4, h5, h6) {
+    position: static;
+  }
+
   .content-header { order: 4; }
   .content-body { order: 5; }
 }

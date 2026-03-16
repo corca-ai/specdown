@@ -46,7 +46,6 @@ jobs:
         run: |
           cp -r specs/report _site
           cp specs/report.json _site/report.json
-          cp -r notch-test _site/notch-test 2>/dev/null || true
 
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
