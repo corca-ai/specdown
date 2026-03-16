@@ -782,21 +782,6 @@ code, pre, kbd, samp {
   padding-left: 1.5rem;
 }
 
-/* ── Notch backdrop (mobile) ── */
-@supports (padding-top: env(safe-area-inset-top)) {
-  body::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: var(--safe-top);
-    background: var(--bg);
-    z-index: 10;
-    pointer-events: none;
-  }
-}
-
 /* ── Mobile layout ── */
 .mobile-title { display: none; }
 
@@ -819,8 +804,6 @@ code, pre, kbd, samp {
     order: 2;
     margin-top: 1.5rem;
     margin-bottom: 1rem;
-    max-height: none;
-    overflow-y: visible;
   }
 
   .toc-inner { padding-left: 0; padding-bottom: 1rem; }
