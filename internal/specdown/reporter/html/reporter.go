@@ -339,7 +339,6 @@ var pageTemplate = template.Must(template.New("page").Funcs(template.FuncMap{
   <link rel="stylesheet" href="{{ .AssetRoot }}/style.css">
 </head>
 <body>
-  <div class="notch-cover" aria-hidden="true"></div>
   <main>
     <div class="layout">
       <aside class="toc" aria-label="Table of contents">
