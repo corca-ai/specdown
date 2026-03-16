@@ -21,7 +21,7 @@ $ echo actual
 expected
 ```
 
-Green border = pass. Red border = expected failure. That's the whole idea: write prose, embed executable examples, get a verified report.
+Green border = pass. Red border = expected failure. That's the whole idea: write prose, embed executable examples, get a verified report. See the [source Markdown](https://raw.githubusercontent.com/corca-ai/specdown/refs/heads/main/specs/index.spec.md) that produced this page.
 
 ## Chapters
 
