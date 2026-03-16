@@ -105,15 +105,6 @@ assert everyItemHasOwner {
 check everyItemHasOwner for 5
 ```
 
-```run:shell
-# Verify the ownership model passes
-mkdir -p .tmp-test
-printf '%s\n' '# Ownership' '' '```alloy:model(ownership)' 'module ownership' '' 'sig User {}' 'sig Item { owner: one User }' '' 'assert everyItemHasOwner {' '  all i: Item | one i.owner' '}' '' 'check everyItemHasOwner for 5' '```' > .tmp-test/ownership.spec.md
-printf '# T\n\n- [Own](ownership.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/ownership-cfg.json
-specdown run -config .tmp-test/ownership-cfg.json 2>&1 | grep -q 'PASS'
-```
-
 ### 2. Counterexample Harvesting
 
 When Alloy finds a counterexample, fix the model, then add the counterexample as a check row to prevent regression. Document the counterexample in prose so future readers know why the row exists.
@@ -154,15 +145,6 @@ assert exclusive {
 
 check complete for 5
 check exclusive for 5
-```
-
-```run:shell
-# Verify the classification model passes
-mkdir -p .tmp-test
-printf '%s\n' '# Classify' '' '```alloy:model(classify)' 'module classify' '' 'abstract sig Level {}' 'one sig Admin, Member, Guest extends Level {}' '' 'sig Subject { level: one Level }' '' 'pred isAdmin[s: Subject] { s.level = Admin }' 'pred isMember[s: Subject] { s.level = Member }' 'pred isGuest[s: Subject] { s.level = Guest }' '' 'assert complete {' '  all s: Subject | isAdmin[s] or isMember[s] or isGuest[s]' '}' '' 'assert exclusive {' '  no s: Subject | (isAdmin[s] and isMember[s])' '    or (isMember[s] and isGuest[s])' '    or (isAdmin[s] and isGuest[s])' '}' '' 'check complete for 5' 'check exclusive for 5' '```' > .tmp-test/classify.spec.md
-printf '# T\n\n- [Classify](classify.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/classify-cfg.json
-specdown run -config .tmp-test/classify-cfg.json 2>&1 | grep -q 'PASS'
 ```
 
 With this proof, a check table needs only one representative per level

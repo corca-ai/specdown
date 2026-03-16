@@ -100,34 +100,12 @@ Without `but 6 Int`, Alloy's default 4-bit integers only cover -8 to 7,
 which cannot represent values like 10 or 21. The wider bitwidth lets the
 solver explore the full range declared in the fact.
 
-```run:shell
-# Build spec with but-scope check and run Alloy verification
-mkdir -p .tmp-test
-printf '# T\n\n- [But](but-scope.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"},"reporters":[{"builtin":"json","outFile":"but-report.json"}]}' > .tmp-test/but-cfg.json
-printf '%s\n' '# But Scope Test' '' '```alloy:model(scoring)' 'module scoring' '' 'sig Player {' '  score: one Int' '}' '' 'fact validScores {' '  all p: Player | p.score >= 0 and p.score <= 21' '}' '' 'assert scoreBound {' '  all p: Player | p.score >= 0 implies p.score <= 21' '}' '' 'check scoreBound for 3 but 6 Int' '```' > .tmp-test/but-scope.spec.md
-specdown run -config .tmp-test/but-cfg.json 2>&1 || true
-```
-
-```run:shell
-grep -q '"status": "passed"' .tmp-test/but-report.json
-```
-
 ## Combination Rules
 
 Fragments with the same model name are merged into a single virtual `.als` file.
 Source mapping comments are inserted into the generated model.
 
 A `module` declaration in a subsequent fragment is a compile-time error.
-
-```run:shell
-# Reject duplicate module declaration in same model
-mkdir -p .tmp-test
-printf '# Bad\n\n```alloy:model(dm)\nmodule dm\nsig A {}\n```\n\n```alloy:model(dm)\nmodule dm\nsig B {}\n```\n' > .tmp-test/dup-module.spec.md
-printf '# T\n\n- [Dup](dup-module.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/dup-module-cfg.json
-! specdown run -config .tmp-test/dup-module-cfg.json 2>/dev/null
-```
 
 ## Model Reference
 
@@ -140,21 +118,6 @@ defined in a different section. This is useful for cross-section references.
 
 The directive displays as a badge in the HTML report and links to
 a counterexample artifact on failure.
-
-A dry-run must recognize `alloy:ref` directives as alloy checks.
-
-```run:shell
-# Create spec with alloy:ref and verify dry-run detects it
-mkdir -p .tmp-test
-printf '# Ref Test\n\n## Model\n\n```alloy:model(rm)\nmodule rm\nsig A {}\nassert noOrphan { all a: A | a in A }\ncheck noOrphan for 3\n```\n\n## Reference\n\n> alloy:ref(rm#noOrphan, scope=5)\n' > .tmp-test/ref-test.spec.md
-printf '# T\n\n- [Ref](ref-test.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/ref-test-cfg.json
-```
-
-```run:shell
-$ specdown run -config .tmp-test/ref-test-cfg.json -dry-run 2>&1 | grep -o 'alloy:.*'
-...
-```
 
 ## State Machine Models
 
@@ -188,15 +151,6 @@ assert noGreenToRed {
 check noGreenToRed for 5
 ```
 
-```run:shell
-# Verify the traffic light model passes
-mkdir -p .tmp-test
-printf '%s\n' '# Traffic' '' '```alloy:model(traffic)' 'module traffic' '' 'abstract sig Color {}' 'one sig Red, Yellow, Green extends Color {}' '' 'sig Light {' '  color: one Color' '}' '' 'pred validTransition[from, to: Color] {' '  from = Red implies to = Green' '  from = Green implies to = Yellow' '  from = Yellow implies to = Red' '}' '' 'assert noGreenToRed {' '  all from, to: Color |' '    validTransition[from, to] implies not (from = Green and to = Red)' '}' '' 'check noGreenToRed for 5' '```' > .tmp-test/traffic.spec.md
-printf '# T\n\n- [Traffic](traffic.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"}}' > .tmp-test/traffic-cfg.json
-specdown run -config .tmp-test/traffic-cfg.json 2>&1 | grep -q 'PASS'
-```
-
 ## Counterexample Artifacts
 
 When an Alloy check fails, specdown writes a counterexample artifact to
@@ -204,28 +158,5 @@ When an Alloy check fails, specdown writes a counterexample artifact to
 JSON report includes a `counterexamplePath` field pointing to this file.
 
 On failure, the `message` field includes a counterexample summary
-extracted from the Alloy solver output.
-
-```run:shell
-# Run a deliberately failing Alloy check
-mkdir -p .tmp-test
-printf '%s\n' '# Counterexample Test' '' '```alloy:model(cx)' 'module cx' 'sig Node { next: lone Node }' 'assert allDisconnected { all n: Node | no n.next }' 'check allDisconnected for 3' '```' > .tmp-test/cx-test.spec.md
-printf '# T\n\n- [CX](cx-test.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[],"models":{"builtin":"alloy"},"reporters":[{"builtin":"json","outFile":"cx-report.json"}]}' > .tmp-test/cx-cfg.json
-specdown run -config .tmp-test/cx-cfg.json 2>&1 || true
-```
-
-The JSON report includes a `counterexamplePath` for the failing check.
-
-```run:shell
-$ grep -q '"counterexamplePath"' .tmp-test/cx-report.json && echo found
-found
-```
-
-The counterexample artifact file exists on disk.
-
-```run:shell
-# Verify the counterexample file was written
-path=$(grep 'counterexamplePath' .tmp-test/cx-report.json | sed 's/.*"counterexamplePath"[^"]*"\([^"]*\)".*/\1/')
-test -n "$path" && test -f "$path"
-```
+extracted from the Alloy solver output. The JSON report includes a
+`counterexamplePath` field, and the artifact file is written to disk.

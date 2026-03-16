@@ -53,26 +53,6 @@ $ test -f .tmp-test/init-overview/specs/example.spec.md && echo yes
 yes
 ```
 
-### What a spec looks like
-
-This document is itself a spec — the blocks below are executed when
-you run `specdown run`, and their results appear in the
-[explains::HTML report](report.spec.md).
-A green left border means the block passed:
-
-```run:shell
-$ echo hello
-hello
-```
-
-This block intentionally mismatches. It appears red and counts as a failure,
-but `!fail` prevents it from causing a non-zero exit code:
-
-```run:shell !fail
-$ echo hello
-goodbye
-```
-
 ### Run specs
 
 ```sh
