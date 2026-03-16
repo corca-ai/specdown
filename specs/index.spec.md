@@ -3,7 +3,7 @@
 A Markdown-first executable specification system.
 One document is the spec, the test, and the report.
 
-This page is itself a spec — it was executed by `specdown run` to produce the report you are reading. The blocks below are live results, not screenshots.
+This page is itself a spec — it was executed by `specdown run` to produce the report you are reading. Separate docs and tests always drift apart. specdown weaves natural language and executable acceptance tests into one Markdown file, and adapters connect those tests to real code — so prose, verification, and implementation stay linked by construction.
 
 ## See It Work
 
@@ -22,10 +22,6 @@ expected
 ```
 
 Green border = pass. Red border = expected failure. That's the whole idea: write prose, embed executable examples, get a verified report.
-
-## Why
-
-Separated docs and tests drift apart. specdown makes a single Markdown file serve as prose, executable tests, and optional formal models — so what you read is what you run.
 
 ## Chapters
 
