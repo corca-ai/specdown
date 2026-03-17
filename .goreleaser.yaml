@@ -49,7 +49,31 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  use: github-native
+  sort: asc
+  groups:
+    - title: Breaking Changes
+      regexp: '(?i)BREAKING'
+      order: 0
+    - title: Added
+      regexp: '^Add '
+      order: 1
+    - title: Fixed
+      regexp: '^Fix '
+      order: 2
+    - title: Changed
+      regexp: '^(Replace|Simplify|Consolidate|Unify|Restructure|Use|Move|Rename|Refactor)'
+      order: 3
+    - title: Removed
+      regexp: '^Remove '
+      order: 4
+    - title: Documentation
+      regexp: '^(Improve|Rewrite) .*(spec|doc|guide|index|readme)'
+      order: 5
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^Merge '
 
 release:
   github:

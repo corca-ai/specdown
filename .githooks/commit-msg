@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -e
+
+msg=$(head -1 "$1")
+
+# Merge commits and reverts are always OK
+if [[ "$msg" =~ ^Merge\  ]] || [[ "$msg" =~ ^Revert\  ]]; then
+  exit 0
+fi
+
+# Must start with a capitalized imperative verb (allow hyphenated compounds like Multi-page)
+if ! [[ "$msg" =~ ^[A-Z][a-z]+(-[a-z]+)*[\ :]\ ? ]]; then
+  echo "error: commit message must start with a capitalized verb (e.g. 'Add', 'Fix')"
+  echo "  got: $msg"
+  exit 1
+fi
+
+# Reject past tense (-ed) and gerund (-ing) first words
+first=$(echo "$msg" | awk '{print $1}')
+if [[ "$first" =~ ed$ ]] || [[ "$first" =~ ing$ ]]; then
+  echo "error: use imperative mood, not past tense or gerund"
+  echo "  got: '$first' — try '${first%ed}' or '${first%ing}' instead"
+  exit 1
+fi
+
+# Reject known noise
+if [[ "$first" =~ ^(Wip|Tmp|Temp|Fixup|Squash)$ ]]; then
+  echo "error: commit message looks like a draft — write a real message"
+  exit 1
+fi
+
+# Minimum length (verb + something)
+if [ ${#msg} -lt 10 ]; then
+  echo "error: commit message too short — be descriptive"
+  echo "  got: $msg"
+  exit 1
+fi
