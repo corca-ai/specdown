@@ -488,6 +488,9 @@ func installSkillsCmd(args []string) error {
 		{"best-practices.md", specdown.SkillBestPractices},
 		{"validation.md", specdown.SkillValidation},
 		{"traceability.md", specdown.SkillTraceability},
+		{"workflow-new-project.md", specdown.SkillWorkflowNewProject},
+		{"workflow-adopt.md", specdown.SkillWorkflowAdopt},
+		{"workflow-evolve.md", specdown.SkillWorkflowEvolve},
 	}
 	for _, f := range files {
 		p := filepath.Join(dir, f.name)

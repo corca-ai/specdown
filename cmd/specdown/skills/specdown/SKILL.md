@@ -13,19 +13,23 @@ Write, run, and fix executable specifications.
 - Config: !`d="$PWD"; while [ "$d" != "/" ]; do if [ -f "$d/specdown.json" ]; then echo "path: $d/specdown.json"; cat "$d/specdown.json"; break; fi; d="$(dirname "$d")"; done; if [ "$d" = "/" ]; then echo "no specdown.json found"; fi`
 - Specs: !`specdown run -dry-run 2>&1 | head -50`
 
-## Authoring Specs
+## Workflows
 
-Before writing, read the reference specs below — they are the authoritative source of truth for specdown's syntax and behavior. Start with **Overview** and **Spec Syntax** for the basics.
+Identify the user's scenario from the Project Context above, then read the matching workflow guide.
 
-1. Read the project's `specdown.json` to understand the entry file, adapters, and directory layout.
-2. Create the `.spec.md` file in the appropriate directory.
-3. Add it to the entry/index file: `- [Title](path/to/new.spec.md)`.
-4. Structure: H1 title, prose context explaining the feature, then executable blocks and check tables that verify the implementation.
-5. Run `specdown run` to verify.
+| Scenario | How to detect | Guide |
+|----------|---------------|-------|
+| **New project** | No `specdown.json` found | [New Project](${CLAUDE_SKILL_DIR}/workflow-new-project.md) |
+| **Adopting specdown** | `specdown.json` exists but few or no `.spec.md` files | [Adopt](${CLAUDE_SKILL_DIR}/workflow-adopt.md) |
+| **Evolving specs** | Specs already exist; user wants to add, change, or strengthen them | [Evolve](${CLAUDE_SKILL_DIR}/workflow-evolve.md) |
 
-Do NOT modify the spec unless the spec itself is wrong.
+Key principles across all workflows:
+- Do NOT modify the spec unless the spec itself is wrong — fix the implementation instead.
+- One spec file per feature or bounded concern.
+- Prefer check tables over `run:shell` for repetitive assertions.
+- Start with prose and design rationale, then add executable verification.
 
-### Choosing the right verification approach
+## Choosing the right verification approach
 
 Before reaching for `run:shell`, check whether the project already has adapter-defined checks (`specdown.json` → `adapters[].checks`). Use the highest-level tool that fits:
 

@@ -183,6 +183,9 @@ report.md
 syntax.md
 traceability.md
 validation.md
+workflow-adopt.md
+workflow-evolve.md
+workflow-new-project.md
 ```
 
 Running the command again without `--overwrite` is rejected:
