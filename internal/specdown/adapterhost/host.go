@@ -227,7 +227,7 @@ func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecRespon
 		case r := <-ch:
 			return r.resp, r.err
 		case <-ctx.Done():
-			return adapterprotocol.ExecResponse{ID: seqID, Error: fmt.Sprintf("timeout after %dms", timeoutMs)}, nil
+			return adapterprotocol.ExecResponse{ID: seqID, Error: fmt.Sprintf("timeout after %dms (exec: %q)", timeoutMs, truncate(source, 80))}, nil
 		}
 	}
 
@@ -282,12 +282,19 @@ func (s *Session) Assert(check string, params map[string]string, columns, cells 
 		case r := <-ch:
 			return r.resp, r.err
 		case <-ctx.Done():
-			return adapterprotocol.AssertResponse{ID: seqID, Type: "failed", Message: fmt.Sprintf("timeout after %dms", timeoutMs)}, nil
+			return adapterprotocol.AssertResponse{ID: seqID, Type: "failed", Message: fmt.Sprintf("timeout after %dms (assert: check %q)", timeoutMs, truncate(check, 80))}, nil
 		}
 	}
 
 	r := <-ch
 	return r.resp, r.err
+}
+
+func truncate(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit] + "..."
 }
 
 func (s *Session) Close() error {

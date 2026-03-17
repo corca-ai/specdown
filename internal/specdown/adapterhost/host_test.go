@@ -239,7 +239,7 @@ func TestExecTimeoutReturnsSyntheticError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
-	if resp.Error != "timeout after 100ms" {
+	if resp.Error != `timeout after 100ms (exec: "ignored")` {
 		t.Fatalf("unexpected error %q", resp.Error)
 	}
 
