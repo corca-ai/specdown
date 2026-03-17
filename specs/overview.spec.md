@@ -75,12 +75,4 @@ specdown install skills
 
 This installs the `/specdown` skill with syntax reference, adapter protocol, and best practices.
 
-## Why
-
-When documents and test code are separated, properties stated in documents may not be verified, and tests verify behavior but do not explain design intent.
-
-specdown solves this by making a single Markdown document serve as prose, executable tests, and optional [explains::formal models](alloy.spec.md).
-Alloy models let you prove that a property holds for every case within a bounded scope — not just the examples you happened to test.
-Combined in one document, prose explains intent, executable blocks confirm implementation, and Alloy models guarantee structural properties.
-
-The next chapter, [explains::Spec Syntax](syntax.spec.md), covers the full authoring surface: executable blocks, variables, check tables, and hooks.
+The next chapter, [explains::Spec Syntax](syntax.spec.md), covers the full authoring surface: shell blocks, doctest blocks, variables, check tables, and hooks.

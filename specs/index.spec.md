@@ -3,7 +3,7 @@
 A Markdown-first executable specification system.
 One document is the spec, the test, and the report.
 
-This page is itself a spec — it was executed by `specdown run` to produce the report you are reading. Separate docs and tests always drift apart. specdown weaves natural language and executable acceptance tests into one Markdown file, and adapters connect those tests to real code — so prose, verification, and implementation stay linked by construction.
+This page is itself a spec — it was executed by `specdown run` to produce the report you are reading. Separate docs and tests always drift apart: properties stated in documents go unverified, and tests confirm behavior but never explain design intent. specdown weaves natural language, executable acceptance tests, and optional [Alloy models](alloy.spec.md) into one Markdown file — prose explains intent, executable blocks confirm implementation, and formal models guarantee structural properties.
 
 Inspired by Ward Cunningham's [FIT](https://en.wikipedia.org/wiki/Framework_for_integrated_test) and Donald Knuth's [Literate Programming](https://en.wikipedia.org/wiki/Literate_programming).
 
@@ -23,14 +23,14 @@ $ echo actual
 expected
 ```
 
-Green border = pass. Red border = expected failure. That's the whole idea: write prose, embed executable examples, get a verified report. See the [source Markdown](https://raw.githubusercontent.com/corca-ai/specdown/refs/heads/main/specs/index.spec.md) that produced this page.
+Green border = pass. Red border = failure. That's the whole idea: write prose, embed executable examples, get a verified report. See the [source Markdown](https://raw.githubusercontent.com/corca-ai/specdown/refs/heads/main/specs/index.spec.md) that produced this page.
 
 ## Chapters
 
 ### Fundamentals
 
-- [Overview](overview.spec.md) — install, first spec, and why specdown exists
-- [Spec Syntax](syntax.spec.md) — executable blocks, variables, check tables, hooks
+- [Overview](overview.spec.md) — install and first spec
+- [Spec Syntax](syntax.spec.md) — shell blocks, doctest blocks, variables, check tables, hooks
 - [Configuration](config.spec.md) — `specdown.json` format and defaults
 - [CLI](cli.spec.md) — commands, flags, and filtering
 

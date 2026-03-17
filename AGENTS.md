@@ -10,7 +10,7 @@
 ## Self-Specs (source of truth)
 
 - [Overview](specs/overview.spec.md) — what specdown is and getting started
-- [Spec Syntax](specs/syntax.spec.md) — executable blocks, variables, fixtures, hooks
+- [Spec Syntax](specs/syntax.spec.md) — shell blocks, doctest blocks, variables, check tables, hooks
 - [Configuration](specs/config.spec.md) — specdown.json format
 - [CLI](specs/cli.spec.md) — commands and flags
 - [Adapter Protocol](specs/adapter-protocol.spec.md) — protocol reference and examples

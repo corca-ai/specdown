@@ -5,27 +5,18 @@ type: spec
 # Spec Syntax
 
 A spec file is plain Markdown. This document builds up the authoring surface
-from simple to complex: headings, executable blocks, variables, check tables,
-hooks, and frontmatter.
+from simple to complex: headings, shell blocks, doctest blocks, variables,
+check tables, hooks, and frontmatter.
 
 ## Headings and Prose
 
 Heading hierarchy (`#`, `##`, `###`, ...) is converted into a test suite hierarchy.
 Prose paragraphs are preserved in the HTML report but are not execution targets.
 
-## Executable Blocks
+## Shell Blocks
 
-Executable blocks are fenced code blocks whose info string starts with a recognized prefix.
-
-| Prefix | Meaning |
-|--------|---------|
-| `run:<target>` | Executable block |
-| `alloy:model(<name>)` | Alloy model definition (see [Alloy](alloy.spec.md)) |
-| `alloy:ref(<model>#<assertion>)` | Alloy model reference (see [Alloy](alloy.spec.md)) |
-
-The `<target>` is defined by the adapter, not the core.
-Blocks whose content starts with `$ ` lines are auto-detected as doctest-style
-and run each command individually with inline output comparison.
+`run:shell` fenced blocks are executable — specdown runs them and checks
+for zero exit.
 
 The parser must recognize `run` as the executable block kind.
 
@@ -42,6 +33,19 @@ so typos like `runn:shell` are caught early.
 
 To suppress warnings for specific prefixes, add `ignorePrefixes` to `specdown.json`.
 Plain info strings without a colon (e.g. `json`, `go`, `python`) never warn.
+
+Any executable block can be marked with `!fail` to indicate that failure
+is the expected outcome. When the adapter reports failure as expected,
+the case is rendered identically to a regular failure — red styling,
+failure stats, and red dot markers in the ToC all apply.
+The only difference is the exit code: a spec run exits 0
+when expected failures are the only failures present.
+If the adapter unexpectedly succeeds, the case is a real failure.
+`!fail` blocks do not support variable capture (`-> $name`).
+
+```run:shell !fail
+false
+```
 
 ## Summary Lines
 
@@ -89,6 +93,102 @@ A block without a leading comment renders normally (not collapsed):
 ```run:shell
 test 1 -eq 1
 ```
+
+## Doctest Blocks
+
+A `run:<target>` block whose content starts with `$ ` lines is auto-detected
+as doctest-style. Lines starting with `$ ` are commands; subsequent lines
+until the next `$ ` or end of block are the expected output.
+
+Commands are executed sequentially. On the first output mismatch, the block
+fails with `expected` and `actual` values for diffing. Commands without
+expected output lines are executed but only checked for exit status.
+
+```run:shell
+$ echo hello
+hello
+$ echo one two three
+one two three
+```
+
+A doctest-style block with no expected output still verifies the command succeeds.
+
+```run:shell
+$ true
+```
+
+Multi-line expected output is matched exactly.
+
+```run:shell
+$ printf 'line1\nline2\nline3'
+line1
+line2
+line3
+```
+
+Arithmetic and pipelines work as expected.
+
+```run:shell
+$ echo $((2 + 3))
+5
+$ seq 3 | tr '\n' '+' | sed 's/+$//'
+1+2+3
+```
+
+Commands that produce no output show only the prompt line.
+
+```run:shell
+$ mkdir -p /tmp/specdown-test
+$ touch /tmp/specdown-test/file.txt
+$ test -f /tmp/specdown-test/file.txt
+```
+
+### Wildcard Matching
+
+A line containing exactly `...` in the expected output matches zero or more
+lines in the actual output. There is no escape for literal `...`. This is
+useful when output contains timestamps, PIDs, temporary paths, or other
+values that change between runs.
+
+A wildcard in the middle skips variable lines:
+
+```run:shell
+$ echo hello && date && echo goodbye
+hello
+...
+goodbye
+```
+
+Multiple wildcards can appear in a single expected block:
+
+```run:shell
+$ printf 'a\nb\nc\nd\ne'
+a
+...
+c
+...
+e
+```
+
+When no `...` line is present, matching is exact (backward compatible).
+
+```run:shell !fail
+$ echo hello
+world
+```
+
+A doctest block with `!fail` intentionally shows the wrong expected output.
+The `!fail` modifier makes the mismatch count as a pass.
+On failure, passed steps render in green and the failing step renders
+in red with the expected value below.
+
+```run:shell !fail
+$ echo hello
+goodbye
+```
+
+When a case fails, remaining cases continue. Bindings from failed cases
+are discarded.
 
 ## Variable Capture
 
@@ -175,124 +275,6 @@ printf 'ok'
 ```run:shell
 test "${escapeTest}" = "ok"
 ```
-
-## Doctest Blocks
-
-A `run:<target>` block whose content starts with `$ ` lines is auto-detected
-as doctest-style. Lines starting with `$ ` are commands; subsequent lines
-until the next `$ ` or end of block are the expected output.
-
-Commands are executed sequentially. On the first output mismatch, the block
-fails with `expected` and `actual` values for diffing. Commands without
-expected output lines are executed but only checked for exit status.
-
-```run:shell
-$ echo hello
-hello
-$ echo one two three
-one two three
-```
-
-A doctest-style block with no expected output still verifies the command succeeds.
-
-```run:shell
-$ true
-```
-
-Multi-line expected output is matched exactly.
-
-```run:shell
-$ printf 'line1\nline2\nline3'
-line1
-line2
-line3
-```
-
-Arithmetic and pipelines work as expected.
-
-```run:shell
-$ echo $((2 + 3))
-5
-$ seq 3 | tr '\n' '+' | sed 's/+$//'
-1+2+3
-```
-
-Commands that produce no output show only the prompt line.
-
-```run:shell
-$ mkdir -p /tmp/specdown-test
-$ touch /tmp/specdown-test/file.txt
-$ test -f /tmp/specdown-test/file.txt
-```
-
-### Wildcard Matching
-
-A line containing exactly `...` in the expected output matches zero or more
-lines in the actual output. There is no escape for literal `...`. This is
-useful when output contains timestamps, PIDs, temporary paths, or other
-values that change between runs.
-
-A wildcard in the middle skips variable lines:
-
-```run:shell
-$ echo hello && date && echo goodbye
-hello
-...
-goodbye
-```
-
-Multiple wildcards can appear in a single expected block:
-
-```run:shell
-$ printf 'a\nb\nc\nd\ne'
-a
-...
-c
-...
-e
-```
-
-When no `...` line is present, matching is exact (backward compatible).
-
-```run:shell !fail
-$ echo hello
-world
-```
-
-## Expected Failures
-
-Any executable block can be marked with `!fail` to indicate that failure
-is the expected outcome. When the adapter reports failure as expected,
-the case is rendered identically to a regular failure — red styling,
-failure stats, and red dot markers in the ToC all apply.
-The only difference is the exit code: a spec run exits 0
-when expected failures are the only failures present.
-If the adapter unexpectedly succeeds, the case is a real failure.
-
-`!fail` blocks do not support variable capture (`-> $name`).
-
-### Failing run block with exit code
-
-A command that exits non-zero is normally a failure. With `!fail`, it passes.
-
-```run:shell !fail
-false
-```
-
-### Failing doctest-style block with output mismatch
-
-This block intentionally shows the wrong expected output.
-The `!fail` modifier makes the mismatch count as a pass.
-On failure, passed steps render in green and the failing step renders
-in red with the expected value below.
-
-```run:shell !fail
-$ echo hello
-goodbye
-```
-
-When a case fails, remaining cases continue. Bindings from failed cases
-are discarded.
 
 ## Check Tables
 
@@ -418,6 +400,18 @@ shown as a small ruby annotation above it.
 For example, a + b is `check:echo-value(value=3)`.
 
 Multiple inline elements can appear in the same paragraph.
+
+## Other Block Prefixes
+
+The target in `run:<target>` names an [adapter](adapter-protocol.spec.md).
+The built-in shell adapter works with no configuration; custom adapters
+are registered in [`specdown.json`](config.spec.md).
+
+| Prefix | Meaning |
+|--------|---------|
+| `run:<target>` | Executable block dispatched to an adapter |
+| `alloy:model(<name>)` | Alloy model definition (see [Alloy](alloy.spec.md)) |
+| `alloy:ref(<model>#<assertion>)` | Alloy model reference (see [Alloy](alloy.spec.md)) |
 
 ## Setup and Teardown Hooks
 
