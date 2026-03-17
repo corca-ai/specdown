@@ -206,7 +206,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 	if report.Summary.CasesFailed != 2 {
 		t.Fatalf("unexpected summary %+v", report.Summary)
 	}
-	if got := report.Results[1].Cases[1].Message; got != `missing runtime binding for "boardName"` {
+	if got := report.Results[1].Cases[1].Message; got != `variable $boardName is not defined; no bindings are available in this scope` {
 		t.Fatalf("unexpected message %q", got)
 	}
 }

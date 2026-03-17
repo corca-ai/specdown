@@ -505,7 +505,7 @@ func installSkillsCmd(args []string) error {
 
 func initProject() error {
 	if _, err := os.Stat("specdown.json"); err == nil {
-		return fmt.Errorf("specdown.json already exists")
+		return fmt.Errorf("specdown.json already exists\nhint: to start fresh, remove specdown.json and the specs/ directory first")
 	}
 
 	if err := os.MkdirAll("specs", 0o755); err != nil {

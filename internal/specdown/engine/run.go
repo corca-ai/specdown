@@ -315,14 +315,14 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 		desc := specCase.Code.Block.Descriptor()
 		entry, ok := r.blocks[desc]
 		if !ok {
-			return adapterEntry{}, fmt.Errorf("no adapter supports block %q in %s", desc, specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports block %q in %s\nhint: declare this block in an adapter's \"blocks\" list in specdown.json", desc, specCase.ID.Key())
 		}
 		return entry, nil
 	case core.CaseKindTableRow:
 		check := specCase.TableRow.Check
 		entry, ok := r.checks[check]
 		if !ok {
-			return adapterEntry{}, fmt.Errorf("no adapter supports check %q in %s", check, specCase.ID.Key())
+			return adapterEntry{}, fmt.Errorf("no adapter supports check %q in %s\nhint: declare this check in an adapter's \"checks\" list in specdown.json", check, specCase.ID.Key())
 		}
 		return entry, nil
 	default:
@@ -981,7 +981,7 @@ func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
 		rootName := parts[0]
 		rootValue, ok := values[rootName]
 		if !ok {
-			unresolved = fmt.Errorf("missing runtime binding for %q", rootName)
+			unresolved = undefinedVariableError(rootName, values)
 			return raw
 		}
 		if len(parts) == 1 {
@@ -999,6 +999,17 @@ func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
 		return "", unresolved
 	}
 	return rendered, nil
+}
+
+func undefinedVariableError(name string, values map[string]any) error {
+	names := make([]string, 0, len(values))
+	for k := range values {
+		names = append(names, "$"+k)
+	}
+	if len(names) > 0 {
+		return fmt.Errorf("variable $%s is not defined; available bindings: %s", name, strings.Join(names, ", "))
+	}
+	return fmt.Errorf("variable $%s is not defined; no bindings are available in this scope", name)
 }
 
 func resolveValue(value any, path []string) (any, error) {

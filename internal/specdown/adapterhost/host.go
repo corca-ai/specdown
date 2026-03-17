@@ -158,7 +158,7 @@ func handleBuiltinMessage(raw []byte, encoder *json.Encoder, checksDir string) e
 
 	typeRaw, ok := fields["type"]
 	if !ok {
-		return fmt.Errorf("missing type field")
+		return fmt.Errorf("adapter response missing \"type\" field (expected \"exec\" or \"assert\")")
 	}
 	var msgType string
 	if err := json.Unmarshal(typeRaw, &msgType); err != nil {

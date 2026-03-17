@@ -526,12 +526,12 @@ func parseAlloyRefDirective(line string) (AlloyRefNode, bool, error) {
 
 	matches := alloyRefDirectivePattern.FindStringSubmatch(trimmed)
 	if matches == nil {
-		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q", trimmed)
+		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q (expected format: \"> alloy:ref(model#assertion, scope=...)\")", trimmed)
 	}
 
 	scope := strings.TrimSpace(matches[3])
 	if scope == "" {
-		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q", trimmed)
+		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q (expected format: \"> alloy:ref(model#assertion, scope=...)\")", trimmed)
 	}
 
 	return AlloyRefNode{

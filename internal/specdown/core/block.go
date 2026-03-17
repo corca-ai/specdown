@@ -43,7 +43,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 	}
 
 	if strings.HasPrefix(trimmed, "alloy:") {
-		return BlockSpec{}, fmt.Errorf("unsupported spec block %q", trimmed)
+		return BlockSpec{}, fmt.Errorf("unsupported spec block %q: alloy blocks use the \"<!-- alloy:model#assertion -->\" directive syntax instead", trimmed)
 	}
 
 	expectFail, working := extractExpectFail(trimmed)
@@ -61,7 +61,7 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 	target := strings.TrimSpace(parts[1])
 	if kind == BlockKindRun {
 		if target == "" {
-			return BlockSpec{}, fmt.Errorf("invalid spec block %q", trimmed)
+			return BlockSpec{}, fmt.Errorf("invalid spec block %q: run blocks require a target (e.g. \"run:shell\")", trimmed)
 		}
 		if expectFail && len(captureNames) > 0 {
 			return BlockSpec{}, fmt.Errorf("!fail blocks do not support captures")

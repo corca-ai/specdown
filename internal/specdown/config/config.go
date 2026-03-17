@@ -143,7 +143,7 @@ func Load(path string) (Config, string, error) {
 		return Config{}, "", err
 	}
 	if cfg.Models.Builtin != "alloy" {
-		return Config{}, "", fmt.Errorf("models builtin %q is not supported", cfg.Models.Builtin)
+		return Config{}, "", fmt.Errorf("models builtin %q is not supported (only \"alloy\" is available)", cfg.Models.Builtin)
 	}
 	if cfg.Trace != nil {
 		if err := validateTrace(cfg.Trace); err != nil {
