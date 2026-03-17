@@ -20,18 +20,22 @@ and specdown checks them automatically:
   "trace": {
     "types": ["theme", "epic", "story", "at"],
     "edges": {
-      "decomposes": { "from": "epic",  "to": "theme", "count": "1..* → 1" },
-      "covers":     { "from": "story", "to": "epic",  "count": "1..* → 1" },
-      "tests":      { "from": "at",    "to": "story", "count": "1..* → 1" }
+      "decomposes": { "from": "theme", "to": "epic",  "count": "1 → 1..*" },
+      "covers":     { "from": "epic",  "to": "story", "count": "1 → 1..*" },
+      "tests":      { "from": "story", "to": "at",    "count": "1 → 1..*" }
     }
   }
 }
 ```
 
-With this configuration, `specdown trace --strict` fails if any epic
-lacks a theme link, any story is not covered by an acceptance test,
-or any document violates its declared cardinality. Everything else
-is derived.
+Edges follow UML dependency direction: `from` is the dependent, `to` is
+the dependency. A theme depends on its epics, an epic depends on its
+stories, a story depends on its acceptance tests. The `from` document
+contains the trace link.
+
+With this configuration, `specdown trace --strict` fails if any theme
+lacks epic links, any story lacks acceptance test links, or any document
+violates its declared cardinality. Everything else is derived.
 
 ## Authoring Surface
 
@@ -56,7 +60,7 @@ Trace links use standard markdown link syntax with an `<edge_name>::` prefix in 
 link text:
 
 ```markdown
-This feature [covers::Login Story](../stories/login.md) and
+This epic [covers::Login Story](../stories/login.md) and
 [covers::Password Reset](../stories/password-reset.md).
 ```
 
@@ -73,7 +77,7 @@ are stripped before resolution — documents are atoms.
 
 ### Structural Guarantee
 
-When an edge kind connects documents of different types (e.g., `test → feature`),
+When an edge kind connects documents of different types (e.g., `feature → test`),
 the type system alone prevents reverse cycles within that edge kind.
 This means hierarchical traceability (theme → epic → story → test) is
 inherently acyclic without needing the `acyclic` flag.
@@ -127,8 +131,8 @@ The `trace` key in `specdown.json` configures traceability:
     "types": ["goal", "feature", "test"],
     "ignore": ["vendor/**", "third_party/**"],
     "edges": {
-      "covers":   { "from": "feature", "to": "goal",    "count": "1..* → 1..*" },
-      "tests":    { "from": "test",    "to": "feature", "count": "1..* → 1" },
+      "covers":   { "from": "goal",    "to": "feature", "count": "1..* → 1..*" },
+      "tests":    { "from": "feature", "to": "test",    "count": "1 → 1..*" },
       "requires": { "from": "feature", "to": "feature", "acyclic": true, "transitive": true }
     }
   }
@@ -165,12 +169,12 @@ the config file location. All `.md` files are included unless they match an
 # Discovery finds all .md files with types
 mkdir -p .tmp-test/trace/disc
 cat <<'CFG' > .tmp-test/trace/disc/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["goal","feature"],"edges":{"covers":{"from":"feature","to":"goal"}}}}
+{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["goal","feature"],"edges":{"covers":{"from":"goal","to":"feature"}}}}
 CFG
 mkdir -p .tmp-test/trace/disc/specs .tmp-test/trace/disc/goals .tmp-test/trace/disc/features
 printf '# Index\n' > .tmp-test/trace/disc/specs/index.spec.md
-printf -- '---\ntype: goal\n---\n# G1\n' > .tmp-test/trace/disc/goals/g1.md
-printf -- '---\ntype: feature\n---\n# F1\n\n[covers::G1](../goals/g1.md)\n' > .tmp-test/trace/disc/features/f1.md
+printf -- '---\ntype: goal\n---\n# G1\n\n[covers::F1](../features/f1.md)\n' > .tmp-test/trace/disc/goals/g1.md
+printf -- '---\ntype: feature\n---\n# F1\n' > .tmp-test/trace/disc/features/f1.md
 specdown trace -config .tmp-test/trace/disc/specdown.json 2>&1 | grep -c '"type"'
 ```
 
@@ -221,10 +225,10 @@ For each edge type with a `count` constraint, every document of the relevant typ
 must satisfy both source-side and target-side multiplicity.
 
 ```run:shell
-# Cardinality violation: feature with no incoming tests
+# Cardinality violation: feature with no outgoing test links
 mkdir -p .tmp-test/trace/card
 cat <<'CFG' > .tmp-test/trace/card/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"test","to":"feature","count":"1..* → 1"}}}}
+{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
 CFG
 mkdir -p .tmp-test/trace/card/specs
 printf '# Index\n' > .tmp-test/trace/card/specs/index.spec.md
@@ -322,7 +326,7 @@ A trace error does not prevent spec execution.
 # specdown run reports trace errors
 mkdir -p .tmp-test/trace/run-int
 cat <<'CFG' > .tmp-test/trace/run-int/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"test","to":"feature","count":"1..* → 1"}}}}
+{"entry":"specs/index.spec.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
 CFG
 mkdir -p .tmp-test/trace/run-int/specs
 printf '# Index\n\n- [F](../f.md)\n' > .tmp-test/trace/run-int/specs/index.spec.md
