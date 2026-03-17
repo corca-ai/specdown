@@ -383,7 +383,7 @@ var pageTemplate = template.Must(template.New("page").Funcs(template.FuncMap{
   </main>
   <footer class="site-footer">
     <hr>
-    <p><a href="https://github.com/corca-ai/specdown">github.com/corca-ai/specdown</a> · written by ak@corca.ai</p>
+    <p><a href="https://github.com/corca-ai/specdown">github.com/corca-ai/specdown</a></p>
   </footer>
   <script src="{{ .AssetRoot }}/script.js"></script>
 </body>
