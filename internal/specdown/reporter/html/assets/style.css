@@ -266,6 +266,7 @@ main {
   letter-spacing: -0.01em;
   margin-bottom: 0.4rem;
   text-wrap: balance;
+  word-break: keep-all;
 }
 
 .doc-type {
@@ -288,6 +289,7 @@ main {
   padding: 0.5em 0 0.35em;
   margin-top: 0.75em;
   text-wrap: balance;
+  word-break: keep-all;
   letter-spacing: -0.01em;
   position: sticky;
   background: var(--bg);
@@ -305,7 +307,7 @@ main {
 
 .spec-body > :first-child > :first-child { margin-top: 0; }
 
-.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0; }
+.spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer) { margin: 1.25rem 0 0; word-break: keep-all; }
 .spec-body :is(p, ul, ol, dl, blockquote):not(.exec-block-footer):not(.exec-table-footer):first-child { margin-top: 0; }
 .spec-body pre { margin: 1rem 0; }
 .spec-body li { margin: 0.25rem 0; }
