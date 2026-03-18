@@ -164,9 +164,6 @@ func run(args []string) error {
 	}
 
 	if report.Summary.SpecsFailed > 0 || report.Summary.TraceErrorCount > 0 {
-		if !*quiet {
-			printFailures(report)
-		}
 		xfailSuffix := ""
 		if report.Summary.CasesExpectedFail > 0 {
 			xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
@@ -597,58 +594,6 @@ func resolvePath(baseDir, value string) string {
 	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
-func printFailures(report core.Report) {
-	for i := range report.Results {
-		printCaseFailures(report.Results[i].Cases)
-	}
-}
-
-func printCaseFailures(cases []core.CaseResult) {
-	for i := range cases {
-		if cases[i].Status != core.StatusFailed {
-			continue
-		}
-		printCaseFailure(cases[i])
-	}
-}
-
-func printCaseFailure(c core.CaseResult) {
-	path := strings.Join(c.ID.HeadingPath, " > ")
-	kind := c.Block + c.Check
-	if c.Kind == core.CaseKindAlloy {
-		kind = "alloy:" + c.Model + "#" + c.Assertion
-	}
-	label := ""
-	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
-		label = fmt.Sprintf(" row %d", c.RowNumber)
-		if c.Label != "" {
-			label = fmt.Sprintf(" row %d %q", c.RowNumber, c.Label)
-		}
-	}
-	tag := "FAIL"
-	if c.ExpectFail {
-		tag = "XFAIL"
-	}
-	fmt.Fprintf(os.Stderr, "  %s  %s  [%s]%s\n", tag, path, kind, label)
-	if c.Message != "" {
-		fmt.Fprintf(os.Stderr, "        %s\n", c.Message)
-	}
-	if c.Expected != "" {
-		fmt.Fprintf(os.Stderr, "        expected: %s\n", c.Expected)
-	}
-	if c.Actual != "" {
-		fmt.Fprintf(os.Stderr, "        actual:   %s\n", c.Actual)
-	}
-	for _, step := range c.Steps {
-		if step.Status != core.StatusFailed {
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "        $ %s\n", step.Command)
-		fmt.Fprintf(os.Stderr, "        expected: %s\n", step.Expected)
-		fmt.Fprintf(os.Stderr, "        actual:   %s\n", step.Actual)
-	}
-}
-
 func printBindings(report core.Report) {
 	for i := range report.Results {
 		for j := range report.Results[i].Cases {
@@ -716,6 +661,27 @@ func printCaseResult(c core.CaseResult) {
 		label = fmt.Sprintf(" row %d", c.RowNumber)
 	}
 	fmt.Printf("  %s  %s  [%s]%s  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
+
+	if c.Status != core.StatusFailed {
+		return
+	}
+	if c.Message != "" {
+		fmt.Printf("        %s\n", c.Message)
+	}
+	if c.Expected != "" {
+		fmt.Printf("        expected: %s\n", c.Expected)
+	}
+	if c.Actual != "" {
+		fmt.Printf("        actual:   %s\n", c.Actual)
+	}
+	for _, step := range c.Steps {
+		if step.Status != core.StatusFailed {
+			continue
+		}
+		fmt.Printf("        $ %s\n", step.Command)
+		fmt.Printf("        expected: %s\n", step.Expected)
+		fmt.Printf("        actual:   %s\n", step.Actual)
+	}
 }
 
 // prependSelfToPath ensures that child processes (adapters, setup/teardown
