@@ -113,6 +113,7 @@ func run(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
 	showBindings := fs.Bool("show-bindings", false, "Print resolved variable bindings for each case")
 	quiet := fs.Bool("quiet", false, "Suppress progress output; show only final summary")
+	maxFailures := fs.Int("max-failures", 0, "Stop after N unexpected failures (0 = unlimited)")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -127,9 +128,10 @@ func run(args []string) error {
 	}
 
 	opts := engine.RunOptions{
-		Filter: *filter,
-		Jobs:   *jobs,
-		DryRun: *dryRun,
+		Filter:      *filter,
+		Jobs:        *jobs,
+		DryRun:      *dryRun,
+		MaxFailures: *maxFailures,
 	}
 	if !*quiet {
 		opts.Progress = stdoutProgress()
@@ -635,7 +637,7 @@ func stdoutProgress() engine.ProgressFunc {
 		case "spec":
 			fmt.Printf("spec: %s\n", ev.Spec)
 		case "case":
-			printCaseResult(*ev.Case)
+			printCaseResult(*ev.Case, ev.CaseNum, ev.CasesTotal)
 		}
 	}
 }
@@ -650,7 +652,7 @@ func caseTag(status core.Status, expectFail bool) string {
 	return "PASS"
 }
 
-func printCaseResult(c core.CaseResult) {
+func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 	tag := caseTag(c.Status, c.ExpectFail)
 	kind := c.Block + c.Check
 	if c.Kind == core.CaseKindAlloy {
@@ -660,7 +662,11 @@ func printCaseResult(c core.CaseResult) {
 	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
 		label = fmt.Sprintf(" row %d", c.RowNumber)
 	}
-	fmt.Printf("  %s  %s  [%s]%s  (%dms)\n", tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
+	counter := ""
+	if casesTotal > 0 {
+		counter = fmt.Sprintf("[%d/%d] ", caseNum, casesTotal)
+	}
+	fmt.Printf("  %s%s  %s  [%s]%s  (%dms)\n", counter, tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
 
 	if c.Status != core.StatusFailed {
 		return

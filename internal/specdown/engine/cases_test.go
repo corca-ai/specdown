@@ -109,7 +109,7 @@ func TestRecordResultPassedAddsBindings(t *testing.T) {
 		},
 	}
 
-	ctx.recordResult(result, core.HeadingPath{"Root", "Section"})
+	_ = ctx.recordResult(result, core.HeadingPath{"Root", "Section"})
 
 	if len(ctx.results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(ctx.results))
@@ -134,7 +134,7 @@ func TestRecordResultFailedSkipsBindings(t *testing.T) {
 		},
 	}
 
-	ctx.recordResult(result, core.HeadingPath{"Root"})
+	_ = ctx.recordResult(result, core.HeadingPath{"Root"})
 
 	// Bindings should NOT be recorded for failed cases
 	visible := ctx.bindings.VisibleAt(core.HeadingPath{"Root"})
@@ -159,12 +159,12 @@ func TestRecordResultMultipleCasesAccumulate(t *testing.T) {
 		results:  make([]core.CaseResult, 0),
 	}
 
-	ctx.recordResult(core.CaseResult{
+	_ = ctx.recordResult(core.CaseResult{
 		ID: core.SpecID{HeadingPath: []string{"A"}}, Status: core.StatusPassed,
 		Bindings: []core.Binding{{Name: "a", Value: "1"}},
 	}, core.HeadingPath{"A"})
 
-	ctx.recordResult(core.CaseResult{
+	_ = ctx.recordResult(core.CaseResult{
 		ID: core.SpecID{HeadingPath: []string{"B"}}, Status: core.StatusPassed,
 		Bindings: []core.Binding{{Name: "b", Value: "2"}},
 	}, core.HeadingPath{"B"})

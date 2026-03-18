@@ -77,6 +77,7 @@ echo "$help" | grep -q "alloy dump"
 | `-dry-run` | `false` | Parse and validate only |
 | `-show-bindings` | `false` | Print resolved variable bindings for each case |
 | `-quiet` | `false` | Suppress progress output; show only final summary |
+| `-max-failures` | `0` | Stop after N unexpected failures (0 = unlimited) |
 
 ### Trace Flags
 

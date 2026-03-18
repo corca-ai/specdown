@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
@@ -31,17 +33,25 @@ type ProgressEvent struct {
 	Spec string
 	// Case is set when Kind == "case".
 	Case *core.CaseResult
+	// CaseNum is the 1-based index of the current case (set for "case" events).
+	CaseNum int
+	// CasesTotal is the total number of cases in the run.
+	CasesTotal int
 }
 
 // ProgressFunc is called during execution to stream progress.
 // It must be safe to call from multiple goroutines when Jobs > 1.
 type ProgressFunc func(ProgressEvent)
 
+// errMaxFailures is a sentinel returned when the failure limit is reached.
+var errMaxFailures = errors.New("maximum failure count reached")
+
 type RunOptions struct {
-	Filter   string
-	Jobs     int
-	DryRun   bool
-	Progress ProgressFunc
+	Filter      string
+	Jobs        int
+	DryRun      bool
+	Progress    ProgressFunc
+	MaxFailures int // 0 means unlimited
 }
 
 type adapterRegistry struct {
@@ -159,15 +169,32 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 		jobs = 1
 	}
 
-	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner, defaultTimeout, progress)
-	if err != nil {
+	var casesTotal int
+	for i := range plan.Documents {
+		casesTotal += len(plan.Documents[i].Cases)
+	}
+
+	var failures atomic.Int32
+	var caseCounter atomic.Int32
+	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner, defaultTimeout, progress, opts.MaxFailures, &failures, casesTotal, &caseCounter)
+	hitLimit := errors.Is(err, errMaxFailures)
+	if err != nil && !hitLimit {
 		return core.Report{}, err
 	}
 
-	summary := core.Summary{SpecsTotal: len(plan.Documents)}
+	// Filter out unexecuted documents (zero-value entries from early stop).
+	var executed []core.DocumentResult
 	for i := range results {
-		accumulateSummary(&summary, results[i])
+		if results[i].Document.RelativeTo != "" || len(results[i].Cases) > 0 {
+			executed = append(executed, results[i])
+		}
 	}
+
+	summary := core.Summary{SpecsTotal: len(executed)}
+	for i := range executed {
+		accumulateSummary(&summary, executed[i])
+	}
+	results = executed
 
 	return core.Report{
 		Title:       title,
@@ -177,11 +204,15 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	}, nil
 }
 
-func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc) ([]core.DocumentResult, error) {
+func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
 	if jobs == 1 {
 		for i := range documents {
-			result, err := runDocument(documents[i], registry, host, alloyRunner, defaultTimeout, progress)
+			result, err := runDocument(documents[i], registry, host, alloyRunner, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter)
+			if errors.Is(err, errMaxFailures) {
+				results[i] = result
+				return results, err
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -199,13 +230,16 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := runDocument(dp, registry, host, alloyRunner, defaultTimeout, progress)
+			result, err := runDocument(dp, registry, host, alloyRunner, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter)
 			results[i] = result
 			errs[i] = err
 		}(i, documents[i])
 	}
 	wg.Wait()
 	for _, err := range errs {
+		if errors.Is(err, errMaxFailures) {
+			return results, err
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -349,7 +383,7 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 	}
 }
 
-func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc) (core.DocumentResult, error) {
+func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32) (core.DocumentResult, error) {
 	progress(ProgressEvent{Kind: "spec", Spec: plan.Document.RelativeTo})
 
 	if len(plan.Cases) == 0 {
@@ -361,30 +395,39 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 
 	sm := newSessionManager(host)
 
-	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout, progress)
-	if err != nil {
+	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter)
+	hitLimit := errors.Is(err, errMaxFailures)
+	if err != nil && !hitLimit {
 		if closeErr := sm.CloseAll(); closeErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: closing adapter sessions: %v\n", closeErr)
 		}
 		return core.DocumentResult{}, err
 	}
 
-	if err := sm.CloseAll(); err != nil {
-		return core.DocumentResult{}, err
+	if closeErr := sm.CloseAll(); closeErr != nil {
+		if !hitLimit {
+			return core.DocumentResult{}, closeErr
+		}
+		fmt.Fprintf(os.Stderr, "warning: closing adapter sessions: %v\n", closeErr)
 	}
 
-	alloyResults, err := alloyRunner.RunDocument(plan)
-	if err != nil {
-		return core.DocumentResult{}, err
+	if !hitLimit {
+		alloyResults, alloyErr := alloyRunner.RunDocument(plan)
+		if alloyErr != nil {
+			return core.DocumentResult{}, alloyErr
+		}
+		cases = mergeAlloyResults(cases, alloyResults)
 	}
 
-	cases = mergeAlloyResults(cases, alloyResults)
-
-	return core.DocumentResult{
+	result := core.DocumentResult{
 		Document: plan.Document,
 		Status:   documentStatus(cases),
 		Cases:    cases,
-	}, nil
+	}
+	if hitLimit {
+		return result, errMaxFailures
+	}
+	return result, nil
 }
 
 // documentStatus derives the overall document status from case results.
@@ -416,25 +459,32 @@ func mergeAlloyResults(cases, alloyResults []core.CaseResult) []core.CaseResult 
 	return cases
 }
 
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int, progress ProgressFunc) ([]core.CaseResult, error) {
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32) ([]core.CaseResult, error) {
 	timeout := plan.Document.Frontmatter.Timeout
 	if timeout == 0 {
 		timeout = defaultTimeout
 	}
 	ctx := &caseRunContext{
-		registry:  registry,
-		sessions:  sm,
-		bindings:  newBindingsManager(),
-		timeoutMs: timeout,
-		hooks:     plan.Hooks,
-		results:   make([]core.CaseResult, 0, len(plan.Cases)),
-		spec:      plan.Document.RelativeTo,
-		progress:  progress,
+		registry:    registry,
+		sessions:    sm,
+		bindings:    newBindingsManager(),
+		timeoutMs:   timeout,
+		hooks:       plan.Hooks,
+		results:     make([]core.CaseResult, 0, len(plan.Cases)),
+		spec:        plan.Document.RelativeTo,
+		progress:    progress,
+		maxFailures: maxFailures,
+		failures:    failures,
+		casesTotal:  casesTotal,
+		caseCounter: caseCounter,
 	}
 
 	for i, specCase := range plan.Cases {
 		nextPath := peekNextPath(plan.Cases, i)
 		if err := ctx.processCase(specCase, nextPath); err != nil {
+			if errors.Is(err, errMaxFailures) {
+				return ctx.results, err
+			}
 			return nil, err
 		}
 	}
@@ -442,15 +492,19 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sess
 }
 
 type caseRunContext struct {
-	registry  adapterRegistry
-	sessions  *sessionManager
-	bindings  *bindingsManager
-	timeoutMs int
-	hooks     []core.HookSpec
-	results   []core.CaseResult
-	prevPath  core.HeadingPath
-	spec      string
-	progress  ProgressFunc
+	registry    adapterRegistry
+	sessions    *sessionManager
+	bindings    *bindingsManager
+	timeoutMs   int
+	hooks       []core.HookSpec
+	results     []core.CaseResult
+	prevPath    core.HeadingPath
+	spec        string
+	progress    ProgressFunc
+	maxFailures int
+	failures    *atomic.Int32
+	casesTotal  int
+	caseCounter *atomic.Int32
 }
 
 // processCase handles a single case: hooks, execution, result recording.
@@ -470,7 +524,9 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 		return err
 	}
 
-	c.recordResult(result, specCase.ID.HeadingPath)
+	if err := c.recordResult(result, specCase.ID.HeadingPath); err != nil {
+		return err
+	}
 
 	c.runTeardownHooks(currPath, nextPath)
 
@@ -478,15 +534,27 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 	return nil
 }
 
-// recordResult appends a case result, records bindings, and emits progress.
-func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingPath) {
+// recordResult appends a case result, records bindings, emits progress,
+// and returns errMaxFailures when the failure limit is reached.
+func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingPath) error {
 	c.results = append(c.results, result)
 	if result.Status != core.StatusFailed {
 		c.bindings.Add(result.Bindings, path)
 	}
 	if c.progress != nil {
-		c.progress(ProgressEvent{Kind: "case", Spec: c.spec, Case: &result})
+		var caseNum int
+		if c.caseCounter != nil {
+			caseNum = int(c.caseCounter.Add(1))
+		}
+		c.progress(ProgressEvent{Kind: "case", Spec: c.spec, Case: &result, CaseNum: caseNum, CasesTotal: c.casesTotal})
 	}
+	if result.Status == core.StatusFailed && !result.ExpectFail &&
+		c.maxFailures > 0 && c.failures != nil {
+		if int(c.failures.Add(1)) >= c.maxFailures {
+			return errMaxFailures
+		}
+	}
+	return nil
 }
 
 // alloyPlaceholder creates a placeholder result for an alloy case.
