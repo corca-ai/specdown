@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "embed"
@@ -130,6 +131,9 @@ func run(args []string) error {
 		Jobs:   *jobs,
 		DryRun: *dryRun,
 	}
+	if !*quiet {
+		opts.Progress = stdoutProgress()
+	}
 
 	runStart := time.Now()
 	report, err := engine.Run(configDir, cfg, alloy.Runner{BaseDir: configDir}, opts)
@@ -148,10 +152,6 @@ func run(args []string) error {
 			printDryRun(report)
 		}
 		return nil
-	}
-
-	if !*quiet {
-		printResults(report)
 	}
 
 	if *showBindings && !*quiet {
@@ -681,11 +681,16 @@ func printWarnings(report core.Report) {
 	}
 }
 
-func printResults(report core.Report) {
-	for i := range report.Results {
-		fmt.Printf("spec: %s\n", report.Results[i].Document.RelativeTo)
-		for j := range report.Results[i].Cases {
-			printCaseResult(report.Results[i].Cases[j])
+func stdoutProgress() engine.ProgressFunc {
+	var mu sync.Mutex
+	return func(ev engine.ProgressEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch ev.Kind {
+		case "spec":
+			fmt.Printf("spec: %s\n", ev.Spec)
+		case "case":
+			printCaseResult(*ev.Case)
 		}
 	}
 }

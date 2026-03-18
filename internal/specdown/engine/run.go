@@ -23,10 +23,25 @@ type adapterEntry struct {
 	Config config.AdapterConfig
 }
 
+// ProgressEvent describes a streaming progress notification.
+type ProgressEvent struct {
+	// Kind is "spec" when a document starts, "case" when a case finishes.
+	Kind string
+	// Spec is the document-relative path (set for both kinds).
+	Spec string
+	// Case is set when Kind == "case".
+	Case *core.CaseResult
+}
+
+// ProgressFunc is called during execution to stream progress.
+// It must be safe to call from multiple goroutines when Jobs > 1.
+type ProgressFunc func(ProgressEvent)
+
 type RunOptions struct {
-	Filter string
-	Jobs   int
-	DryRun bool
+	Filter   string
+	Jobs     int
+	DryRun   bool
+	Progress ProgressFunc
 }
 
 type adapterRegistry struct {
@@ -66,7 +81,11 @@ func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts R
 	}
 	host := adapterhost.Host{BaseDir: baseDir}
 	defaultTimeout := cfg.EffectiveDefaultTimeout()
-	report, err := runWithDocs(title, docs, cfg, host, modelRunner, opts, defaultTimeout)
+	progress := opts.Progress
+	if progress == nil {
+		progress = func(ProgressEvent) {}
+	}
+	report, err := runWithDocs(title, docs, cfg, host, modelRunner, opts, defaultTimeout, progress)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -114,7 +133,7 @@ func DumpModels(baseDir string, cfg config.Config, dumper ModelDumper) ([]string
 	return paths, nil
 }
 
-func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions, defaultTimeout int) (core.Report, error) {
+func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions, defaultTimeout int, progress ProgressFunc) (core.Report, error) {
 	plan, err := core.CompileDocuments(docs)
 	if err != nil {
 		return core.Report{}, err
@@ -140,7 +159,7 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 		jobs = 1
 	}
 
-	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner, defaultTimeout)
+	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner, defaultTimeout, progress)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -158,11 +177,11 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	}, nil
 }
 
-func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int) ([]core.DocumentResult, error) {
+func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
 	if jobs == 1 {
 		for i := range documents {
-			result, err := runDocument(documents[i], registry, host, alloyRunner, defaultTimeout)
+			result, err := runDocument(documents[i], registry, host, alloyRunner, defaultTimeout, progress)
 			if err != nil {
 				return nil, err
 			}
@@ -180,7 +199,7 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := runDocument(dp, registry, host, alloyRunner, defaultTimeout)
+			result, err := runDocument(dp, registry, host, alloyRunner, defaultTimeout, progress)
 			results[i] = result
 			errs[i] = err
 		}(i, documents[i])
@@ -330,7 +349,9 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 	}
 }
 
-func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int) (core.DocumentResult, error) {
+func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc) (core.DocumentResult, error) {
+	progress(ProgressEvent{Kind: "spec", Spec: plan.Document.RelativeTo})
+
 	if len(plan.Cases) == 0 {
 		return core.DocumentResult{
 			Document: plan.Document,
@@ -340,7 +361,7 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 
 	sm := newSessionManager(host)
 
-	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout)
+	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout, progress)
 	if err != nil {
 		if closeErr := sm.CloseAll(); closeErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: closing adapter sessions: %v\n", closeErr)
@@ -395,7 +416,7 @@ func mergeAlloyResults(cases, alloyResults []core.CaseResult) []core.CaseResult 
 	return cases
 }
 
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int) ([]core.CaseResult, error) {
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int, progress ProgressFunc) ([]core.CaseResult, error) {
 	timeout := plan.Document.Frontmatter.Timeout
 	if timeout == 0 {
 		timeout = defaultTimeout
@@ -407,6 +428,8 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sess
 		timeoutMs: timeout,
 		hooks:     plan.Hooks,
 		results:   make([]core.CaseResult, 0, len(plan.Cases)),
+		spec:      plan.Document.RelativeTo,
+		progress:  progress,
 	}
 
 	for i, specCase := range plan.Cases {
@@ -426,6 +449,8 @@ type caseRunContext struct {
 	hooks     []core.HookSpec
 	results   []core.CaseResult
 	prevPath  core.HeadingPath
+	spec      string
+	progress  ProgressFunc
 }
 
 // processCase handles a single case: hooks, execution, result recording.
@@ -453,11 +478,14 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 	return nil
 }
 
-// recordResult appends a case result and records bindings for passing cases.
+// recordResult appends a case result, records bindings, and emits progress.
 func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingPath) {
 	c.results = append(c.results, result)
 	if result.Status != core.StatusFailed {
 		c.bindings.Add(result.Bindings, path)
+	}
+	if c.progress != nil {
+		c.progress(ProgressEvent{Kind: "case", Spec: c.spec, Case: &result})
 	}
 }
 

@@ -170,7 +170,7 @@ cd .tmp-test/skill-install && specdown install skills 2>/dev/null
 The installed files are the skill definition plus one reference per spec:
 
 ```run:shell
-$ ls .tmp-test/skill-install/.claude/skills/specdown/ | sort
+$ ls .tmp-test/skill-install/.claude/skills/specdown/ | LC_ALL=C sort
 SKILL.md
 adapter-protocol.md
 alloy.md
