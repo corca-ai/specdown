@@ -94,5 +94,7 @@ and optional label:
 ```
 
 The HTML report renders expected/actual as an inline diff.
-The JSON report includes `expected`, `actual`, and `label` fields for
-programmatic consumption.
+The JSON report includes a `schemaVersion` field (currently `2`).
+Common fields (`expected`, `actual`, `label`) remain at the top level
+of each case result. Kind-specific fields are nested under `code`,
+`table`, or `alloy` keys.

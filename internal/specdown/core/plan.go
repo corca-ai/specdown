@@ -24,6 +24,10 @@ type CodeCaseSpec struct {
 	Template string
 }
 
+func (c *CodeCaseSpec) VariableRefs() []string { return variableReferences(c.Template) }
+func (c *CodeCaseSpec) TargetKey() string       { return c.Block.Descriptor() }
+func (c *CodeCaseSpec) DisplayKind() string     { return c.Block.Descriptor() }
+
 // TableRowCaseSpec holds fields specific to table row and check call cases.
 type TableRowCaseSpec struct {
 	Check       string
@@ -33,6 +37,22 @@ type TableRowCaseSpec struct {
 	RowNumber   int
 }
 
+func (c *TableRowCaseSpec) VariableRefs() []string { return mergeVariableReferences(c.Cells...) }
+func (c *TableRowCaseSpec) TargetKey() string       { return c.Check }
+func (c *TableRowCaseSpec) DisplayKind() string     { return "check:" + c.Check }
+
+func (c *TableRowCaseSpec) DefaultLabel(headingPath HeadingPath) string {
+	display := c.DisplayKind()
+	if len(headingPath) == 0 {
+		return display
+	}
+	suffix := headingPath[len(headingPath)-1]
+	if c.RowNumber > 0 {
+		return display + " @ " + suffix + " row " + fmt.Sprintf("%d", c.RowNumber)
+	}
+	return display + " @ " + suffix
+}
+
 // InlineExpectCaseSpec holds fields specific to inline expect cases.
 type InlineExpectCaseSpec struct {
 	Template    string
@@ -40,11 +60,27 @@ type InlineExpectCaseSpec struct {
 	ExpectFail  bool
 }
 
+func (c *InlineExpectCaseSpec) VariableRefs() []string {
+	return mergeVariableReferences(c.Template, c.ExpectValue)
+}
+
 // AlloyCaseSpec holds fields specific to alloy verification cases.
 type AlloyCaseSpec struct {
 	Model     string
 	Assertion string
 	Scope     string
+}
+
+func (c *AlloyCaseSpec) DisplayKind() string {
+	return "alloy:" + c.Model + "#" + c.Assertion
+}
+
+func (c *AlloyCaseSpec) DefaultLabel(headingPath HeadingPath) string {
+	suffix := "alloy:ref(" + c.Model + "#" + c.Assertion + ", scope=" + c.Scope + ")"
+	if len(headingPath) == 0 {
+		return suffix
+	}
+	return suffix + " @ " + headingPath[len(headingPath)-1]
 }
 
 // CaseSpec represents an executable case. Exactly one of Code, TableRow,
@@ -223,7 +259,10 @@ func CompileDocuments(docs []Document) (Plan, error) {
 }
 
 func CompileDocument(doc Document) (DocumentPlan, error) {
-	cases := executableCases(doc)
+	cases, err := executableCases(doc)
+	if err != nil {
+		return DocumentPlan{}, err
+	}
 	hooks := extractHooks(doc)
 	alloyModels, alloyChecks, err := compileAlloy(doc, documentMaxOrdinal(doc))
 	if err != nil {
@@ -247,7 +286,7 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 		for _, captureName := range cases[i].Code.Block.CaptureNames {
 			bindings = append(bindings, bindingDefinition{
 				Name:        captureName,
-				HeadingPath: append([]string(nil), cases[i].ID.HeadingPath...),
+				HeadingPath: copyPath(cases[i].ID.HeadingPath),
 			})
 		}
 	}
@@ -289,7 +328,7 @@ func appendNodeBindings(bindings []bindingDefinition, node Node) []bindingDefini
 	for _, name := range block.Block.CaptureNames {
 		bindings = append(bindings, bindingDefinition{
 			Name:        name,
-			HeadingPath: append([]string(nil), block.ID.HeadingPath...),
+			HeadingPath: copyPath(block.ID.HeadingPath),
 		})
 	}
 	return bindings
@@ -358,7 +397,7 @@ func extractHooks(doc Document) []HookSpec {
 			hooks = append(hooks, HookSpec{
 				Kind:        h.Hook,
 				Each:        h.Each,
-				HeadingPath: append([]string(nil), h.HeadingPath...),
+				HeadingPath: copyPath(h.HeadingPath),
 				Block:       h.Block,
 				Source:      h.Source,
 			})
@@ -367,19 +406,107 @@ func extractHooks(doc Document) []HookSpec {
 	return hooks
 }
 
-func executableCases(doc Document) []CaseSpec {
+func executableCases(doc Document) ([]CaseSpec, error) {
 	cases := make([]CaseSpec, 0)
-	for _, node := range doc.Nodes {
-		switch current := node.(type) {
+	maxOrd := documentMaxOrdinal(doc)
+
+	for i := 0; i < len(doc.Nodes); i++ {
+		switch current := doc.Nodes[i].(type) {
 		case CodeBlockNode:
 			cases = appendCodeCase(cases, current)
 		case TableNode:
+			// Table without a preceding check directive — not executable.
 			cases = appendTableCases(cases, current)
 		case CheckCallNode:
 			cases = appendCheckCallCase(cases, current)
 		case ProseNode:
 			cases = appendInlineCases(cases, current)
+		case CheckDirectiveNode:
+			newCases, skip, err := processCheckDirective(current, doc, i, &maxOrd)
+			if err != nil {
+				return nil, err
+			}
+			cases = append(cases, newCases...)
+			i += skip
 		}
+	}
+	return cases, nil
+}
+
+// processCheckDirective pairs a CheckDirectiveNode with the following table
+// or emits a standalone check call. Returns new cases and how many nodes to skip.
+func processCheckDirective(current CheckDirectiveNode, doc Document, i int, maxOrd *int) ([]CaseSpec, int, error) {
+	table, found := findFollowingTable(doc.Nodes, i+1)
+	switch {
+	case found:
+		cases := appendCheckTableCases(nil, current, table, doc.RelativeTo, maxOrd)
+		// Count nodes to skip past the table.
+		skip := 0
+		for j := i + 1; j < len(doc.Nodes); j++ {
+			if _, ok := doc.Nodes[j].(TableNode); ok {
+				skip = j - i
+				break
+			}
+		}
+		return cases, skip, nil
+	case len(current.CheckParams) > 0:
+		*maxOrd++
+		return []CaseSpec{{
+			ID: SpecID{
+				File:        doc.RelativeTo,
+				HeadingPath: copyPath(current.HeadingPath),
+				Ordinal:     *maxOrd,
+			},
+			Kind: CaseKindTableRow,
+			TableRow: &TableRowCaseSpec{
+				Check:       current.Check,
+				CheckParams: current.CheckParams,
+			},
+		}}, 0, nil
+	default:
+		return nil, 0, fmt.Errorf("%s: check directive %q must be followed by a table", doc.RelativeTo, current.Check)
+	}
+}
+
+// findFollowingTable looks for a TableNode after position start,
+// skipping whitespace-only ProseNodes.
+func findFollowingTable(nodes []Node, start int) (TableNode, bool) {
+	for i := start; i < len(nodes); i++ {
+		switch n := nodes[i].(type) {
+		case TableNode:
+			return n, true
+		case ProseNode:
+			// Skip blank prose (whitespace between directive and table).
+			if strings.TrimSpace(n.Raw) == "" {
+				continue
+			}
+			return TableNode{}, false
+		default:
+			return TableNode{}, false
+		}
+	}
+	return TableNode{}, false
+}
+
+// appendCheckTableCases creates executable cases from a check directive + table pair.
+func appendCheckTableCases(cases []CaseSpec, directive CheckDirectiveNode, table TableNode, file string, ordinal *int) []CaseSpec {
+	for index, row := range table.Rows {
+		*ordinal++
+		cases = append(cases, CaseSpec{
+			ID: SpecID{
+				File:        file,
+				HeadingPath: copyPath(directive.HeadingPath),
+				Ordinal:     *ordinal,
+			},
+			Kind: CaseKindTableRow,
+			TableRow: &TableRowCaseSpec{
+				Check:       directive.Check,
+				CheckParams: directive.CheckParams,
+				Columns:     copyPath(table.Columns),
+				Cells:       copyPath(row.Cells),
+				RowNumber:   index + 1,
+			},
+		})
 	}
 	return cases
 }
@@ -456,8 +583,8 @@ func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
 			TableRow: &TableRowCaseSpec{
 				Check:       table.Check,
 				CheckParams: table.CheckParams,
-				Columns:     append([]string(nil), table.Columns...),
-				Cells:       append([]string(nil), row.Cells...),
+				Columns:     copyPath(table.Columns),
+				Cells:       copyPath(row.Cells),
 				RowNumber:   index + 1,
 			},
 		})
@@ -518,11 +645,11 @@ func mergeVariableReferences(sources ...string) []string {
 func caseReferences(spec CaseSpec) []string {
 	switch spec.Kind {
 	case CaseKindCode:
-		return variableReferences(spec.Code.Template)
+		return spec.Code.VariableRefs()
 	case CaseKindInlineExpect:
-		return mergeVariableReferences(spec.InlineExpect.Template, spec.InlineExpect.ExpectValue)
+		return spec.InlineExpect.VariableRefs()
 	case CaseKindTableRow:
-		return mergeVariableReferences(spec.TableRow.Cells...)
+		return spec.TableRow.VariableRefs()
 	default:
 		return nil
 	}
@@ -531,44 +658,43 @@ func caseReferences(spec CaseSpec) []string {
 func (c CaseSpec) TargetKey() string {
 	switch c.Kind {
 	case CaseKindCode:
-		return c.Code.Block.Descriptor()
+		return c.Code.TargetKey()
 	case CaseKindInlineExpect:
 		return "expect"
 	case CaseKindAlloy:
 		return "alloy"
+	case CaseKindTableRow:
+		return c.TableRow.TargetKey()
 	default:
-		return c.TableRow.Check
+		return ""
 	}
 }
 
 func (c CaseSpec) DisplayKind() string {
 	switch c.Kind {
 	case CaseKindCode:
-		return c.Code.Block.Descriptor()
+		return c.Code.DisplayKind()
 	case CaseKindInlineExpect:
 		return "expect"
 	case CaseKindAlloy:
-		return "alloy:" + c.Alloy.Model + "#" + c.Alloy.Assertion
+		return c.Alloy.DisplayKind()
+	case CaseKindTableRow:
+		return c.TableRow.DisplayKind()
 	default:
-		return "check:" + c.TableRow.Check
+		return ""
 	}
 }
 
 func (c CaseSpec) DefaultLabel() string {
-	if c.Kind == CaseKindAlloy {
-		a := c.Alloy
-		suffix := "alloy:ref(" + a.Model + "#" + a.Assertion + ", scope=" + a.Scope + ")"
+	switch c.Kind {
+	case CaseKindAlloy:
+		return c.Alloy.DefaultLabel(c.ID.HeadingPath)
+	case CaseKindTableRow:
+		return c.TableRow.DefaultLabel(c.ID.HeadingPath)
+	default:
 		if len(c.ID.HeadingPath) == 0 {
-			return suffix
+			return c.DisplayKind()
 		}
-		return suffix + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
+		return c.DisplayKind() + " @ " + c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
 	}
-	if len(c.ID.HeadingPath) == 0 {
-		return c.DisplayKind()
-	}
-	suffix := c.ID.HeadingPath[len(c.ID.HeadingPath)-1]
-	if c.Kind == CaseKindTableRow {
-		return c.DisplayKind() + " @ " + suffix + " row " + fmt.Sprintf("%d", c.TableRow.RowNumber)
-	}
-	return c.DisplayKind() + " @ " + suffix
 }

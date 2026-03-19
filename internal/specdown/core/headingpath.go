@@ -41,3 +41,8 @@ func (hp HeadingPath) Key() string {
 func (hp HeadingPath) Join(sep string) string {
 	return strings.Join(hp, sep)
 }
+
+// copyPath returns a shallow copy of a HeadingPath (or []string used as one).
+func copyPath(p []string) HeadingPath {
+	return append(HeadingPath(nil), p...)
+}

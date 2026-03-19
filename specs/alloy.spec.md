@@ -154,9 +154,10 @@ check noGreenToRed for 5
 ## Counterexample Artifacts
 
 When an Alloy check fails, specdown writes a counterexample artifact to
-`.artifacts/specdown/counterexamples/`. The `AlloyCheckResult` in the
-JSON report includes a `counterexamplePath` field pointing to this file.
+`.artifacts/specdown/counterexamples/`. The alloy result detail in the
+JSON report includes a `counterexamplePath` field (at `.alloy.counterexamplePath`
+within a case result) pointing to this file.
 
 On failure, the `message` field includes a counterexample summary
-extracted from the Alloy solver output. The JSON report includes a
-`counterexamplePath` field, and the artifact file is written to disk.
+extracted from the Alloy solver output, and the artifact file is
+written to disk.

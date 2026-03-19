@@ -74,7 +74,7 @@ func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []CaseSpec, map[string]s
 			models[index].Fragments = append(models[index].Fragments, AlloyFragmentSpec{
 				Model:       current.Model,
 				Source:      current.Source,
-				HeadingPath: append([]string(nil), current.HeadingPath...),
+				HeadingPath: copyPath(current.HeadingPath),
 			})
 		case AlloyRefNode:
 			if current.ID == nil {
@@ -109,7 +109,7 @@ func appendImplicitChecks(file string, models []AlloyModelSpec, checks []CaseSpe
 				checks = append(checks, CaseSpec{
 					ID: SpecID{
 						File:        file,
-						HeadingPath: append([]string(nil), fragment.HeadingPath...),
+						HeadingPath: copyPath(fragment.HeadingPath),
 						Ordinal:     ordinal,
 					},
 					Kind: CaseKindAlloy,

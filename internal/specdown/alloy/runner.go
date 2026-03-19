@@ -316,22 +316,24 @@ func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandRe
 	}
 	base.Status = core.StatusFailed
 	base.Message = message
-	base.CounterexamplePath = counterexamplePath
+	base.Alloy.CounterexamplePath = counterexamplePath
 	return base, nil
 }
 
 func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
 	a := check.Alloy
 	return core.CaseResult{
-		ID:            check.ID,
-		Kind:          core.CaseKindAlloy,
-		Model:         a.Model,
-		Assertion:     a.Assertion,
-		Scope:         a.Scope,
-		Label:         check.DefaultLabel(),
-		BundlePath:    bundle.AbsolutePath,
-		SourceMapPath: bundle.SourceMapAbsolutePath,
-		SourceRef:     formatSourceRef(check.ID.File, check.ID.HeadingPath),
+		ID:    check.ID,
+		Kind:  core.CaseKindAlloy,
+		Label: check.DefaultLabel(),
+		Alloy: &core.AlloyResultDetail{
+			Model:         a.Model,
+			Assertion:     a.Assertion,
+			Scope:         a.Scope,
+			BundlePath:    bundle.AbsolutePath,
+			SourceMapPath: bundle.SourceMapAbsolutePath,
+			SourceRef:     formatSourceRef(check.ID.File, check.ID.HeadingPath),
+		},
 	}
 }
 
@@ -340,14 +342,16 @@ func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
 	for _, check := range checks {
 		a := check.Alloy
 		result := core.CaseResult{
-			ID:        check.ID,
-			Kind:      core.CaseKindAlloy,
-			Model:     a.Model,
-			Assertion: a.Assertion,
-			Scope:     a.Scope,
-			Label:     check.DefaultLabel(),
-			Status:    core.StatusFailed,
-			Message:   message,
+			ID:      check.ID,
+			Kind:    core.CaseKindAlloy,
+			Label:   check.DefaultLabel(),
+			Status:  core.StatusFailed,
+			Message: message,
+			Alloy: &core.AlloyResultDetail{
+				Model:     a.Model,
+				Assertion: a.Assertion,
+				Scope:     a.Scope,
+			},
 		}
 		results = append(results, result)
 	}
@@ -358,21 +362,24 @@ func failedChecks(checks []core.CaseSpec, bundlePath, sourceMapPath, message str
 	results := make([]core.CaseResult, 0, len(checks))
 	for _, check := range checks {
 		a := check.Alloy
-		result := core.CaseResult{
-			ID:            check.ID,
-			Kind:          core.CaseKindAlloy,
+		detail := &core.AlloyResultDetail{
 			Model:         a.Model,
 			Assertion:     a.Assertion,
 			Scope:         a.Scope,
-			Label:         check.DefaultLabel(),
-			Status:        core.StatusFailed,
-			Message:       message,
 			BundlePath:    bundlePath,
 			SourceMapPath: sourceMapPath,
 		}
 		if hasLocation {
-			result.BundleLine = location.BundleLine
-			result.SourceRef = location.SourceRef
+			detail.BundleLine = location.BundleLine
+			detail.SourceRef = location.SourceRef
+		}
+		result := core.CaseResult{
+			ID:      check.ID,
+			Kind:    core.CaseKindAlloy,
+			Label:   check.DefaultLabel(),
+			Status:  core.StatusFailed,
+			Message: message,
+			Alloy:   detail,
 		}
 		results = append(results, result)
 	}

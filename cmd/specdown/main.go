@@ -512,13 +512,7 @@ func initProject() error {
 	}
 
 	configJSON := `{
-  "entry": "specs/index.spec.md",
-  "adapters": [],
-  "models": { "builtin": "alloy" },
-  "reporters": [
-    { "builtin": "html", "outFile": "specs/report" },
-    { "builtin": "json", "outFile": "specs/report.json" }
-  ]
+  "entry": "specs/index.spec.md"
 }
 `
 	if err := os.WriteFile("specdown.json", []byte(configJSON), 0o644); err != nil {
@@ -604,7 +598,7 @@ func printBindings(report core.Report) {
 				continue
 			}
 			path := strings.Join(c.ID.HeadingPath, " > ")
-			kind := c.Block + c.Check
+			kind := caseKindLabel(c)
 			var pairs []string
 			for _, b := range c.VisibleBindings {
 				pairs = append(pairs, fmt.Sprintf("$%s=%v", b.Name, b.Value))
@@ -652,15 +646,26 @@ func caseTag(status core.Status, expectFail bool) string {
 	return "PASS"
 }
 
+// caseKindLabel returns a short display label for a CaseResult's kind.
+func caseKindLabel(c core.CaseResult) string {
+	switch {
+	case c.Code != nil:
+		return c.Code.Block
+	case c.Table != nil:
+		return c.Table.Check
+	case c.Alloy != nil:
+		return "alloy:" + c.Alloy.Model + "#" + c.Alloy.Assertion
+	default:
+		return "expect"
+	}
+}
+
 func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 	tag := caseTag(c.Status, c.ExpectFail)
-	kind := c.Block + c.Check
-	if c.Kind == core.CaseKindAlloy {
-		kind = "alloy:" + c.Model + "#" + c.Assertion
-	}
+	kind := caseKindLabel(c)
 	label := ""
-	if c.Kind == core.CaseKindTableRow && c.RowNumber > 0 {
-		label = fmt.Sprintf(" row %d", c.RowNumber)
+	if c.Table != nil && c.Table.RowNumber > 0 {
+		label = fmt.Sprintf(" row %d", c.Table.RowNumber)
 	}
 	counter := ""
 	if casesTotal > 0 {
@@ -680,7 +685,11 @@ func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 	if c.Actual != "" {
 		fmt.Printf("        actual:   %s\n", c.Actual)
 	}
-	for _, step := range c.Steps {
+	var steps []core.DoctestStep
+	if c.Code != nil {
+		steps = c.Code.Steps
+	}
+	for _, step := range steps {
 		if step.Status != core.StatusFailed {
 			continue
 		}
@@ -717,14 +726,11 @@ func printDryRun(report core.Report) {
 		fmt.Printf("spec: %s\n", report.Results[i].Document.RelativeTo)
 		for j := range report.Results[i].Cases {
 			c := report.Results[i].Cases[j]
-			if c.Kind == core.CaseKindAlloy {
-				fmt.Printf("  alloy: %s [%s#%s, scope=%s]\n", strings.Join(c.ID.HeadingPath, " > "), c.Model, c.Assertion, c.Scope)
+			if c.Alloy != nil {
+				fmt.Printf("  alloy: %s [%s#%s, scope=%s]\n", strings.Join(c.ID.HeadingPath, " > "), c.Alloy.Model, c.Alloy.Assertion, c.Alloy.Scope)
 				continue
 			}
-			kind := c.Block
-			if c.Kind == core.CaseKindTableRow {
-				kind = "check:" + c.Check
-			}
+			kind := caseKindLabel(c)
 			fmt.Printf("  case: %s [%s]\n", strings.Join(c.ID.HeadingPath, " > "), kind)
 		}
 	}

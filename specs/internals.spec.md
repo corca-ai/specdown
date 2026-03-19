@@ -24,34 +24,12 @@ $ specdown version
 
 ## Architecture
 
-Two pipelines diverge from a single document.
+Four components process a spec document:
 
-```text
-Spec Document (.spec.md)
-    |
-    +-- Core
-    |     +-- heading / prose / block / table parsing
-    |     +-- variable scope computation
-    |     +-- executable unit ID assignment
-    |     +-- embedded Alloy model extraction
-    |
-    +-- Runtime Adapter
-    |     +-- test execution + event emission
-    |
-    +-- Reporter
-    |     +-- HTML / JSON artifact generation
-    |
-    +-- Alloy Runner
-          +-- model check + event emission
-```
-
-The core parses the document and produces an execution plan — a list of
-blocks and table rows tagged with adapter names. It never executes anything
-itself. The runtime adapter receives each unit, runs the actual code, and
-emits pass/fail events. The reporter collects those events and renders
-the final HTML or JSON output. The Alloy runner is a parallel path:
-it extracts embedded model fragments, invokes the Alloy solver, and
-feeds results into the same event stream.
+- **Core** — parses Markdown (headings, prose, blocks, tables), computes variable scopes, assigns executable unit IDs, and extracts embedded Alloy model fragments. Produces an execution plan — a list of blocks and table rows tagged with adapter names. Never executes anything itself.
+- **ModelRunner** — the engine calls `ModelRunner.RunDocument()` before the case loop. Model verification results are pre-indexed and looked up inline during case processing, flowing through the same case sequence as adapter results.
+- **Runtime Adapter** — receives each unit, runs the actual code, and emits pass/fail events.
+- **Reporter** — collects events and renders the final HTML or JSON output.
 
 All four components communicate through a common event schema. This means
 a new reporter or a new adapter can be added without changing the core.
@@ -106,7 +84,8 @@ carries a type, a case identifier, and optional diagnostic fields:
 | actual   | string | Actual value (failed events only)              |
 | bindings | array  | Variable bindings captured during execution    |
 
-Events flow from adapters and the Alloy runner into case results.
+Events flow from adapters into case results; model verification
+results (via `ModelRunner`) are pre-computed and looked up inline.
 The reporter never sees raw adapter protocol messages — only the
 unified event stream assembled by the engine.
 
@@ -116,7 +95,7 @@ A reporter receives a `Report` value after execution completes and
 writes output artifacts. The report contains:
 
 - **Title** — derived from the entry document heading.
-- **Results** — one `DocumentResult` per spec, each holding an ordered list of `CaseResult` values.
+- **Results** — one `DocumentResult` per spec, each holding an ordered list of `CaseResult` values. Kind-specific fields are nested in `code`, `table`, or `alloy` sub-structs.
 - **Summary** — aggregate counts: specs total/passed/failed, cases total/passed/failed/expected-fail.
 - **TraceErrors** — validation messages from the traceability checker (if configured).
 - **TraceGraph** — the document graph with typed edges (if configured).
@@ -124,7 +103,7 @@ writes output artifacts. The report contains:
 Two built-in reporters are supported:
 
 - **html** — writes a multi-page HTML site with a global table of contents, per-document pages, shared CSS/JS assets, and optional trace graph visualization.
-- **json** — writes the full `Report` struct as indented JSON.
+- **json** — writes the full `Report` struct as indented JSON. The report includes a `schemaVersion` field (currently `2`).
 
 Reporter selection is configured in [depends::specdown.json](config.spec.md) via the `reporters` array. Each entry specifies a `builtin` name and an `outFile` path.
 
@@ -169,7 +148,10 @@ $ specdown run -dry-run 2>&1 | grep 'spec(s)'
 
 ## Alloy Runner Integration
 
-The Alloy runner implements the `ModelRunner` interface:
+The engine calls `ModelRunner.RunDocument()` before the case loop.
+Results are indexed by `SpecID` and looked up inline during case
+processing. The `ModelRunner` interface keeps model verification
+decoupled from the engine.
 
 ```text
 ModelRunner
@@ -187,5 +169,6 @@ For each document, the runner:
 The runner caches the Alloy JAR in `~/.cache/specdown/`. If the JAR
 is missing, it downloads the official release automatically.
 
-Alloy cases run in parallel with adapter cases at the document level
-and their results are merged into the same `DocumentResult`.
+Model results are pre-computed via `ModelRunner` before the case loop;
+alloy cases execute in document order within the normal case sequence.
+Alloy failures respect `-max-failures` and stream progress inline.

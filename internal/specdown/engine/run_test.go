@@ -105,10 +105,10 @@ func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 	if got := specResult.Cases[3].Bindings; len(got) != 1 || got[0].Name != "cardId" || got[0].Value != "card-1" {
 		t.Fatalf("unexpected card binding %#v", got)
 	}
-	if got := specResult.Cases[4].RenderedCells; len(got) != 3 || got[0] != "board-1" || got[1] != "card-1" || got[2] != "yes" {
+	if got := specResult.Cases[4].Table.RenderedCells; len(got) != 3 || got[0] != "board-1" || got[1] != "card-1" || got[2] != "yes" {
 		t.Fatalf("unexpected card exists row %#v", got)
 	}
-	if got := specResult.Cases[7].RenderedCells; len(got) != 3 || got[2] != "doing" {
+	if got := specResult.Cases[7].Table.RenderedCells; len(got) != 3 || got[2] != "doing" {
 		t.Fatalf("unexpected moved card row %#v", got)
 	}
 }
@@ -289,12 +289,14 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 					HeadingPath: []string{"Pocket Board", "Formal Rules"},
 					Ordinal:     2,
 				},
-				Kind:      core.CaseKindAlloy,
-				Model:     "board",
-				Assertion: "cardShape",
-				Scope:     "5",
-				Label:     "alloy:ref(board#cardShape, scope=5) @ Formal Rules",
-				Status:    core.StatusPassed,
+				Kind:   core.CaseKindAlloy,
+				Label:  "alloy:ref(board#cardShape, scope=5) @ Formal Rules",
+				Status: core.StatusPassed,
+				Alloy: &core.AlloyResultDetail{
+					Model:     "board",
+					Assertion: "cardShape",
+					Scope:     "5",
+				},
 			},
 		},
 	}, RunOptions{}, config.DefaultTimeoutMsec, func(ProgressEvent) {})
@@ -1217,13 +1219,15 @@ func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult,
 		if !ok {
 			a := check.Alloy
 			result = core.CaseResult{
-				ID:        check.ID,
-				Kind:      core.CaseKindAlloy,
-				Model:     a.Model,
-				Assertion: a.Assertion,
-				Scope:     a.Scope,
-				Label:     "alloy:ref(" + a.Model + "#" + a.Assertion + ", scope=" + a.Scope + ")",
-				Status:    core.StatusPassed,
+				ID:     check.ID,
+				Kind:   core.CaseKindAlloy,
+				Label:  "alloy:ref(" + a.Model + "#" + a.Assertion + ", scope=" + a.Scope + ")",
+				Status: core.StatusPassed,
+				Alloy: &core.AlloyResultDetail{
+					Model:     a.Model,
+					Assertion: a.Assertion,
+					Scope:     a.Scope,
+				},
 			}
 		}
 		results = append(results, result)

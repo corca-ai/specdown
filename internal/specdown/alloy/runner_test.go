@@ -414,17 +414,17 @@ func TestFailedChecksWithLocation(t *testing.T) {
 	loc := failureLocation{BundleLine: 3, SourceRef: "test.md#Section"}
 	results := failedChecks(checks, "/bundle.als", "/bundle.als.map.json", "error msg", loc, true)
 	testutil.Len(t, results, 1)
-	testutil.Equal(t, results[0].BundleLine, 3)
-	testutil.Equal(t, results[0].SourceRef, "test.md#Section")
-	testutil.Equal(t, results[0].BundlePath, "/bundle.als")
+	testutil.Equal(t, results[0].Alloy.BundleLine, 3)
+	testutil.Equal(t, results[0].Alloy.SourceRef, "test.md#Section")
+	testutil.Equal(t, results[0].Alloy.BundlePath, "/bundle.als")
 }
 
 func TestFailedChecksWithoutLocation(t *testing.T) {
 	checks := []core.CaseSpec{alloyCheck("m", "a1", "5", 1)}
 	results := failedChecks(checks, "/bundle.als", "/map.json", "error msg", failureLocation{}, false)
 	testutil.Len(t, results, 1)
-	testutil.Equal(t, results[0].BundleLine, 0)
-	testutil.Equal(t, results[0].SourceRef, "")
+	testutil.Equal(t, results[0].Alloy.BundleLine, 0)
+	testutil.Equal(t, results[0].Alloy.SourceRef, "")
 }
 
 // --- evaluateCheck ---
@@ -470,7 +470,7 @@ func TestEvaluateCheckCounterexample(t *testing.T) {
 	testutil.NilErr(t, err)
 	testutil.Equal(t, result.Status, core.StatusFailed)
 	testutil.Contains(t, result.Message, "counterexample")
-	testutil.True(t, result.CounterexamplePath != "")
+	testutil.True(t, result.Alloy.CounterexamplePath != "")
 }
 
 // --- summarizeCounterexample ---
@@ -663,8 +663,8 @@ func TestBaseCheckResult(t *testing.T) {
 	bundle := modelBundle{Model: "m", AbsolutePath: "/b.als", SourceMapAbsolutePath: "/b.als.map.json"}
 	result := baseCheckResult(check, bundle)
 	testutil.Equal(t, result.Kind, core.CaseKindAlloy)
-	testutil.Equal(t, result.Model, "m")
-	testutil.Equal(t, result.Assertion, "a1")
-	testutil.Equal(t, result.Scope, "5")
-	testutil.Equal(t, result.BundlePath, "/b.als")
+	testutil.Equal(t, result.Alloy.Model, "m")
+	testutil.Equal(t, result.Alloy.Assertion, "a1")
+	testutil.Equal(t, result.Alloy.Scope, "5")
+	testutil.Equal(t, result.Alloy.BundlePath, "/b.als")
 }

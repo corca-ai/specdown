@@ -181,6 +181,19 @@ type CheckCallNode struct {
 func (CheckCallNode) isNode()            {}
 func (n CheckCallNode) Markdown() string { return n.Raw }
 
+// CheckDirectiveNode is an intermediate parse node representing a check directive
+// (> check:name or > check:name(params)). It is paired with a following TableNode
+// during compilation in CompileDocument().
+type CheckDirectiveNode struct {
+	Check       string            `json:"check"`
+	CheckParams map[string]string `json:"checkParams,omitempty"`
+	Raw         string            `json:"raw"`
+	HeadingPath HeadingPath       `json:"headingPath,omitempty"`
+}
+
+func (CheckDirectiveNode) isNode()            {}
+func (n CheckDirectiveNode) Markdown() string { return n.Raw }
+
 type Frontmatter struct {
 	Timeout int    `json:"timeout,omitempty"` // milliseconds, 0 = no limit
 	Type    string `json:"type,omitempty"`    // trace node type (e.g. "goal", "feature", "test")

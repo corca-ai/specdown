@@ -6,59 +6,25 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
-func TestAlloyPlaceholder(t *testing.T) {
-	spec := core.CaseSpec{
-		ID: core.SpecID{
-			File:        "test.spec.md",
-			HeadingPath: []string{"Root", "Section"},
-			Ordinal:     3,
-		},
-		Kind: core.CaseKindAlloy,
-		Alloy: &core.AlloyCaseSpec{
-			Model:     "board",
-			Assertion: "cardShape",
-			Scope:     "5",
-		},
+func TestIndexResultsByKey(t *testing.T) {
+	results := []core.CaseResult{
+		{ID: core.SpecID{File: "a.md", Ordinal: 1}, Status: core.StatusPassed},
+		{ID: core.SpecID{File: "a.md", Ordinal: 2}, Status: core.StatusFailed},
 	}
-
-	result := alloyPlaceholder(spec)
-
-	if result.ID.Key() != spec.ID.Key() {
-		t.Fatalf("expected ID %v, got %v", spec.ID, result.ID)
+	m := indexResultsByKey(results)
+	if len(m) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(m))
 	}
-	if result.Kind != core.CaseKindAlloy {
-		t.Fatalf("expected kind alloy, got %q", result.Kind)
-	}
-	if result.Model != "board" {
-		t.Fatalf("expected model 'board', got %q", result.Model)
-	}
-	if result.Assertion != "cardShape" {
-		t.Fatalf("expected assertion 'cardShape', got %q", result.Assertion)
-	}
-	if result.Scope != "5" {
-		t.Fatalf("expected scope '5', got %q", result.Scope)
-	}
-	if result.Label != "alloy:ref(board#cardShape, scope=5) @ Section" {
-		t.Fatalf("unexpected label %q", result.Label)
-	}
-	if result.Status != "" {
-		t.Fatalf("placeholder should have empty status, got %q", result.Status)
+	r1, ok := m[results[0].ID.Key()]
+	if !ok || r1.Status != core.StatusPassed {
+		t.Fatalf("expected passed result for key %s", results[0].ID.Key())
 	}
 }
 
-func TestAlloyPlaceholderNoHeading(t *testing.T) {
-	spec := core.CaseSpec{
-		ID:   core.SpecID{File: "test.spec.md", Ordinal: 1},
-		Kind: core.CaseKindAlloy,
-		Alloy: &core.AlloyCaseSpec{
-			Model:     "m",
-			Assertion: "a",
-			Scope:     "3",
-		},
-	}
-	result := alloyPlaceholder(spec)
-	if result.Label != "alloy:ref(m#a, scope=3)" {
-		t.Fatalf("unexpected label %q", result.Label)
+func TestIndexResultsByKeyEmpty(t *testing.T) {
+	m := indexResultsByKey(nil)
+	if len(m) != 0 {
+		t.Fatalf("expected empty map, got %d entries", len(m))
 	}
 }
 
@@ -278,33 +244,6 @@ func TestShouldRunTeardownEach(t *testing.T) {
 	// Case at hook depth: should NOT trigger
 	if shouldRunTeardownHook(hook, core.HeadingPath{"Root"}, nil) {
 		t.Fatal("teardown-each should not run at hook depth without child")
-	}
-}
-
-func TestMergeAlloyResultsEmpty(t *testing.T) {
-	cases := []core.CaseResult{
-		{ID: core.SpecID{Ordinal: 1}, Kind: core.CaseKindCode, Status: core.StatusPassed},
-	}
-	merged := mergeAlloyResults(cases, nil)
-	if len(merged) != 1 {
-		t.Fatalf("expected 1 case, got %d", len(merged))
-	}
-}
-
-func TestMergeAlloyResultsReplacesPlaceholder(t *testing.T) {
-	placeholder := core.CaseResult{
-		ID:   core.SpecID{File: "a.md", HeadingPath: []string{"X"}, Ordinal: 1},
-		Kind: core.CaseKindAlloy,
-	}
-	actual := core.CaseResult{
-		ID:     core.SpecID{File: "a.md", HeadingPath: []string{"X"}, Ordinal: 1},
-		Kind:   core.CaseKindAlloy,
-		Status: core.StatusPassed,
-		Label:  "real result",
-	}
-	merged := mergeAlloyResults([]core.CaseResult{placeholder}, []core.CaseResult{actual})
-	if merged[0].Label != "real result" {
-		t.Fatalf("placeholder was not replaced, label=%q", merged[0].Label)
 	}
 }
 

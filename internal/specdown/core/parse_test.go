@@ -61,7 +61,7 @@ func TestParseDocumentBuildsHeadingPathAndExecutableIDs(t *testing.T) {
 		assertTableShape(t, tables)
 	})
 	t.Run("ordinals", func(t *testing.T) {
-		assertOrdinals(t, blocks, tables)
+		assertOrdinals(t, blocks)
 	})
 }
 
@@ -87,26 +87,30 @@ func assertTableShape(t *testing.T, tables []TableNode) {
 	if len(tables) != 1 {
 		t.Fatalf("expected 1 table, got %d", len(tables))
 	}
-	if tables[0].Check != "board-exists" {
-		t.Fatalf("unexpected check %q", tables[0].Check)
+	// After Item 4 refactoring, tables parse without check info.
+	// Check metadata moves to CheckDirectiveNode and is paired at compile time.
+	if tables[0].Check != "" {
+		t.Fatalf("expected empty check on parsed table, got %q", tables[0].Check)
 	}
 	if len(tables[0].Rows) != 2 {
 		t.Fatalf("unexpected row count %d", len(tables[0].Rows))
 	}
-	if tables[0].Rows[0].ID == nil || tables[0].Rows[1].ID == nil {
-		t.Fatal("expected executable table row ids")
+	// Table rows no longer get IDs at parse time; ordinals are assigned at compile time.
+	if tables[0].Rows[0].ID != nil || tables[0].Rows[1].ID != nil {
+		t.Fatal("expected no IDs on parsed table rows (assigned at compile time)")
 	}
 }
 
-func assertOrdinals(t *testing.T, blocks []CodeBlockNode, tables []TableNode) {
+func assertOrdinals(t *testing.T, blocks []CodeBlockNode) {
 	t.Helper()
-	if blocks[0].ID.Ordinal != 1 || blocks[1].ID.Ordinal != 2 || tables[0].Rows[0].ID.Ordinal != 3 || tables[0].Rows[1].ID.Ordinal != 4 {
-		t.Fatalf("unexpected ordinals %d %d %d %d", blocks[0].ID.Ordinal, blocks[1].ID.Ordinal, tables[0].Rows[0].ID.Ordinal, tables[0].Rows[1].ID.Ordinal)
+	// Only code block ordinals are assigned at parse time.
+	if blocks[0].ID.Ordinal != 1 || blocks[1].ID.Ordinal != 2 {
+		t.Fatalf("unexpected code block ordinals %d %d", blocks[0].ID.Ordinal, blocks[1].ID.Ordinal)
 	}
 }
 
-func TestParseDocumentRejectsCheckDirectiveWithoutTable(t *testing.T) {
-	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+func TestCompileDocumentRejectsCheckDirectiveWithoutTable(t *testing.T) {
+	doc, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
 		"> check:board-exists",
@@ -114,9 +118,13 @@ func TestParseDocumentRejectsCheckDirectiveWithoutTable(t *testing.T) {
 		"not a table",
 		"",
 	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
 
+	_, err = CompileDocument(doc)
 	if err == nil {
-		t.Fatal("expected parse error")
+		t.Fatal("expected compile error")
 	}
 	if !strings.Contains(err.Error(), "must be followed by a table") {
 		t.Fatalf("unexpected error %v", err)
@@ -234,22 +242,23 @@ func TestParseDocumentParsesCheckParams(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	var tables []TableNode
+	// After Item 4 refactoring, check info is on CheckDirectiveNode, not TableNode.
+	var directives []CheckDirectiveNode
 	for _, node := range doc.Nodes {
-		if tbl, ok := node.(TableNode); ok {
-			tables = append(tables, tbl)
+		if d, ok := node.(CheckDirectiveNode); ok {
+			directives = append(directives, d)
 		}
 	}
-	if len(tables) != 1 {
-		t.Fatalf("expected 1 table, got %d", len(tables))
+	if len(directives) != 1 {
+		t.Fatalf("expected 1 check directive, got %d", len(directives))
 	}
-	if tables[0].Check != "write-permission" {
-		t.Fatalf("unexpected check %q", tables[0].Check)
+	if directives[0].Check != "write-permission" {
+		t.Fatalf("unexpected check %q", directives[0].Check)
 	}
-	if tables[0].CheckParams == nil {
+	if directives[0].CheckParams == nil {
 		t.Fatal("expected check params")
 	}
-	if got := tables[0].CheckParams["user"]; got != "alan" {
+	if got := directives[0].CheckParams["user"]; got != "alan" {
 		t.Fatalf("expected param user=alan, got %q", got)
 	}
 }
@@ -269,14 +278,14 @@ func TestParseDocumentParsesCheckMultipleParams(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	var tables []TableNode
+	var directives []CheckDirectiveNode
 	for _, node := range doc.Nodes {
-		if tbl, ok := node.(TableNode); ok {
-			tables = append(tables, tbl)
+		if d, ok := node.(CheckDirectiveNode); ok {
+			directives = append(directives, d)
 		}
 	}
-	if tables[0].CheckParams["type"] != "lexical" || tables[0].CheckParams["mode"] != "rich" {
-		t.Fatalf("unexpected params %#v", tables[0].CheckParams)
+	if directives[0].CheckParams["type"] != "lexical" || directives[0].CheckParams["mode"] != "rich" {
+		t.Fatalf("unexpected params %#v", directives[0].CheckParams)
 	}
 }
 
@@ -295,14 +304,14 @@ func TestParseDocumentCheckWithoutParamsHasNilParams(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	var tables []TableNode
+	var directives []CheckDirectiveNode
 	for _, node := range doc.Nodes {
-		if tbl, ok := node.(TableNode); ok {
-			tables = append(tables, tbl)
+		if d, ok := node.(CheckDirectiveNode); ok {
+			directives = append(directives, d)
 		}
 	}
-	if tables[0].CheckParams != nil {
-		t.Fatalf("expected nil params for parameterless check, got %#v", tables[0].CheckParams)
+	if directives[0].CheckParams != nil {
+		t.Fatalf("expected nil params for parameterless check, got %#v", directives[0].CheckParams)
 	}
 }
 
@@ -360,7 +369,7 @@ func TestUnescapeCell(t *testing.T) {
 	}
 }
 
-func TestParseDocumentAllowsCheckWithParamsAndNoTable(t *testing.T) {
+func TestCompileDocumentAllowsCheckWithParamsAndNoTable(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",
 		"",
@@ -375,28 +384,27 @@ func TestParseDocumentAllowsCheckWithParamsAndNoTable(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	var calls []CheckCallNode
-	for _, node := range doc.Nodes {
-		if fc, ok := node.(CheckCallNode); ok {
-			calls = append(calls, fc)
+	plan, err := CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	var checkCases []CaseSpec
+	for _, c := range plan.Cases {
+		if c.Kind == CaseKindTableRow && c.TableRow != nil && c.TableRow.Check == "check-user" {
+			checkCases = append(checkCases, c)
 		}
 	}
-	if len(calls) != 1 {
-		t.Fatalf("expected 1 check call, got %d", len(calls))
+	if len(checkCases) != 1 {
+		t.Fatalf("expected 1 check case, got %d", len(checkCases))
 	}
-	if calls[0].Check != "check-user" {
-		t.Fatalf("unexpected check %q", calls[0].Check)
-	}
-	if calls[0].CheckParams["field"] != "plan" || calls[0].CheckParams["expected"] != "STANDARD" {
-		t.Fatalf("unexpected params %#v", calls[0].CheckParams)
-	}
-	if calls[0].ID == nil || calls[0].ID.Ordinal != 1 {
-		t.Fatalf("unexpected ID %#v", calls[0].ID)
+	if checkCases[0].TableRow.CheckParams["field"] != "plan" || checkCases[0].TableRow.CheckParams["expected"] != "STANDARD" {
+		t.Fatalf("unexpected params %#v", checkCases[0].TableRow.CheckParams)
 	}
 }
 
-func TestParseDocumentRejectsCheckWithoutParamsAndNoTable(t *testing.T) {
-	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+func TestCompileDocumentRejectsCheckWithoutParamsAndNoTable(t *testing.T) {
+	doc, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
 		"",
 		"> check:board-exists",
@@ -404,9 +412,13 @@ func TestParseDocumentRejectsCheckWithoutParamsAndNoTable(t *testing.T) {
 		"not a table",
 		"",
 	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
 
+	_, err = CompileDocument(doc)
 	if err == nil {
-		t.Fatal("expected parse error")
+		t.Fatal("expected compile error")
 	}
 	if !strings.Contains(err.Error(), "must be followed by a table") {
 		t.Fatalf("unexpected error %v", err)

@@ -33,31 +33,45 @@ type DoctestStep struct {
 }
 
 type CaseResult struct {
+	// Common (always set)
 	ID              SpecID        `json:"id"`
 	Kind            CaseKind      `json:"kind"`
-	Block           string        `json:"block,omitempty"`
-	Check           string        `json:"check,omitempty"`
-	Label           string        `json:"label"`
-	Template        string        `json:"template,omitempty"`
-	RenderedSource  string        `json:"renderedSource,omitempty"`
-	Columns         []string      `json:"columns,omitempty"`
-	TemplateCells   []string      `json:"templateCells,omitempty"`
-	RenderedCells   []string      `json:"renderedCells,omitempty"`
-	RowNumber       int           `json:"rowNumber,omitempty"`
 	Status          Status        `json:"status"`
+	Label           string        `json:"label"`
+	DurationMs      int           `json:"durationMs,omitempty"`
 	ExpectFail      bool          `json:"expectFail,omitempty"`
 	Message         string        `json:"message,omitempty"`
 	Expected        string        `json:"expected,omitempty"`
 	Actual          string        `json:"actual,omitempty"`
 	Bindings        []Binding     `json:"bindings,omitempty"`
 	VisibleBindings []Binding     `json:"visibleBindings,omitempty"`
-	DurationMs      int           `json:"durationMs,omitempty"`
-	Steps           []DoctestStep `json:"steps,omitempty"`
 	Events          []Event       `json:"events,omitempty"`
-	// Alloy-specific fields (only set when Kind == CaseKindAlloy)
-	Model              string `json:"model,omitempty"`
-	Assertion          string `json:"assertion,omitempty"`
-	Scope              string `json:"scope,omitempty"`
+
+	// Kind-specific (exactly one is set, or none for InlineExpect)
+	Code  *CodeResultDetail  `json:"code,omitempty"`
+	Table *TableResultDetail `json:"table,omitempty"`
+	Alloy *AlloyResultDetail `json:"alloy,omitempty"`
+}
+
+type CodeResultDetail struct {
+	Block          string        `json:"block"`
+	Template       string        `json:"template,omitempty"`
+	RenderedSource string        `json:"renderedSource,omitempty"`
+	Steps          []DoctestStep `json:"steps,omitempty"`
+}
+
+type TableResultDetail struct {
+	Check         string   `json:"check"`
+	Columns       []string `json:"columns,omitempty"`
+	TemplateCells []string `json:"templateCells,omitempty"`
+	RenderedCells []string `json:"renderedCells,omitempty"`
+	RowNumber     int      `json:"rowNumber,omitempty"`
+}
+
+type AlloyResultDetail struct {
+	Model              string `json:"model"`
+	Assertion          string `json:"assertion"`
+	Scope              string `json:"scope"`
 	BundlePath         string `json:"bundlePath,omitempty"`
 	SourceMapPath      string `json:"sourceMapPath,omitempty"`
 	BundleLine         int    `json:"bundleLine,omitempty"`
@@ -108,10 +122,11 @@ type ModelRunner interface {
 }
 
 type Report struct {
-	Title       string           `json:"title"`
-	GeneratedAt time.Time        `json:"generatedAt"`
-	Results     []DocumentResult `json:"results"`
-	Summary     Summary          `json:"summary"`
-	TraceErrors []string         `json:"traceErrors,omitempty"`
-	TraceGraph  *TraceGraphData  `json:"traceGraph,omitempty"`
+	SchemaVersion int              `json:"schemaVersion"`
+	Title         string           `json:"title"`
+	GeneratedAt   time.Time        `json:"generatedAt"`
+	Results       []DocumentResult `json:"results"`
+	Summary       Summary          `json:"summary"`
+	TraceErrors   []string         `json:"traceErrors,omitempty"`
+	TraceGraph    *TraceGraphData  `json:"traceGraph,omitempty"`
 }

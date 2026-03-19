@@ -197,10 +197,11 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	results = executed
 
 	return core.Report{
-		Title:       title,
-		GeneratedAt: time.Now(),
-		Results:     results,
-		Summary:     summary,
+		SchemaVersion: 2,
+		Title:         title,
+		GeneratedAt:   time.Now(),
+		Results:       results,
+		Summary:       summary,
 	}, nil
 }
 
@@ -283,15 +284,21 @@ func dryRunReport(plan core.Plan) core.Report {
 			}
 			switch c.Kind {
 			case core.CaseKindCode:
-				cr.Block = c.Code.Block.Descriptor()
+				cr.Code = &core.CodeResultDetail{
+					Block: c.Code.Block.Descriptor(),
+				}
 			case core.CaseKindTableRow:
-				cr.Check = c.TableRow.Check
-				cr.Columns = append([]string(nil), c.TableRow.Columns...)
-				cr.RowNumber = c.TableRow.RowNumber
+				cr.Table = &core.TableResultDetail{
+					Check:   c.TableRow.Check,
+					Columns: append([]string(nil), c.TableRow.Columns...),
+					RowNumber: c.TableRow.RowNumber,
+				}
 			case core.CaseKindAlloy:
-				cr.Model = c.Alloy.Model
-				cr.Assertion = c.Alloy.Assertion
-				cr.Scope = c.Alloy.Scope
+				cr.Alloy = &core.AlloyResultDetail{
+					Model:     c.Alloy.Model,
+					Assertion: c.Alloy.Assertion,
+					Scope:     c.Alloy.Scope,
+				}
 			}
 			cases = append(cases, cr)
 		}
@@ -303,9 +310,10 @@ func dryRunReport(plan core.Plan) core.Report {
 	}
 
 	return core.Report{
-		GeneratedAt: time.Now(),
-		Results:     results,
-		Summary:     summary,
+		SchemaVersion: 2,
+		GeneratedAt:   time.Now(),
+		Results:       results,
+		Summary:       summary,
 	}
 }
 
@@ -395,7 +403,14 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 
 	sm := newSessionManager(host)
 
-	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter)
+	// Pre-compute model verification results via ModelRunner before the case loop.
+	modelResults, modelErr := alloyRunner.RunDocument(plan)
+	if modelErr != nil {
+		return core.DocumentResult{}, modelErr
+	}
+	precomputed := indexResultsByKey(modelResults)
+
+	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter, precomputed)
 	hitLimit := errors.Is(err, errMaxFailures)
 	if err != nil && !hitLimit {
 		if closeErr := sm.CloseAll(); closeErr != nil {
@@ -411,14 +426,6 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		fmt.Fprintf(os.Stderr, "warning: closing adapter sessions: %v\n", closeErr)
 	}
 
-	if !hitLimit {
-		alloyResults, alloyErr := alloyRunner.RunDocument(plan)
-		if alloyErr != nil {
-			return core.DocumentResult{}, alloyErr
-		}
-		cases = mergeAlloyResults(cases, alloyResults)
-	}
-
 	result := core.DocumentResult{
 		Document: plan.Document,
 		Status:   documentStatus(cases),
@@ -428,6 +435,15 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		return result, errMaxFailures
 	}
 	return result, nil
+}
+
+// indexResultsByKey builds a lookup map from model runner results.
+func indexResultsByKey(results []core.CaseResult) map[string]core.CaseResult {
+	m := make(map[string]core.CaseResult, len(results))
+	for i := range results {
+		m[results[i].ID.Key()] = results[i]
+	}
+	return m
 }
 
 // documentStatus derives the overall document status from case results.
@@ -440,26 +456,7 @@ func documentStatus(cases []core.CaseResult) core.Status {
 	return core.StatusPassed
 }
 
-// mergeAlloyResults replaces placeholder alloy cases with actual results.
-func mergeAlloyResults(cases, alloyResults []core.CaseResult) []core.CaseResult {
-	if len(alloyResults) == 0 {
-		return cases
-	}
-	alloyByKey := make(map[string]core.CaseResult, len(alloyResults))
-	for i := range alloyResults {
-		alloyByKey[alloyResults[i].ID.Key()] = alloyResults[i]
-	}
-	for i := range cases {
-		if cases[i].Kind == core.CaseKindAlloy {
-			if ar, ok := alloyByKey[cases[i].ID.Key()]; ok {
-				cases[i] = ar
-			}
-		}
-	}
-	return cases
-}
-
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32) ([]core.CaseResult, error) {
+func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32, precomputed map[string]core.CaseResult) ([]core.CaseResult, error) {
 	timeout := plan.Document.Frontmatter.Timeout
 	if timeout == 0 {
 		timeout = defaultTimeout
@@ -477,6 +474,7 @@ func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sess
 		failures:    failures,
 		casesTotal:  casesTotal,
 		caseCounter: caseCounter,
+		precomputed: precomputed,
 	}
 
 	for i, specCase := range plan.Cases {
@@ -505,6 +503,7 @@ type caseRunContext struct {
 	failures    *atomic.Int32
 	casesTotal  int
 	caseCounter *atomic.Int32
+	precomputed map[string]core.CaseResult
 }
 
 // processCase handles a single case: hooks, execution, result recording.
@@ -512,7 +511,19 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 	currPath := specCase.ID.HeadingPath
 
 	if specCase.Kind == core.CaseKindAlloy {
-		c.results = append(c.results, alloyPlaceholder(specCase))
+		result, ok := c.precomputed[specCase.ID.Key()]
+		if !ok {
+			result = core.CaseResult{
+				ID:      specCase.ID,
+				Kind:    core.CaseKindAlloy,
+				Label:   specCase.DefaultLabel(),
+				Status:  core.StatusFailed,
+				Message: "missing model verification result for " + specCase.ID.Key(),
+			}
+		}
+		if err := c.recordResult(result, specCase.ID.HeadingPath); err != nil {
+			return err
+		}
 		c.prevPath = currPath
 		return nil
 	}
@@ -555,20 +566,6 @@ func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingP
 		}
 	}
 	return nil
-}
-
-// alloyPlaceholder creates a placeholder result for an alloy case.
-// The real result is merged in later from the alloy runner.
-func alloyPlaceholder(specCase core.CaseSpec) core.CaseResult {
-	a := specCase.Alloy
-	return core.CaseResult{
-		ID:        specCase.ID,
-		Kind:      core.CaseKindAlloy,
-		Model:     a.Model,
-		Assertion: a.Assertion,
-		Scope:     a.Scope,
-		Label:     specCase.DefaultLabel(),
-	}
 }
 
 // peekNextPath returns the heading path of the next case, or nil if at the end.
@@ -733,12 +730,14 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 func runCodeCase(specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
 	code := specCase.Code
 	result := core.CaseResult{
-		ID:             specCase.ID,
-		Kind:           specCase.Kind,
-		Block:          code.Block.Descriptor(),
-		Label:          specCase.DefaultLabel(),
-		Template:       code.Template,
-		RenderedSource: prepared.Code.Template,
+		ID:    specCase.ID,
+		Kind:  specCase.Kind,
+		Label: specCase.DefaultLabel(),
+		Code: &core.CodeResultDetail{
+			Block:          code.Block.Descriptor(),
+			Template:       code.Template,
+			RenderedSource: prepared.Code.Template,
+		},
 	}
 
 	result.Events = append(result.Events, core.Event{
@@ -796,7 +795,7 @@ func runDoctestCase(_, prepared core.CaseSpec, session *adapterhost.Session, res
 		}
 
 		actual, stepStatus := evalDoctestStep(resp, step.Expected)
-		result.Steps = append(result.Steps, core.DoctestStep{
+		result.Code.Steps = append(result.Code.Steps, core.DoctestStep{
 			Command:  step.Command,
 			Expected: step.Expected,
 			Actual:   actual,
@@ -850,14 +849,16 @@ func runTableRowCase(specCase, prepared core.CaseSpec, session *adapterhost.Sess
 	tr := specCase.TableRow
 	pr := prepared.TableRow
 	result := core.CaseResult{
-		ID:            specCase.ID,
-		Kind:          specCase.Kind,
-		Check:         tr.Check,
-		Label:         specCase.DefaultLabel(),
-		Columns:       append([]string(nil), tr.Columns...),
-		TemplateCells: append([]string(nil), tr.Cells...),
-		RenderedCells: append([]string(nil), pr.Cells...),
-		RowNumber:     tr.RowNumber,
+		ID:    specCase.ID,
+		Kind:  specCase.Kind,
+		Label: specCase.DefaultLabel(),
+		Table: &core.TableResultDetail{
+			Check:         tr.Check,
+			Columns:       append([]string(nil), tr.Columns...),
+			TemplateCells: append([]string(nil), tr.Cells...),
+			RenderedCells: append([]string(nil), pr.Cells...),
+			RowNumber:     tr.RowNumber,
+		},
 	}
 
 	result.Events = append(result.Events, core.Event{
@@ -1150,16 +1151,20 @@ func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		result.Block = specCase.Code.Block.Descriptor()
-		result.Template = specCase.Code.Template
-		result.RenderedSource = specCase.Code.Template
+		result.Code = &core.CodeResultDetail{
+			Block:          specCase.Code.Block.Descriptor(),
+			Template:       specCase.Code.Template,
+			RenderedSource: specCase.Code.Template,
+		}
 	case core.CaseKindTableRow:
 		tr := specCase.TableRow
-		result.Check = tr.Check
-		result.Columns = append([]string(nil), tr.Columns...)
-		result.RowNumber = tr.RowNumber
-		result.TemplateCells = append([]string(nil), tr.Cells...)
-		result.RenderedCells = append([]string(nil), tr.Cells...)
+		result.Table = &core.TableResultDetail{
+			Check:         tr.Check,
+			Columns:       append([]string(nil), tr.Columns...),
+			RowNumber:     tr.RowNumber,
+			TemplateCells: append([]string(nil), tr.Cells...),
+			RenderedCells: append([]string(nil), tr.Cells...),
+		}
 	}
 
 	result.Events = append(result.Events, core.Event{

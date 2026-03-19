@@ -60,9 +60,6 @@ type documentParser struct {
 	headingPath     []string
 	title           string
 	ordinal         int
-	check           string
-	checkParams     map[string]string
-	checkRaw        string
 	hookKind        HookKind
 	hookEach        bool
 	hookRaw         string
@@ -114,7 +111,7 @@ func (p *documentParser) parse() error {
 	if p.hookKind != "" {
 		return fmt.Errorf("%s: %s directive must be followed by a code block", p.file, p.hookKind)
 	}
-	return p.flushCheck()
+	return nil
 }
 
 func (p *documentParser) parseLine(i int) (int, error) {
@@ -156,36 +153,16 @@ func (p *documentParser) requireNoHook() error {
 	return nil
 }
 
-func (p *documentParser) flushCheck() error {
-	if p.check == "" {
-		return nil
-	}
-	node, flushed, err := tryFlushCheck(p.check, p.checkParams, p.checkRaw, p.file, &p.ordinal, p.headingPath)
-	if err != nil {
-		return err
-	}
-	if flushed {
-		p.nodes = append(p.nodes, node)
-	}
-	p.check = ""
-	p.checkParams = nil
-	p.checkRaw = ""
-	return nil
-}
-
 func (p *documentParser) handleAlloyRef(i int, ref AlloyRefNode) (int, error) {
 	if err := p.requireNoHook(); err != nil {
 		return 0, err
 	}
-	if err := p.flushCheck(); err != nil {
-		return 0, err
-	}
 	p.ordinal++
 	ref.Raw = p.lines[i]
-	ref.HeadingPath = append([]string(nil), p.headingPath...)
+	ref.HeadingPath = copyPath(p.headingPath)
 	ref.ID = &SpecID{
 		File:        p.file,
-		HeadingPath: append([]string(nil), p.headingPath...),
+		HeadingPath: copyPath(p.headingPath),
 		Ordinal:     p.ordinal,
 	}
 	p.nodes = append(p.nodes, ref)
@@ -194,9 +171,6 @@ func (p *documentParser) handleAlloyRef(i int, ref AlloyRefNode) (int, error) {
 
 func (p *documentParser) handleHookDirective(i int, hk HookKind, he bool) (int, error) {
 	if err := p.requireNoHook(); err != nil {
-		return 0, err
-	}
-	if err := p.flushCheck(); err != nil {
 		return 0, err
 	}
 	p.hookKind = hk
@@ -209,19 +183,16 @@ func (p *documentParser) handleCheckDirective(i int, check string, params map[st
 	if err := p.requireNoHook(); err != nil {
 		return 0, err
 	}
-	if err := p.flushCheck(); err != nil {
-		return 0, err
-	}
-	p.check = check
-	p.checkParams = params
-	p.checkRaw = p.lines[i]
+	p.nodes = append(p.nodes, CheckDirectiveNode{
+		Check:       check,
+		CheckParams: params,
+		Raw:         p.lines[i],
+		HeadingPath: copyPath(p.headingPath),
+	})
 	return i + 1, nil
 }
 
 func (p *documentParser) handleFence(i int) (int, error) {
-	if err := p.flushCheck(); err != nil {
-		return 0, err
-	}
 	info := parseFenceInfo(p.lines[i])
 
 	if p.hookKind != "" {
@@ -274,7 +245,7 @@ func (p *documentParser) parseHookBlock(i int, info string) (int, error) {
 		Source:      source,
 		Raw:         p.hookRaw + strings.Join(p.lines[i:end+1], ""),
 		Summary:     hookSummary,
-		HeadingPath: append([]string(nil), p.headingPath...),
+		HeadingPath: copyPath(p.headingPath),
 	})
 	p.hookKind = ""
 	p.hookEach = false
@@ -292,7 +263,7 @@ func (p *documentParser) parseAlloyModelBlock(i int, modelName string) (int, err
 		Model:       modelName,
 		Source:      source,
 		Raw:         raw,
-		HeadingPath: append([]string(nil), p.headingPath...),
+		HeadingPath: copyPath(p.headingPath),
 	})
 	return end + 1, nil
 }
@@ -326,7 +297,7 @@ func (p *documentParser) parseCodeBlock(i int, info string) (int, error) {
 		p.ordinal++
 		node.ID = &SpecID{
 			File:        p.file,
-			HeadingPath: append([]string(nil), p.headingPath...),
+			HeadingPath: copyPath(p.headingPath),
 			Ordinal:     p.ordinal,
 		}
 	}
@@ -338,22 +309,16 @@ func (p *documentParser) handleTable(i int) (int, error) {
 	if err := p.requireNoHook(); err != nil {
 		return 0, err
 	}
-	table, next, err := parseTableNode(p.file, p.lines, i, p.check, p.checkParams, &p.ordinal, p.headingPath)
+	table, next, err := parseTableNode(p.file, p.lines, i)
 	if err != nil {
 		return 0, err
 	}
 	p.nodes = append(p.nodes, table)
-	p.check = ""
-	p.checkParams = nil
-	p.checkRaw = ""
 	return next, nil
 }
 
 func (p *documentParser) handleHeading(i, level int, text string) (int, error) {
 	if err := p.requireNoHook(); err != nil {
-		return 0, err
-	}
-	if err := p.flushCheck(); err != nil {
 		return 0, err
 	}
 	if p.title == "" {
@@ -364,7 +329,7 @@ func (p *documentParser) handleHeading(i, level int, text string) (int, error) {
 		Level:       level,
 		Text:        text,
 		Raw:         p.lines[i],
-		HeadingPath: append([]string(nil), p.headingPath...),
+		HeadingPath: copyPath(p.headingPath),
 	})
 	return i + 1, nil
 }
@@ -389,12 +354,9 @@ func (p *documentParser) handleProse(i int) (int, error) {
 	if err := p.requireNoHook(); err != nil {
 		return 0, err
 	}
-	if err := p.flushCheck(); err != nil {
-		return 0, err
-	}
 	proseNode := ProseNode{
 		Raw:         raw,
-		HeadingPath: append([]string(nil), p.headingPath...),
+		HeadingPath: copyPath(p.headingPath),
 	}
 	proseNode.Inlines = parseInlineElements(raw, p.file, &p.ordinal, p.headingPath)
 	p.nodes = append(p.nodes, proseNode)
@@ -489,27 +451,6 @@ func parseHookDirective(line string) (HookKind, bool, bool) {
 	return HookKind(matches[1]), matches[2] == "each", true
 }
 
-func tryFlushCheck(check string, checkParams map[string]string, checkRaw, relativePath string, ordinal *int, headingPath []string) (CheckCallNode, bool, error) {
-	if check == "" {
-		return CheckCallNode{}, false, nil
-	}
-	if len(checkParams) == 0 {
-		return CheckCallNode{}, false, fmt.Errorf("%s: check directive %q must be followed by a table", relativePath, check)
-	}
-	*ordinal++
-	return CheckCallNode{
-		Check:       check,
-		CheckParams: checkParams,
-		Raw:         checkRaw,
-		HeadingPath: append([]string(nil), headingPath...),
-		ID: &SpecID{
-			File:        relativePath,
-			HeadingPath: append([]string(nil), headingPath...),
-			Ordinal:     *ordinal,
-		},
-	}, true, nil
-}
-
 func parseAlloyModelInfo(info string) (string, bool) {
 	matches := alloyModelInfoPattern.FindStringSubmatch(strings.TrimSpace(info))
 	if matches == nil {
@@ -548,7 +489,7 @@ func isTableStart(lines []string, index int) bool {
 	return looksLikeTableRow(lines[index]) && isTableSeparator(lines[index+1])
 }
 
-func parseTableNode(relativePath string, lines []string, start int, check string, checkParams map[string]string, ordinal *int, headingPath []string) (TableNode, int, error) {
+func parseTableNode(relativePath string, lines []string, start int) (TableNode, int, error) {
 	columns, err := parseTableCells(lines[start])
 	if err != nil {
 		return TableNode{}, 0, fmt.Errorf("%s: %w", relativePath, err)
@@ -572,14 +513,6 @@ func parseTableNode(relativePath string, lines []string, start int, check string
 			Cells: cells,
 			Raw:   lines[end],
 		}
-		if check != "" {
-			*ordinal++
-			row.ID = &SpecID{
-				File:        relativePath,
-				HeadingPath: append([]string(nil), headingPath...),
-				Ordinal:     *ordinal,
-			}
-		}
 		rows = append(rows, row)
 		end++
 	}
@@ -589,11 +522,9 @@ func parseTableNode(relativePath string, lines []string, start int, check string
 	}
 
 	return TableNode{
-		Check:       check,
-		CheckParams: checkParams,
-		Columns:     columns,
-		Rows:        rows,
-		Raw:         strings.Join(lines[start:end], ""),
+		Columns: columns,
+		Rows:    rows,
+		Raw:     strings.Join(lines[start:end], ""),
 	}, end, nil
 }
 
@@ -766,7 +697,7 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 			ExpectFail:  expectFail,
 			ID: &SpecID{
 				File:        relativePath,
-				HeadingPath: append([]string(nil), headingPath...),
+				HeadingPath: copyPath(headingPath),
 				Ordinal:     *ordinal,
 			},
 		})
@@ -784,7 +715,7 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 			CheckParams: parseCheckParams(raw[loc[4]:loc[5]]),
 			ID: &SpecID{
 				File:        relativePath,
-				HeadingPath: append([]string(nil), headingPath...),
+				HeadingPath: copyPath(headingPath),
 				Ordinal:     *ordinal,
 			},
 		})
@@ -835,10 +766,10 @@ func stripCommentPrefix(line string) (string, bool) {
 
 func nextHeadingPath(current []string, level int, text string) []string {
 	if level <= 0 {
-		return append([]string(nil), current...)
+		return copyPath(current)
 	}
 
-	next := append([]string(nil), current...)
+	next := copyPath(current)
 	if len(next) < level-1 {
 		for len(next) < level-1 {
 			next = append(next, "")

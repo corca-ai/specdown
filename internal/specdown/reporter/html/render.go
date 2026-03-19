@@ -105,6 +105,9 @@ func renderNode(node core.Node, caseResults map[string]core.CaseResult) (string,
 		return renderHookBlock(current), nil
 	case core.CheckCallNode:
 		return renderCheckCall(current, caseResults), nil
+	case core.CheckDirectiveNode:
+		// Check directives are consumed during compilation; nothing to render.
+		return "", nil
 	default:
 		return "", fmt.Errorf("unknown node type %T", node)
 	}
@@ -156,8 +159,8 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		out.WriteString(`</details>`)
 	} else {
 		out.WriteString(`<div class="exec-source">`)
-		if len(result.Steps) > 0 {
-			renderDoctestSteps(&out, result.Steps)
+		if result.Code != nil && len(result.Code.Steps) > 0 {
+			renderDoctestSteps(&out, result.Code.Steps)
 		} else {
 			renderCodeSource(&out, result)
 		}
@@ -167,16 +170,23 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	}
 
 	out.WriteString(`<p class="exec-block-footer">`)
-	out.WriteString(template.HTMLEscapeString(result.Block))
+	block := ""
+	if result.Code != nil {
+		block = result.Code.Block
+	}
+	out.WriteString(template.HTMLEscapeString(block))
 	out.WriteString(`</p>`)
 	out.WriteString(`</section>`)
 	return out.String(), nil
 }
 
 func renderCodeSource(out *strings.Builder, result core.CaseResult) {
-	source := result.Template
-	if result.RenderedSource != "" {
-		source = result.RenderedSource
+	source := ""
+	if result.Code != nil {
+		source = result.Code.Template
+		if result.Code.RenderedSource != "" {
+			source = result.Code.RenderedSource
+		}
 	}
 	out.WriteString(`<code>`)
 	out.WriteString(template.HTMLEscapeString(source))
@@ -189,9 +199,12 @@ func renderCodeSource(out *strings.Builder, result core.CaseResult) {
 // renderCodeSourceStripped renders the code block with the first comment line
 // (the summary line) stripped from the displayed source.
 func renderCodeSourceStripped(out *strings.Builder, result core.CaseResult) {
-	source := result.Template
-	if result.RenderedSource != "" {
-		source = result.RenderedSource
+	source := ""
+	if result.Code != nil {
+		source = result.Code.Template
+		if result.Code.RenderedSource != "" {
+			source = result.Code.RenderedSource
+		}
 	}
 	source = stripFirstCommentLine(source)
 	if source != "" {
@@ -326,9 +339,12 @@ func renderTableRow(out *strings.Builder, row core.TableRowNode, result core.Cas
 	out.WriteString(`" id="`)
 	out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
 	out.WriteString(`">`)
-	cells := result.TemplateCells
-	if len(result.RenderedCells) == len(cells) {
-		cells = result.RenderedCells
+	var cells []string
+	if result.Table != nil {
+		cells = result.Table.TemplateCells
+		if len(result.Table.RenderedCells) == len(cells) {
+			cells = result.Table.RenderedCells
+		}
 	}
 	lastIndex := len(cells) - 1
 	for index, cell := range cells {
@@ -379,7 +395,7 @@ func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.Case
 	hasCheck := false
 	for k := range caseResults {
 		r := caseResults[k]
-		if r.Kind != core.CaseKindAlloy || r.Model != node.Model {
+		if r.Kind != core.CaseKindAlloy || r.Alloy == nil || r.Alloy.Model != node.Model {
 			continue
 		}
 		hasCheck = true

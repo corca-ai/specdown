@@ -28,14 +28,12 @@ For v1, a single file is sufficient.
       "blocks": ["run:myapp"],
       "checks": ["user-exists"]
     }
-  ],
-  "reporters": [
-    { "builtin": "html", "outFile": ".artifacts/specdown/report" },
-    { "builtin": "json", "outFile": ".artifacts/specdown/report.json" }
-  ],
-  "models": { "builtin": "alloy" }
+  ]
 }
 ```
+
+The `models` and `reporters` fields can be included to override defaults.
+See [Defaults](#defaults).
 
 ## Entry File
 
@@ -149,7 +147,7 @@ precedence over the built-in.
 | `entry` | Path to the entry Markdown file. Starting point for recursive link crawling |
 | `adapters` | List of adapters that handle executable blocks and checks |
 | `reporters` | Output generators. `html` and `json` builtins provided |
-| `models` | Alloy model verification. Can be omitted if not used |
+| `models` | Alloy model verification (default: `alloy`). Accepted for explicit configuration; omit to use the default |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
 | `trace` | Traceability configuration. See [Traceability](traceability.spec.md) |
 | `toc` | Sidebar table-of-contents grouping. See [TOC Grouping](#toc-grouping) below |
@@ -242,6 +240,9 @@ CFG
 | `outFile` | Output path. For HTML, this is a directory; for JSON, a file path |
 
 ### Models Fields
+
+The entire `models` object is optional. When omitted, alloy is enabled
+by default.
 
 | Field | Description |
 |-------|-------------|
