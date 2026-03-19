@@ -551,7 +551,10 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 		return nil
 	}
 
-	c.runSetupHooks(c.prevPath, currPath)
+	prevPath := c.prevPath
+	c.runHooksMatching(core.HookSetup, func(h core.HookSpec) bool {
+		return shouldRunHook(h, prevPath, currPath)
+	})
 
 	result, err := runSingleCase(specCase, c.registry, c.sessions, c.bindings.VisibleAt(specCase.ID.HeadingPath), c.timeoutMs)
 	if err != nil {
@@ -562,7 +565,9 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 		return err
 	}
 
-	c.runTeardownHooks(currPath, nextPath)
+	c.runHooksMatching(core.HookTeardown, func(h core.HookSpec) bool {
+		return shouldRunTeardownHook(h, currPath, nextPath)
+	})
 
 	c.prevPath = currPath
 	return nil
@@ -599,23 +604,10 @@ func peekNextPath(cases []core.CaseSpec, current int) core.HeadingPath {
 	return nil
 }
 
-func (c *caseRunContext) runSetupHooks(prevPath, currPath core.HeadingPath) {
+func (c *caseRunContext) runHooksMatching(kind core.HookKind, shouldRun func(core.HookSpec) bool) {
 	for i := range c.hooks {
 		hook := c.hooks[i]
-		if hook.Kind != core.HookSetup || !shouldRunHook(hook, prevPath, currPath) {
-			continue
-		}
-		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: %s hook failed: %v\n", hook.Kind, err)
-		}
-	}
-}
-
-func (c *caseRunContext) runTeardownHooks(currPath, nextPath core.HeadingPath) {
-	for i := range c.hooks {
-		hook := c.hooks[i]
-		if hook.Kind != core.HookTeardown || !shouldRunTeardownHook(hook, currPath, nextPath) {
+		if hook.Kind != kind || !shouldRun(hook) {
 			continue
 		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
