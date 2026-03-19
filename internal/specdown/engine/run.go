@@ -59,6 +59,19 @@ type adapterRegistry struct {
 	checks map[string]adapterEntry
 }
 
+// executionContext carries shared state through the document execution call chain.
+type executionContext struct {
+	registry       adapterRegistry
+	host           adapterhost.Host
+	alloyRunner    core.ModelRunner
+	defaultTimeout int
+	progress       ProgressFunc
+	maxFailures    int
+	failures       *atomic.Int32
+	casesTotal     int
+	caseCounter    *atomic.Int32
+}
+
 func runShellCommand(baseDir, command string) error {
 	shell, flag := "sh", "-c"
 	if runtime.GOOS == "windows" {
@@ -176,7 +189,18 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 
 	var failures atomic.Int32
 	var caseCounter atomic.Int32
-	results, err := executeDocuments(plan.Documents, jobs, registry, host, alloyRunner, defaultTimeout, progress, opts.MaxFailures, &failures, casesTotal, &caseCounter)
+	ec := &executionContext{
+		registry:       registry,
+		host:           host,
+		alloyRunner:    alloyRunner,
+		defaultTimeout: defaultTimeout,
+		progress:       progress,
+		maxFailures:    opts.MaxFailures,
+		failures:       &failures,
+		casesTotal:     casesTotal,
+		caseCounter:    &caseCounter,
+	}
+	results, err := ec.executeDocuments(plan.Documents, jobs)
 	hitLimit := errors.Is(err, errMaxFailures)
 	if err != nil && !hitLimit {
 		return core.Report{}, err
@@ -205,11 +229,11 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 	}, nil
 }
 
-func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32) ([]core.DocumentResult, error) {
+func (ec *executionContext) executeDocuments(documents []core.DocumentPlan, jobs int) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
 	if jobs == 1 {
 		for i := range documents {
-			result, err := runDocument(documents[i], registry, host, alloyRunner, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter)
+			result, err := ec.runDocument(documents[i])
 			if errors.Is(err, errMaxFailures) {
 				results[i] = result
 				return results, err
@@ -231,7 +255,7 @@ func executeDocuments(documents []core.DocumentPlan, jobs int, registry adapterR
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			result, err := runDocument(dp, registry, host, alloyRunner, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter)
+			result, err := ec.runDocument(dp)
 			results[i] = result
 			errs[i] = err
 		}(i, documents[i])
@@ -391,8 +415,8 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 	}
 }
 
-func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterhost.Host, alloyRunner core.ModelRunner, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32) (core.DocumentResult, error) {
-	progress(ProgressEvent{Kind: "spec", Spec: plan.Document.RelativeTo})
+func (ec *executionContext) runDocument(plan core.DocumentPlan) (core.DocumentResult, error) {
+	ec.progress(ProgressEvent{Kind: "spec", Spec: plan.Document.RelativeTo})
 
 	if len(plan.Cases) == 0 {
 		return core.DocumentResult{
@@ -401,16 +425,16 @@ func runDocument(plan core.DocumentPlan, registry adapterRegistry, host adapterh
 		}, nil
 	}
 
-	sm := newSessionManager(host)
+	sm := newSessionManager(ec.host)
 
 	// Pre-compute model verification results via ModelRunner before the case loop.
-	modelResults, modelErr := alloyRunner.RunDocument(plan)
+	modelResults, modelErr := ec.alloyRunner.RunDocument(plan)
 	if modelErr != nil {
 		return core.DocumentResult{}, modelErr
 	}
 	precomputed := indexResultsByKey(modelResults)
 
-	cases, err := runDocumentCases(plan, registry, sm, defaultTimeout, progress, maxFailures, failures, casesTotal, caseCounter, precomputed)
+	cases, err := ec.runDocumentCases(plan, sm, precomputed)
 	hitLimit := errors.Is(err, errMaxFailures)
 	if err != nil && !hitLimit {
 		if closeErr := sm.CloseAll(); closeErr != nil {
@@ -456,24 +480,24 @@ func documentStatus(cases []core.CaseResult) core.Status {
 	return core.StatusPassed
 }
 
-func runDocumentCases(plan core.DocumentPlan, registry adapterRegistry, sm *sessionManager, defaultTimeout int, progress ProgressFunc, maxFailures int, failures *atomic.Int32, casesTotal int, caseCounter *atomic.Int32, precomputed map[string]core.CaseResult) ([]core.CaseResult, error) {
+func (ec *executionContext) runDocumentCases(plan core.DocumentPlan, sm *sessionManager, precomputed map[string]core.CaseResult) ([]core.CaseResult, error) {
 	timeout := plan.Document.Frontmatter.Timeout
 	if timeout == 0 {
-		timeout = defaultTimeout
+		timeout = ec.defaultTimeout
 	}
 	ctx := &caseRunContext{
-		registry:    registry,
+		registry:    ec.registry,
 		sessions:    sm,
 		bindings:    newBindingsManager(),
 		timeoutMs:   timeout,
 		hooks:       plan.Hooks,
 		results:     make([]core.CaseResult, 0, len(plan.Cases)),
 		spec:        plan.Document.RelativeTo,
-		progress:    progress,
-		maxFailures: maxFailures,
-		failures:    failures,
-		casesTotal:  casesTotal,
-		caseCounter: caseCounter,
+		progress:    ec.progress,
+		maxFailures: ec.maxFailures,
+		failures:    ec.failures,
+		casesTotal:  ec.casesTotal,
+		caseCounter: ec.caseCounter,
 		precomputed: precomputed,
 	}
 
