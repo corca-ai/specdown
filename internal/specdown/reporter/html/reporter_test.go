@@ -965,3 +965,91 @@ func TestWriteDocTypeBadgeInTOC(t *testing.T) {
 	assertContains(t, html, `toc-type-badge`, "type badge in TOC")
 	assertContains(t, html, `>spec</span>`, "type value in badge")
 }
+
+func TestWriteRendersMermaidBlock(t *testing.T) {
+	mermaidSource := "graph LR\n    A[Core] --> B[Adapter]"
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Diagram Test",
+					RelativeTo: "specs/diagram.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Diagram Test", Raw: "# Diagram Test\n", HeadingPath: []string{"Diagram Test"}},
+						// Standard mermaid block — no ID means non-executable.
+						core.CodeBlockNode{
+							Block:  core.BlockSpec{Raw: "mermaid"},
+							Source: mermaidSource,
+							Raw:    "```mermaid\n" + mermaidSource + "\n```\n",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	html := writeAndReadReport(t, report)
+
+	t.Run("renders_mermaid_container", func(t *testing.T) {
+		assertContains(t, html, `class="mermaid-diagram"`, "mermaid wrapper div")
+		assertContains(t, html, `<pre class="mermaid">`, "mermaid pre element")
+	})
+
+	t.Run("source_is_html_escaped", func(t *testing.T) {
+		// Source with HTML special chars must be escaped, not injected raw.
+		xssReport := core.Report{
+			GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+			Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1},
+			Results: []core.DocumentResult{
+				{
+					Status: core.StatusPassed,
+					Document: core.Document{
+						Title:      "XSS Test",
+						RelativeTo: "specs/xss.spec.md",
+						Nodes: []core.Node{
+							core.HeadingNode{Level: 1, Text: "XSS Test", Raw: "# XSS Test\n", HeadingPath: []string{"XSS Test"}},
+							core.CodeBlockNode{
+								Block:  core.BlockSpec{Raw: "mermaid"},
+								Source: `graph LR\n    A --> B["<script>alert(1)</script>"]`,
+								Raw:    "```mermaid\n...\n```\n",
+							},
+						},
+					},
+				},
+			},
+		}
+		xssHTML := writeAndReadReport(t, xssReport)
+		assertNotContains(t, xssHTML, "<script>alert(1)</script>", "raw script tag must not appear unescaped")
+		assertContains(t, xssHTML, "&lt;script&gt;", "script tag must be HTML-escaped")
+	})
+
+	t.Run("capitalised_mermaid_does_not_match", func(t *testing.T) {
+		// Detection is case-sensitive: "Mermaid" should fall through to normal code rendering.
+		capsReport := core.Report{
+			GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+			Summary:     core.Summary{SpecsTotal: 1, SpecsPassed: 1},
+			Results: []core.DocumentResult{
+				{
+					Status: core.StatusPassed,
+					Document: core.Document{
+						Title:      "Caps Test",
+						RelativeTo: "specs/caps.spec.md",
+						Nodes: []core.Node{
+							core.HeadingNode{Level: 1, Text: "Caps Test", Raw: "# Caps Test\n", HeadingPath: []string{"Caps Test"}},
+							core.CodeBlockNode{
+								Block:  core.BlockSpec{Raw: "Mermaid"},
+								Source: "graph LR",
+								Raw:    "```Mermaid\ngraph LR\n```\n",
+							},
+						},
+					},
+				},
+			},
+		}
+		capsHTML := writeAndReadReport(t, capsReport)
+		assertNotContains(t, capsHTML, `class="mermaid-diagram"`, "capitalised Mermaid must not match")
+	})
+}

@@ -867,6 +867,28 @@ code, pre, kbd, samp {
   margin: 0.5rem 0 1.5rem;
 }
 
+/* ── Mermaid diagrams ── */
+.mermaid-diagram {
+  margin: 1.25rem 0;
+  overflow-x: auto;
+}
+.mermaid-diagram pre.mermaid {
+  /* Fallback: raw source shown as readable code until JS renders SVG */
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--muted);
+  background: var(--note-bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 1rem;
+  white-space: pre;
+}
+.mermaid-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 /* ── Trace tag (type badge) ── */
 .trace-tag {
   display: inline-block;

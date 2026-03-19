@@ -82,3 +82,23 @@
   window.addEventListener('resize', schedule);
   update();
 })();
+
+// Mermaid: progressive enhancement — load from CDN only when diagrams are present.
+// Pinned to an exact release; update the integrity hash when bumping the version.
+(() => {
+  if (!document.querySelector('pre.mermaid')) return;
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/mermaid@11.4.1/dist/mermaid.min.js';
+  s.integrity = 'sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I';
+  s.crossOrigin = 'anonymous';
+  s.onload = () => {
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+    mermaid.run({ querySelector: 'pre.mermaid' });
+  };
+  s.onerror = () => {
+    document.querySelectorAll('pre.mermaid').forEach((el) => {
+      el.title = 'Mermaid diagram — requires internet connection to render';
+    });
+  };
+  document.head.appendChild(s);
+})();
