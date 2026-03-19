@@ -21,11 +21,6 @@ type noopModelRunner struct{}
 func (noopModelRunner) RunDocument(core.DocumentPlan) ([]core.CaseResult, error) { return nil, nil }
 
 func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -81,10 +76,7 @@ func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 		"| ${boardName} | ${cardId} | doing |",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "pocket-board.spec.md", source)
 
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
@@ -114,11 +106,6 @@ func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 }
 
 func TestRunFailsWhenCardColumnCheckMismatches(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -142,10 +129,7 @@ func TestRunFailsWhenCardColumnCheckMismatches(t *testing.T) {
 		"| ${boardName} | ${cardId} | doing |",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "pocket-board.spec.md", source)
 
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
@@ -168,11 +152,6 @@ func TestRunFailsWhenCardColumnCheckMismatches(t *testing.T) {
 }
 
 func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	// The exec returns an error, so the binding is never captured.
 	// The subsequent check row fails because ${boardName} is unresolved.
 	source := strings.Join([]string{
@@ -192,10 +171,7 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 		"| ${boardName} | yes |",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "pocket-board.spec.md", source)
 
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
@@ -212,11 +188,6 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 }
 
 func TestRunFailsWhenNoAdapterSupportsCheck(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -228,10 +199,7 @@ func TestRunFailsWhenNoAdapterSupportsCheck(t *testing.T) {
 		"| demo | yes |",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "pocket-board.spec.md", source)
 
 	_, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err == nil {
@@ -243,11 +211,6 @@ func TestRunFailsWhenNoAdapterSupportsCheck(t *testing.T) {
 }
 
 func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "pocket-board.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Pocket Board",
 		"",
@@ -269,10 +232,7 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 		"> alloy:ref(board#cardShape, scope=5)",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "pocket-board.spec.md", source)
 
 	title, docs, err := core.DiscoverFromEntry(root, "specs/index.spec.md", nil)
 	if err != nil {
@@ -566,17 +526,9 @@ func TestBindingReachableAncestorAndSibling(t *testing.T) {
 }
 
 func TestRunWithFrontmatterTimeout(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "timeout.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	// Frontmatter with 100ms timeout — the helper adapter is fast enough
 	source := "---\ntimeout: 100\n---\n\n# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "timeout.spec.md", source)
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -587,16 +539,8 @@ func TestRunWithFrontmatterTimeout(t *testing.T) {
 }
 
 func TestRunDryRunSkipsExecution(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "dry.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := "# Dry\n\n## Test\n\n```run:board -> $b\ncreate-board\n```\n"
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "dry.spec.md", source)
 	// DryRun should not launch any adapter — even with no adapter config
 	report, err := Run(root, config.Config{Entry: "specs/index.spec.md"}, noopModelRunner{}, RunOptions{DryRun: true})
 	if err != nil {
@@ -611,11 +555,6 @@ func TestRunDryRunSkipsExecution(t *testing.T) {
 }
 
 func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "filter.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Filter",
 		"",
@@ -632,10 +571,7 @@ func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
 		"```",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "filter.spec.md", source)
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{Filter: "Alpha"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -649,11 +585,6 @@ func TestRunWithFilterOnlyRunsMatchingCases(t *testing.T) {
 }
 
 func TestRunExecutesSetupEachHooksAtSectionBoundaries(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "hook.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Hook Test",
 		"",
@@ -677,10 +608,7 @@ func TestRunExecutesSetupEachHooksAtSectionBoundaries(t *testing.T) {
 		"```",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "hook.spec.md", source)
 
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
@@ -697,11 +625,6 @@ func TestRunExecutesSetupEachHooksAtSectionBoundaries(t *testing.T) {
 }
 
 func TestRunExecutesSetupOnceHook(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "hook-once.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Hook Once",
 		"",
@@ -723,10 +646,7 @@ func TestRunExecutesSetupOnceHook(t *testing.T) {
 		"```",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "hook-once.spec.md", source)
 
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
@@ -739,11 +659,6 @@ func TestRunExecutesSetupOnceHook(t *testing.T) {
 }
 
 func TestRunCheckCallWithParams(t *testing.T) {
-	root := t.TempDir()
-	specPath := filepath.Join(root, "specs", "check-call.spec.md")
-	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
 	source := strings.Join([]string{
 		"# Check Call",
 		"",
@@ -758,10 +673,7 @@ func TestRunCheckCallWithParams(t *testing.T) {
 		"> check:board-exists(board=board-1, exists=yes)",
 		"",
 	}, "\n")
-	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-	writeEntryFile(t, root, specPath)
+	root := writeSpecFile(t, "check-call.spec.md", source)
 
 	report, err := Run(root, helperAdapterConfig(), noopModelRunner{}, RunOptions{})
 	if err != nil {
@@ -771,6 +683,21 @@ func TestRunCheckCallWithParams(t *testing.T) {
 	if report.Summary.CasesPassed != 2 {
 		t.Fatalf("expected 2 passed cases, got %+v", report.Summary)
 	}
+}
+
+// writeSpecFile creates a temp dir, writes a spec file, and generates the entry file.
+func writeSpecFile(t *testing.T, name, source string) (root string) {
+	t.Helper()
+	root = t.TempDir()
+	specPath := filepath.Join(root, "specs", name)
+	if err := os.MkdirAll(filepath.Dir(specPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	writeEntryFile(t, root, specPath)
+	return root
 }
 
 func writeEntryFile(t *testing.T, root string, specFiles ...string) {
