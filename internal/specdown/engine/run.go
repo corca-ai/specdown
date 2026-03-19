@@ -1015,61 +1015,83 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 
 var variablePattern = core.VariablePattern
 
-//nolint:gocognit // switch per case kind with template rendering
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {
 	prepared := specCase
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		// Copy the variant to avoid mutating the original
-		codeCopy := *specCase.Code
-		rendered, err := renderTemplate(codeCopy.Template, bindings)
+		code, err := prepareCodeCase(specCase.Code, bindings)
 		if err != nil {
 			return core.CaseSpec{}, err
 		}
-		codeCopy.Template = rendered
-		prepared.Code = &codeCopy
+		prepared.Code = code
 		return prepared, nil
 	case core.CaseKindInlineExpect:
-		ieCopy := *specCase.InlineExpect
-		rendered, err := renderTemplate(ieCopy.Template, bindings)
+		ie, err := prepareInlineExpectCase(specCase.InlineExpect, bindings)
 		if err != nil {
 			return core.CaseSpec{}, err
 		}
-		ieCopy.Template = rendered
-		renderedExpect, err := renderTemplate(ieCopy.ExpectValue, bindings)
-		if err != nil {
-			return core.CaseSpec{}, err
-		}
-		ieCopy.ExpectValue = renderedExpect
-		prepared.InlineExpect = &ieCopy
+		prepared.InlineExpect = ie
 		return prepared, nil
 	case core.CaseKindTableRow:
-		trCopy := *specCase.TableRow
-		rendered := make([]string, 0, len(trCopy.Cells))
-		for _, cell := range trCopy.Cells {
-			value, err := renderTemplate(cell, bindings)
-			if err != nil {
-				return core.CaseSpec{}, err
-			}
-			rendered = append(rendered, core.UnescapeCell(value))
+		tr, err := prepareTableRowCase(specCase.TableRow, bindings)
+		if err != nil {
+			return core.CaseSpec{}, err
 		}
-		trCopy.Cells = rendered
-		if len(trCopy.CheckParams) > 0 {
-			renderedParams := make(map[string]string, len(trCopy.CheckParams))
-			for k, v := range trCopy.CheckParams {
-				rv, err := renderTemplate(v, bindings)
-				if err != nil {
-					return core.CaseSpec{}, err
-				}
-				renderedParams[k] = rv
-			}
-			trCopy.CheckParams = renderedParams
-		}
-		prepared.TableRow = &trCopy
+		prepared.TableRow = tr
 		return prepared, nil
 	default:
 		return core.CaseSpec{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
 	}
+}
+
+func prepareCodeCase(code *core.CodeCaseSpec, bindings []core.Binding) (*core.CodeCaseSpec, error) {
+	codeCopy := *code
+	rendered, err := renderTemplate(codeCopy.Template, bindings)
+	if err != nil {
+		return nil, err
+	}
+	codeCopy.Template = rendered
+	return &codeCopy, nil
+}
+
+func prepareInlineExpectCase(ie *core.InlineExpectCaseSpec, bindings []core.Binding) (*core.InlineExpectCaseSpec, error) {
+	ieCopy := *ie
+	rendered, err := renderTemplate(ieCopy.Template, bindings)
+	if err != nil {
+		return nil, err
+	}
+	ieCopy.Template = rendered
+	renderedExpect, err := renderTemplate(ieCopy.ExpectValue, bindings)
+	if err != nil {
+		return nil, err
+	}
+	ieCopy.ExpectValue = renderedExpect
+	return &ieCopy, nil
+}
+
+func prepareTableRowCase(tr *core.TableRowCaseSpec, bindings []core.Binding) (*core.TableRowCaseSpec, error) {
+	trCopy := *tr
+	rendered := make([]string, 0, len(trCopy.Cells))
+	for _, cell := range trCopy.Cells {
+		value, err := renderTemplate(cell, bindings)
+		if err != nil {
+			return nil, err
+		}
+		rendered = append(rendered, core.UnescapeCell(value))
+	}
+	trCopy.Cells = rendered
+	if len(trCopy.CheckParams) > 0 {
+		renderedParams := make(map[string]string, len(trCopy.CheckParams))
+		for k, v := range trCopy.CheckParams {
+			rv, err := renderTemplate(v, bindings)
+			if err != nil {
+				return nil, err
+			}
+			renderedParams[k] = rv
+		}
+		trCopy.CheckParams = renderedParams
+	}
+	return &trCopy, nil
 }
 
 func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
