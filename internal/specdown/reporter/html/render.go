@@ -46,7 +46,7 @@ func renderDocument(result core.DocumentResult) (string, error) {
 		caseResults[result.Cases[i].ID.Key()] = result.Cases[i]
 	}
 
-	var out strings.Builder
+	var out htmlBuilder
 	var sectionStack []int
 	var accBindings []core.Binding
 	for _, node := range result.Document.Nodes {
@@ -61,28 +61,28 @@ func renderDocument(result core.DocumentResult) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		out.WriteString(rendered)
+		out.raw(rendered)
 		accBindings = accumulateNodeBindings(accBindings, node, caseResults)
 	}
 	for range sectionStack {
-		out.WriteString(`</section>`)
+		out.raw(`</section>`)
 	}
 	return out.String(), nil
 }
 
-func closeSections(out *strings.Builder, sectionStack []int, node core.Node, documentPath string) []int {
+func closeSections(out *htmlBuilder, sectionStack []int, node core.Node, documentPath string) []int {
 	heading, ok := node.(core.HeadingNode)
 	if !ok {
 		return sectionStack
 	}
 	for len(sectionStack) > 0 && sectionStack[len(sectionStack)-1] >= heading.Level {
-		out.WriteString(`</section>`)
+		out.raw(`</section>`)
 		sectionStack = sectionStack[:len(sectionStack)-1]
 	}
 	if len(heading.HeadingPath) > 0 {
-		fmt.Fprintf(out, `<section class="s%d" id=%q>`, heading.Level, template.HTMLEscapeString(core.HeadingAnchor(documentPath, heading.HeadingPath)))
+		fmt.Fprintf(&out.Builder, `<section class="s%d" id=%q>`, heading.Level, template.HTMLEscapeString(core.HeadingAnchor(documentPath, heading.HeadingPath)))
 	} else {
-		fmt.Fprintf(out, `<section class="s%d">`, heading.Level)
+		fmt.Fprintf(&out.Builder, `<section class="s%d">`, heading.Level)
 	}
 	return append(sectionStack, heading.Level)
 }
@@ -123,42 +123,42 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		return markdownToHTML(node.Markdown())
 	}
 
-	var out strings.Builder
-	out.WriteString(`<section class="exec-block `)
+	var out htmlBuilder
+	out.raw(`<section class="exec-block `)
 	if result.ExpectFail {
-		out.WriteString("expected-fail")
+		out.raw("expected-fail")
 	} else {
-		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+		out.text(string(result.Status))
 	}
 	if node.Summary != "" {
-		out.WriteString(` has-summary`)
+		out.raw(` has-summary`)
 	}
-	out.WriteString(`" id="`)
-	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
-	out.WriteString(`">`)
+	out.raw(`" id="`)
+	out.text(node.ID.Anchor())
+	out.raw(`">`)
 
 	if node.Summary != "" {
 		// Collapsible block: summary line shown, code is hidden by default.
 		// Failed blocks auto-expand so failures are never hidden.
-		out.WriteString(`<details class="exec-detail"`)
+		out.raw(`<details class="exec-detail"`)
 		if result.Status == core.StatusFailed && !result.ExpectFail {
-			out.WriteString(` open`)
+			out.raw(` open`)
 		}
-		out.WriteString(`>`)
-		out.WriteString(`<summary class="exec-source">`)
-		out.WriteString(`<span class="exec-summary-text">`)
-		out.WriteString(template.HTMLEscapeString(node.Summary))
-		out.WriteString(`</span>`)
-		out.WriteString(`<span class="exec-expand-marker"></span>`)
-		out.WriteString(`</summary>`)
-		out.WriteString(`<div class="exec-source exec-source-body">`)
+		out.raw(`>`)
+		out.raw(`<summary class="exec-source">`)
+		out.raw(`<span class="exec-summary-text">`)
+		out.text(node.Summary)
+		out.raw(`</span>`)
+		out.raw(`<span class="exec-expand-marker"></span>`)
+		out.raw(`</summary>`)
+		out.raw(`<div class="exec-source exec-source-body">`)
 		renderCodeSourceStripped(&out, result)
 		renderVisibleBindings(&out, result.VisibleBindings)
 		renderBindings(&out, result.Bindings)
-		out.WriteString(`</div>`)
-		out.WriteString(`</details>`)
+		out.raw(`</div>`)
+		out.raw(`</details>`)
 	} else {
-		out.WriteString(`<div class="exec-source">`)
+		out.raw(`<div class="exec-source">`)
 		if result.Code != nil && len(result.Code.Steps) > 0 {
 			renderDoctestSteps(&out, result.Code.Steps)
 		} else {
@@ -166,21 +166,21 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 		}
 		renderVisibleBindings(&out, result.VisibleBindings)
 		renderBindings(&out, result.Bindings)
-		out.WriteString(`</div>`)
+		out.raw(`</div>`)
 	}
 
-	out.WriteString(`<p class="exec-block-footer">`)
+	out.raw(`<p class="exec-block-footer">`)
 	block := ""
 	if result.Code != nil {
 		block = result.Code.Block
 	}
-	out.WriteString(template.HTMLEscapeString(block))
-	out.WriteString(`</p>`)
-	out.WriteString(`</section>`)
+	out.text(block)
+	out.raw(`</p>`)
+	out.raw(`</section>`)
 	return out.String(), nil
 }
 
-func renderCodeSource(out *strings.Builder, result core.CaseResult) {
+func renderCodeSource(out *htmlBuilder, result core.CaseResult) {
 	source := ""
 	if result.Code != nil {
 		source = result.Code.Template
@@ -188,9 +188,9 @@ func renderCodeSource(out *strings.Builder, result core.CaseResult) {
 			source = result.Code.RenderedSource
 		}
 	}
-	out.WriteString(`<code>`)
-	out.WriteString(template.HTMLEscapeString(source))
-	out.WriteString(`</code>`)
+	out.raw(`<code>`)
+	out.text(source)
+	out.raw(`</code>`)
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
 	}
@@ -198,7 +198,7 @@ func renderCodeSource(out *strings.Builder, result core.CaseResult) {
 
 // renderCodeSourceStripped renders the code block with the first comment line
 // (the summary line) stripped from the displayed source.
-func renderCodeSourceStripped(out *strings.Builder, result core.CaseResult) {
+func renderCodeSourceStripped(out *htmlBuilder, result core.CaseResult) {
 	source := ""
 	if result.Code != nil {
 		source = result.Code.Template
@@ -208,9 +208,9 @@ func renderCodeSourceStripped(out *strings.Builder, result core.CaseResult) {
 	}
 	source = stripFirstCommentLine(source)
 	if source != "" {
-		out.WriteString(`<code>`)
-		out.WriteString(template.HTMLEscapeString(source))
-		out.WriteString(`</code>`)
+		out.raw(`<code>`)
+		out.text(source)
+		out.raw(`</code>`)
 	}
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
@@ -226,37 +226,37 @@ func stripFirstCommentLine(source string) string {
 	return source[idx+1:]
 }
 
-func renderVisibleBindings(out *strings.Builder, bindings []core.Binding) {
+func renderVisibleBindings(out *htmlBuilder, bindings []core.Binding) {
 	if len(bindings) == 0 {
 		return
 	}
-	out.WriteString(`<div class="exec-bindings visible-bindings">`)
+	out.open("div", "exec-bindings visible-bindings")
 	for i, b := range bindings {
 		if i > 0 {
-			out.WriteString(`, `)
+			out.raw(`, `)
 		}
-		out.WriteString(`$`)
-		out.WriteString(template.HTMLEscapeString(b.Name))
-		out.WriteString(`=`)
-		out.WriteString(template.HTMLEscapeString(bindingValueToString(b.Value)))
+		out.raw(`$`)
+		out.text(b.Name)
+		out.raw(`=`)
+		out.text(bindingValueToString(b.Value))
 	}
-	out.WriteString(`</div>`)
+	out.close("div")
 }
 
-func renderBindings(out *strings.Builder, bindings []core.Binding) {
+func renderBindings(out *htmlBuilder, bindings []core.Binding) {
 	if len(bindings) == 0 {
 		return
 	}
-	out.WriteString(`<div class="exec-bindings">`)
+	out.open("div", "exec-bindings")
 	for i, b := range bindings {
 		if i > 0 {
-			out.WriteString(`, `)
+			out.raw(`, `)
 		}
-		out.WriteString(template.HTMLEscapeString(b.Name))
-		out.WriteString(`=`)
-		out.WriteString(template.HTMLEscapeString(bindingValueToString(b.Value)))
+		out.text(b.Name)
+		out.raw(`=`)
+		out.text(bindingValueToString(b.Value))
 	}
-	out.WriteString(`</div>`)
+	out.close("div")
 }
 
 func renderHeading(node core.HeadingNode) (string, error) {
@@ -302,43 +302,42 @@ func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (s
 	}
 	tableStatus := tableStatusClass(rows)
 
-	var out strings.Builder
-	out.WriteString(`<section class="exec-table-block`)
+	var out htmlBuilder
+	class := "exec-table-block"
 	if tableStatus != "" {
-		out.WriteString(` `)
-		out.WriteString(template.HTMLEscapeString(tableStatus))
+		class += " " + tableStatus
 	}
-	out.WriteString(`">`)
-	out.WriteString(`<table class="exec-table">`)
-	out.WriteString(`<thead><tr>`)
+	out.open("section", class)
+	out.raw(`<table class="exec-table">`)
+	out.raw(`<thead><tr>`)
 	for _, column := range node.Columns {
-		out.WriteString(`<th>`)
-		out.WriteString(template.HTMLEscapeString(column))
-		out.WriteString(`</th>`)
+		out.raw(`<th>`)
+		out.text(column)
+		out.raw(`</th>`)
 	}
-	out.WriteString(`</tr></thead>`)
-	out.WriteString(`<tbody>`)
+	out.raw(`</tr></thead>`)
+	out.raw(`<tbody>`)
 	for i := range rows {
 		renderTableRow(&out, rows[i].node, rows[i].result)
 	}
-	out.WriteString(`</tbody></table>`)
-	out.WriteString(`<p class="exec-table-footer">check:`)
-	out.WriteString(template.HTMLEscapeString(node.Check))
-	out.WriteString(`</p>`)
-	out.WriteString(`</section>`)
+	out.raw(`</tbody></table>`)
+	out.raw(`<p class="exec-table-footer">check:`)
+	out.text(node.Check)
+	out.raw(`</p>`)
+	out.close("section")
 	return out.String(), nil
 }
 
-func renderTableRow(out *strings.Builder, row core.TableRowNode, result core.CaseResult) {
-	out.WriteString(`<tr class="`)
+func renderTableRow(out *htmlBuilder, row core.TableRowNode, result core.CaseResult) {
+	out.raw(`<tr class="`)
 	if result.ExpectFail {
-		out.WriteString("expected-fail")
+		out.raw("expected-fail")
 	} else {
-		out.WriteString(template.HTMLEscapeString(string(result.Status)))
+		out.text(string(result.Status))
 	}
-	out.WriteString(`" id="`)
-	out.WriteString(template.HTMLEscapeString(row.ID.Anchor()))
-	out.WriteString(`">`)
+	out.raw(`" id="`)
+	out.text(row.ID.Anchor())
+	out.raw(`">`)
 	var cells []string
 	if result.Table != nil {
 		cells = result.Table.TemplateCells
@@ -348,45 +347,45 @@ func renderTableRow(out *strings.Builder, row core.TableRowNode, result core.Cas
 	}
 	lastIndex := len(cells) - 1
 	for index, cell := range cells {
-		out.WriteString(`<td>`)
-		out.WriteString(`<div class="cell-template">`)
-		out.WriteString(template.HTMLEscapeString(core.UnescapeCell(cell)))
-		out.WriteString(`</div>`)
+		out.raw(`<td>`)
+		out.open("div", "cell-template")
+		out.text(core.UnescapeCell(cell))
+		out.close("div")
 		if result.Status == core.StatusFailed && index == lastIndex {
 			renderFailureDiff(out, result.Message, result.Expected, result.Actual)
 		}
-		out.WriteString(`</td>`)
+		out.raw(`</td>`)
 	}
-	out.WriteString(`</tr>`)
+	out.raw(`</tr>`)
 }
 
-func renderFailureDiff(out *strings.Builder, message, expected, actual string) {
+func renderFailureDiff(out *htmlBuilder, message, expected, actual string) {
 	if message == "" && expected == "" && actual == "" {
 		return
 	}
 	if expected == "" && actual == "" {
-		out.WriteString(`<div class="cell-actual">`)
-		out.WriteString(template.HTMLEscapeString(message))
-		out.WriteString(`</div>`)
+		out.open("div", "cell-actual")
+		out.text(message)
+		out.close("div")
 		return
 	}
-	out.WriteString(`<dl class="failure-diff compact">`)
+	out.raw(`<dl class="failure-diff compact">`)
 	if message != "" {
-		out.WriteString(`<dt>error</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(message))
-		out.WriteString(`</dd>`)
+		out.raw(`<dt>error</dt><dd>`)
+		out.text(message)
+		out.raw(`</dd>`)
 	}
 	if expected != "" {
-		out.WriteString(`<dt>expected</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(expected))
-		out.WriteString(`</dd>`)
+		out.raw(`<dt>expected</dt><dd>`)
+		out.text(expected)
+		out.raw(`</dd>`)
 	}
 	if actual != "" {
-		out.WriteString(`<dt>actual</dt><dd>`)
-		out.WriteString(template.HTMLEscapeString(actual))
-		out.WriteString(`</dd>`)
+		out.raw(`<dt>actual</dt><dd>`)
+		out.text(actual)
+		out.raw(`</dd>`)
 	}
-	out.WriteString(`</dl>`)
+	out.raw(`</dl>`)
 }
 
 func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.CaseResult) string {
@@ -414,25 +413,25 @@ func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.Case
 		}
 	}
 
-	var out strings.Builder
-	out.WriteString(`<section class="exec-block alloy-model` + statusClass + `">`)
-	out.WriteString(`<div class="exec-source">`)
-	out.WriteString(`<pre><code>`)
-	out.WriteString(template.HTMLEscapeString(node.Source))
-	out.WriteString(`</code></pre>`)
+	var out htmlBuilder
+	out.open("section", "exec-block alloy-model"+statusClass)
+	out.open("div", "exec-source")
+	out.raw(`<pre><code>`)
+	out.text(node.Source)
+	out.raw(`</code></pre>`)
 	if failedResult != nil {
 		msg := failedResult.Message
 		if msg != "" {
-			out.WriteString(`<div class="cell-actual">`)
-			out.WriteString(template.HTMLEscapeString(msg))
-			out.WriteString(`</div>`)
+			out.open("div", "cell-actual")
+			out.text(msg)
+			out.close("div")
 		}
 	}
-	out.WriteString(`</div>`)
-	out.WriteString(`<p class="exec-block-footer">`)
-	out.WriteString(template.HTMLEscapeString("alloy:model(" + node.Model + ")"))
-	out.WriteString(`</p>`)
-	out.WriteString(`</section>`)
+	out.close("div")
+	out.raw(`<p class="exec-block-footer">`)
+	out.text("alloy:model(" + node.Model + ")")
+	out.raw(`</p>`)
+	out.close("section")
 	return out.String()
 }
 
@@ -441,39 +440,39 @@ func renderHookBlock(node core.HookNode) string {
 	if node.Each {
 		label += ":each"
 	}
-	var out strings.Builder
-	out.WriteString(`<section class="exec-block hook-block`)
+	var out htmlBuilder
+	class := "exec-block hook-block"
 	if node.Summary != "" {
-		out.WriteString(` has-summary`)
+		class += " has-summary"
 	}
-	out.WriteString(`">`)
+	out.open("section", class)
 
 	if node.Summary != "" {
-		out.WriteString(`<details class="exec-detail">`)
-		out.WriteString(`<summary class="exec-source">`)
-		out.WriteString(`<span class="exec-summary-text">`)
-		out.WriteString(template.HTMLEscapeString(node.Summary))
-		out.WriteString(`</span>`)
-		out.WriteString(`<span class="exec-expand-marker"></span>`)
-		out.WriteString(`</summary>`)
-		out.WriteString(`<div class="exec-source exec-source-body">`)
-		out.WriteString(`<code>`)
-		out.WriteString(template.HTMLEscapeString(stripFirstCommentLine(node.Source)))
-		out.WriteString(`</code>`)
-		out.WriteString(`</div>`)
-		out.WriteString(`</details>`)
+		out.raw(`<details class="exec-detail">`)
+		out.raw(`<summary class="exec-source">`)
+		out.raw(`<span class="exec-summary-text">`)
+		out.text(node.Summary)
+		out.raw(`</span>`)
+		out.raw(`<span class="exec-expand-marker"></span>`)
+		out.raw(`</summary>`)
+		out.raw(`<div class="exec-source exec-source-body">`)
+		out.raw(`<code>`)
+		out.text(stripFirstCommentLine(node.Source))
+		out.raw(`</code>`)
+		out.raw(`</div>`)
+		out.raw(`</details>`)
 	} else {
-		out.WriteString(`<div class="exec-source">`)
-		out.WriteString(`<code>`)
-		out.WriteString(template.HTMLEscapeString(node.Source))
-		out.WriteString(`</code>`)
-		out.WriteString(`</div>`)
+		out.open("div", "exec-source")
+		out.raw(`<code>`)
+		out.text(node.Source)
+		out.raw(`</code>`)
+		out.close("div")
 	}
 
-	out.WriteString(`<p class="exec-block-footer">`)
-	out.WriteString(template.HTMLEscapeString(label + " · " + node.Block.Descriptor()))
-	out.WriteString(`</p>`)
-	out.WriteString(`</section>`)
+	out.raw(`<p class="exec-block-footer">`)
+	out.text(label + " · " + node.Block.Descriptor())
+	out.raw(`</p>`)
+	out.close("section")
 	return out.String()
 }
 
@@ -486,14 +485,14 @@ func renderCheckCall(node core.CheckCallNode, caseResults map[string]core.CaseRe
 		return ""
 	}
 
-	var out strings.Builder
-	out.WriteString(`<section class="exec-block check-call `)
-	out.WriteString(template.HTMLEscapeString(string(result.Status)))
-	out.WriteString(`" id="`)
-	out.WriteString(template.HTMLEscapeString(node.ID.Anchor()))
-	out.WriteString(`">`)
-	out.WriteString(`<div class="exec-source">`)
-	out.WriteString(`<code>`)
+	var out htmlBuilder
+	out.raw(`<section class="exec-block check-call `)
+	out.text(string(result.Status))
+	out.raw(`" id="`)
+	out.text(node.ID.Anchor())
+	out.raw(`">`)
+	out.open("div", "exec-source")
+	out.raw(`<code>`)
 	label := node.Check
 	if len(node.CheckParams) > 0 {
 		var params []string
@@ -503,14 +502,14 @@ func renderCheckCall(node core.CheckCallNode, caseResults map[string]core.CaseRe
 		sort.Strings(params)
 		label += "(" + strings.Join(params, ", ") + ")"
 	}
-	out.WriteString(template.HTMLEscapeString(label))
-	out.WriteString(`</code>`)
+	out.text(label)
+	out.raw(`</code>`)
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
 	}
-	out.WriteString(`</div>`)
-	out.WriteString(`<p class="exec-block-footer">check</p>`)
-	out.WriteString(`</section>`)
+	out.close("div")
+	out.raw(`<p class="exec-block-footer">check</p>`)
+	out.close("section")
 	return out.String()
 }
 
@@ -618,63 +617,53 @@ func filterInlinesByKind(inlines []core.InlineElement, kind core.InlineKind) []c
 }
 
 func renderInlineExpectSpan(cr core.CaseResult) string {
-	var out strings.Builder
+	var out htmlBuilder
 	switch {
 	case cr.Status == core.StatusPassed:
-		out.WriteString(`<span class="inline-expect passed" title="`)
-		out.WriteString(template.HTMLEscapeString("expected " + cr.Expected))
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`</span>`)
+		out.raw(`<span class="inline-expect passed" title="`)
+		out.text("expected " + cr.Expected)
+		out.raw(`">`)
+		out.text(cr.Actual)
+		out.raw(`</span>`)
 	case cr.ExpectFail:
-		out.WriteString(`<span class="inline-expect expected-fail" title="`)
-		out.WriteString(template.HTMLEscapeString("expected failure: " + cr.Message))
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<span class="annotation">`)
-		out.WriteString(template.HTMLEscapeString(cr.Expected))
-		out.WriteString(`</span></span>`)
+		out.raw(`<span class="inline-expect expected-fail" title="`)
+		out.text("expected failure: " + cr.Message)
+		out.raw(`">`)
+		out.text(cr.Actual)
+		out.raw(`<span class="annotation">`)
+		out.text(cr.Expected)
+		out.raw(`</span></span>`)
 	default:
-		out.WriteString(`<span class="inline-expect failed" title="`)
-		out.WriteString(template.HTMLEscapeString(cr.Message))
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<span class="annotation">`)
-		out.WriteString(template.HTMLEscapeString(cr.Expected))
-		out.WriteString(`</span></span>`)
+		out.raw(`<span class="inline-expect failed" title="`)
+		out.text(cr.Message)
+		out.raw(`">`)
+		out.text(cr.Actual)
+		out.raw(`<span class="annotation">`)
+		out.text(cr.Expected)
+		out.raw(`</span></span>`)
 	}
 	return out.String()
 }
 
 func renderInlineCheckSpan(inline core.InlineElement, cr core.CaseResult) string {
-	var out strings.Builder
-	if cr.Actual != "" {
-		// Ruby: check name as annotation, actual value as main content
-		out.WriteString(`<span class="inline-check `)
-		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
-		out.WriteString(`" title="`)
-		if cr.Status == core.StatusFailed && cr.Message != "" {
-			out.WriteString(template.HTMLEscapeString(cr.Message))
-		} else {
-			out.WriteString(template.HTMLEscapeString(inline.Raw))
-		}
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(cr.Actual))
-		out.WriteString(`<span class="annotation">`)
-		out.WriteString(template.HTMLEscapeString(inline.Check))
-		out.WriteString(`</span></span>`)
+	var out htmlBuilder
+	out.raw(`<span class="inline-check `)
+	out.text(string(cr.Status))
+	out.raw(`" title="`)
+	if cr.Status == core.StatusFailed && cr.Message != "" {
+		out.text(cr.Message)
 	} else {
-		out.WriteString(`<span class="inline-check `)
-		out.WriteString(template.HTMLEscapeString(string(cr.Status)))
-		out.WriteString(`" title="`)
-		if cr.Status == core.StatusFailed && cr.Message != "" {
-			out.WriteString(template.HTMLEscapeString(cr.Message))
-		} else {
-			out.WriteString(template.HTMLEscapeString(inline.Raw))
-		}
-		out.WriteString(`">`)
-		out.WriteString(template.HTMLEscapeString(inline.Check))
-		out.WriteString(`</span>`)
+		out.text(inline.Raw)
+	}
+	out.raw(`">`)
+	if cr.Actual != "" {
+		out.text(cr.Actual)
+		out.raw(`<span class="annotation">`)
+		out.text(inline.Check)
+		out.raw(`</span></span>`)
+	} else {
+		out.text(inline.Check)
+		out.raw(`</span>`)
 	}
 	return out.String()
 }
@@ -727,64 +716,64 @@ func replaceVarRefs(text string, bindings map[string]string) string {
 	})
 }
 
-func renderDoctestSteps(out *strings.Builder, steps []core.DoctestStep) {
-	out.WriteString(`<div class="doctest-steps">`)
+func renderDoctestSteps(out *htmlBuilder, steps []core.DoctestStep) {
+	out.open("div", "doctest-steps")
 	for _, step := range steps {
-		out.WriteString(`<div class="doctest-command">`)
-		out.WriteString(`<span class="doctest-prompt">$ </span>`)
-		out.WriteString(template.HTMLEscapeString(step.Command))
-		out.WriteString(`</div>`)
+		out.open("div", "doctest-command")
+		out.raw(`<span class="doctest-prompt">$ </span>`)
+		out.text(step.Command)
+		out.close("div")
 		if step.Status == core.StatusPassed {
 			if step.Actual != "" {
 				renderDoctestPassedOutput(out, step)
 			}
 		} else {
 			if step.Actual != "" {
-				out.WriteString(`<div class="doctest-output failed">`)
-				out.WriteString(template.HTMLEscapeString(step.Actual))
-				out.WriteString(`</div>`)
+				out.open("div", "doctest-output failed")
+				out.text(step.Actual)
+				out.close("div")
 			}
 			if step.Expected != "" {
-				out.WriteString(`<div class="doctest-expected">`)
-				out.WriteString(template.HTMLEscapeString(step.Expected))
-				out.WriteString(` <span class="doctest-expected-label">(expected)</span>`)
-				out.WriteString(`</div>`)
+				out.open("div", "doctest-expected")
+				out.text(step.Expected)
+				out.raw(` <span class="doctest-expected-label">(expected)</span>`)
+				out.close("div")
 			}
 		}
 	}
-	out.WriteString(`</div>`)
+	out.close("div")
 }
 
 // renderDoctestPassedOutput renders actual output for a passed step.
 // When the expected output contains "..." wildcards, the matched lines
 // are collapsed into an expandable "... (N lines)" summary.
-func renderDoctestPassedOutput(out *strings.Builder, step core.DoctestStep) {
+func renderDoctestPassedOutput(out *htmlBuilder, step core.DoctestStep) {
 	segments := annotateWildcard(step.Expected, step.Actual)
 	if segments == nil {
 		// No wildcards — render as before.
-		out.WriteString(`<div class="doctest-output passed">`)
-		out.WriteString(template.HTMLEscapeString(step.Actual))
-		out.WriteString(`</div>`)
+		out.open("div", "doctest-output passed")
+		out.text(step.Actual)
+		out.close("div")
 		return
 	}
-	out.WriteString(`<div class="doctest-output passed">`)
+	out.open("div", "doctest-output passed")
 	for _, seg := range segments {
 		if !seg.Wildcard {
-			out.WriteString(template.HTMLEscapeString(seg.Text))
+			out.text(seg.Text)
 		} else {
 			unit := "lines"
 			if seg.Lines == 1 {
 				unit = "line"
 			}
 			summary := fmt.Sprintf("... (%d %s)", seg.Lines, unit)
-			out.WriteString(`<details class="wildcard-fold"><summary>`)
-			out.WriteString(template.HTMLEscapeString(summary))
-			out.WriteString(`</summary><span class="wildcard-expanded">`)
-			out.WriteString(template.HTMLEscapeString(seg.Text))
-			out.WriteString(`</span></details>`)
+			out.raw(`<details class="wildcard-fold"><summary>`)
+			out.text(summary)
+			out.raw(`</summary><span class="wildcard-expanded">`)
+			out.text(seg.Text)
+			out.raw(`</span></details>`)
 		}
 	}
-	out.WriteString(`</div>`)
+	out.close("div")
 }
 
 // wildcardSegment represents a contiguous chunk of actual output,
