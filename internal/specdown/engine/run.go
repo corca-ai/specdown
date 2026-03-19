@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -1022,7 +1021,7 @@ func applyExpectFail(result core.CaseResult) core.CaseResult {
 	return result
 }
 
-var variablePattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
+var variablePattern = core.VariablePattern
 
 //nolint:gocognit // switch per case kind with template rendering
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {

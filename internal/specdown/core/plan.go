@@ -592,7 +592,6 @@ func appendTableCases(cases []CaseSpec, table TableNode) []CaseSpec {
 	return cases
 }
 
-var variableRefPattern = regexp.MustCompile(`(\\?)\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
 var codeSpanPattern = regexp.MustCompile("``[\\s\\S]*?``|`[^`]+`")
 
 // proseVariableReferences extracts variable references from prose text,
@@ -603,7 +602,7 @@ func proseVariableReferences(raw string) []string {
 }
 
 func variableReferences(source string) []string {
-	matches := variableRefPattern.FindAllStringSubmatch(source, -1)
+	matches := VariablePattern.FindAllStringSubmatch(source, -1)
 	if len(matches) == 0 {
 		return nil
 	}

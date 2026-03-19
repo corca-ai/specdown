@@ -550,7 +550,7 @@ func accumulateNodeBindings(bindings []core.Binding, node core.Node, caseResults
 
 var htmlCodeExpectPattern = regexp.MustCompile(`<code>expect:\s*(.+?)\s*==\s*(.+?)\s*</code>`)
 var htmlCodeCheckPattern = regexp.MustCompile(`<code>check:([A-Za-z0-9_-]+)\(([^)]*)\)</code>`)
-var proseVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}`)
+var proseVarPattern = regexp.MustCompile(`\$\{(` + core.VariableRefExpr + `)\}`)
 var htmlCodeTagPattern = regexp.MustCompile(`<code[^>]*>[^<]*</code>`)
 
 func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult, accBindings []core.Binding) (string, error) {
