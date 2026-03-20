@@ -84,7 +84,6 @@ type AdapterConfig struct {
 	Command      []string `json:"command"`
 	Blocks       []string `json:"blocks"`
 	Checks       []string `json:"checks,omitempty"`
-	ChecksDir    string   `json:"checksDir,omitempty"`
 	BuiltinShell bool     `json:"-"` // set internally for the auto-registered shell adapter
 	BuiltinJQ    bool     `json:"-"` // set internally for the auto-registered jq check adapter
 }

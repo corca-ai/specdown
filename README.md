@@ -38,7 +38,6 @@ brew install corca-ai/tap/specdown
 
 ```sh
 go build -o bin/specdown ./cmd/specdown
-go build -o bin/specdown-adapter-shell ./cmd/specdown-adapter-shell
 ```
 
 ### Verify installation

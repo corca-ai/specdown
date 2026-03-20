@@ -79,7 +79,7 @@ func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		builtinShellLoop(stdinReader, stdoutWriter, adapter.ChecksDir)
+		builtinShellLoop(stdinReader, stdoutWriter)
 		_ = stdoutWriter.Close()
 	}()
 
@@ -138,19 +138,19 @@ func builtinJQLoop(reader io.Reader, writer io.Writer) {
 	}
 }
 
-func builtinShellLoop(reader io.Reader, writer io.Writer, checksDir string) {
+func builtinShellLoop(reader io.Reader, writer io.Writer) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	encoder := json.NewEncoder(writer)
 
 	for scanner.Scan() {
-		if err := handleBuiltinMessage(scanner.Bytes(), encoder, checksDir); err != nil {
+		if err := handleBuiltinMessage(scanner.Bytes(), encoder); err != nil {
 			return
 		}
 	}
 }
 
-func handleBuiltinMessage(raw []byte, encoder *json.Encoder, checksDir string) error {
+func handleBuiltinMessage(raw []byte, encoder *json.Encoder) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
@@ -158,7 +158,7 @@ func handleBuiltinMessage(raw []byte, encoder *json.Encoder, checksDir string) e
 
 	typeRaw, ok := fields["type"]
 	if !ok {
-		return fmt.Errorf("adapter response missing \"type\" field (expected \"exec\" or \"assert\")")
+		return fmt.Errorf("adapter response missing \"type\" field (expected \"exec\")")
 	}
 	var msgType string
 	if err := json.Unmarshal(typeRaw, &msgType); err != nil {
@@ -172,12 +172,6 @@ func handleBuiltinMessage(raw []byte, encoder *json.Encoder, checksDir string) e
 			return err
 		}
 		return encoder.Encode(shelladapter.Exec(req.ID, req.Source))
-	case "assert":
-		var req adapterprotocol.AssertRequest
-		if err := json.Unmarshal(raw, &req); err != nil {
-			return err
-		}
-		return encoder.Encode(shelladapter.Assert(req.ID, &req, checksDir))
 	default:
 		return fmt.Errorf("unknown type %q", msgType)
 	}

@@ -1,13 +1,6 @@
 {
   "entry": "specs/index.spec.md",
-  "adapters": [
-    {
-      "name": "shell-fixtures",
-      "command": ["./bin/specdown-adapter-shell", "-checks-dir", "specs/fixtures"],
-      "blocks": [],
-      "checks": ["block-kind", "cell-escape", "echo-value"]
-    }
-  ],
+  "adapters": [],
   "reporters": [
     { "builtin": "html", "outFile": "specs/report" },
     { "builtin": "json", "outFile": "specs/report.json" }

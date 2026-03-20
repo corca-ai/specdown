@@ -19,7 +19,6 @@ export PATH="$(mise where go)/bin:$PATH"
 
 ```sh
 go build -o bin/specdown ./cmd/specdown
-go build -o bin/specdown-adapter-shell ./cmd/specdown-adapter-shell
 ```
 
 For release builds, inject the version via `ldflags`.
@@ -48,8 +47,8 @@ go test ./...
 
 ### Selfspecs
 
-The project's own specifications are executable. After building both
-binaries, run them from the project root. Selfspecs invoke `specdown`
+The project's own specifications are executable. After building,
+run them from the project root. Selfspecs invoke `specdown`
 recursively, so `bin/` must be on `PATH`:
 
 ```sh

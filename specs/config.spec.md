@@ -230,7 +230,6 @@ CFG
 | `command` | Array of strings — the executable and its arguments |
 | `blocks` | List of block prefixes this adapter handles (e.g. `["run:myapp"]`) |
 | `checks` | List of check names this adapter handles (e.g. `["user-exists"]`) |
-| `checksDir` | Directory containing shell check scripts (default: `"./checks"`) |
 
 ### Reporter Fields
 
@@ -264,7 +263,6 @@ When fields are omitted from a config file, sensible defaults are applied:
 | `setup` | not set (no pre-run command) |
 | `teardown` | not set (no post-run command) |
 | `defaultTimeoutMsec` | `30000` (30 seconds) |
-| `checksDir` (adapter) | `""` (empty — must be set explicitly when using shell check scripts) |
 
 An empty config `{}` is valid — all fields are defaulted.
 

@@ -19,24 +19,6 @@ builds:
       - goos: windows
         goarch: arm64
 
-  - id: specdown-adapter-shell
-    main: ./cmd/specdown-adapter-shell
-    binary: specdown-adapter-shell
-    ldflags:
-      - -s -w
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
-
 archives:
   - formats: [tar.gz]
     format_overrides:
@@ -90,6 +72,5 @@ brews:
     license: MIT
     install: |
       bin.install "specdown"
-      bin.install "specdown-adapter-shell"
     test: |
       system bin/"specdown", "version"

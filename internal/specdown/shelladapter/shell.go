@@ -3,13 +3,9 @@ package shelladapter
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
-	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
@@ -34,71 +30,6 @@ func Exec(id int, source string) ExecRawResponse {
 
 	output := strings.TrimRight(stdout.String(), "\n")
 	return ExecRawResponse{"id": id, "output": output}
-}
-
-// Assert runs a check script and returns an AssertResponse.
-func Assert(id int, req *adapterprotocol.AssertRequest, checksDir string) adapterprotocol.AssertResponse {
-	if req == nil {
-		return adapterprotocol.AssertResponse{
-			ID:      id,
-			Type:    "failed",
-			Message: "missing assert request",
-		}
-	}
-
-	// Build environment from check params and cells.
-	env := os.Environ()
-	if req.CheckParams != nil {
-		for k, v := range req.CheckParams {
-			env = append(env, fmt.Sprintf("CHECK_PARAM_%s=%s", strings.ToUpper(k), v))
-		}
-	}
-	for i, col := range req.Columns {
-		value := ""
-		if i < len(req.Cells) {
-			value = req.Cells[i]
-		}
-		env = append(env, fmt.Sprintf("COL_%s=%s", strings.ToUpper(strings.ReplaceAll(col, "-", "_")), value))
-	}
-	env = append(env, fmt.Sprintf("CHECK=%s", req.Check))
-
-	script := filepath.Join(checksDir, req.Check+".sh")
-	if _, err := os.Stat(script); err != nil {
-		return adapterprotocol.AssertResponse{
-			ID:      id,
-			Type:    "failed",
-			Message: fmt.Sprintf("check script not found: %s", script),
-		}
-	}
-	cmd := exec.Command("sh", script)
-	cmd.Env = env
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = strings.TrimSpace(stdout.String())
-		}
-		if message == "" {
-			message = err.Error()
-		}
-		return adapterprotocol.AssertResponse{
-			ID:      id,
-			Type:    "failed",
-			Message: message,
-		}
-	}
-
-	resp := adapterprotocol.AssertResponse{
-		ID:   id,
-		Type: "passed",
-	}
-	if actual := strings.TrimSpace(stdout.String()); actual != "" {
-		resp.Actual = actual
-	}
-	return resp
 }
 
 // DoctestStep is an alias for core.DoctestCommand for backward compatibility.

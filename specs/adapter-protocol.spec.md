@@ -148,20 +148,6 @@ Blocks whose content starts with `$ ` lines are auto-detected as doctest-style.
 The engine sends individual `exec` requests for each command and compares
 output against expected values inline.
 
-### Check Tables
-
-The shell adapter handles check table rows by executing
-`{checksDir}/{check}.sh` scripts. Table columns and check params are
-passed as environment variables:
-
-| Variable pattern | Source |
-|---|---|
-| `COL_{COLUMN}` | Table cell value (column name uppercased, hyphens become underscores) |
-| `CHECK_PARAM_{KEY}` | Check directive parameter (key uppercased) |
-| `CHECK` | Check name |
-
-Exit 0 passes; non-zero fails (stderr or stdout used as error message).
-
 ### Override Precedence
 
 If a user adapter explicitly claims a shell block (e.g., `"blocks": ["run:shell"]`),

@@ -34,7 +34,6 @@ jobs:
         run: |
           mkdir -p bin
           go build -o bin/specdown ./cmd/specdown/
-          go build -o bin/specdown-adapter-shell ./cmd/specdown-adapter-shell/
 
       - name: Run self-spec
         run: |

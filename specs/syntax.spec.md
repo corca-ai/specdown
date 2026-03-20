@@ -20,8 +20,6 @@ for zero exit.
 
 The parser must recognize `run` as the executable block kind.
 
-> check:block-kind
-
 | info | kind | target |
 | --- | --- | --- |
 | run:shell | run | shell |
@@ -196,7 +194,6 @@ A block can capture its output into one or more variables with `-> $varName`.
 Multiple captures use comma-separated names: `-> $var1, $var2`.
 Each output line is bound to the corresponding capture name in order.
 
-> check:block-kind
 | info | kind | target |
 | --- | --- | --- |
 | run:shell -> $id | run | shell |
@@ -298,7 +295,6 @@ before sending to the adapter.
 Adapters always receive unescaped values.
 The HTML report also unescapes cells, rendering `\n` as visible line breaks.
 
-> check:cell-escape
 | input | expected |
 | --- | --- |
 | hello | hello |
@@ -397,7 +393,7 @@ When the adapter returns an `actual` value in its passed response, the inline
 check displays the actual value as the main content with the check name
 shown as a small ruby annotation above it.
 
-For example, a + b is `check:echo-value(value=3)`.
+For example, a + b is `check:jq(input=3, expr=., expected=3)`.
 
 Multiple inline elements can appear in the same paragraph.
 

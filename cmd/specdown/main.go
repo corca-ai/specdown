@@ -122,7 +122,7 @@ func run(args []string) error {
 		return err
 	}
 
-	cfg, configDir, err := config.LoadOrDefault(*configPath)
+	cfg, configDir, err := loadConfig(fs, *configPath)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func traceCmd(args []string) error {
 		return err
 	}
 
-	cfg, configDir, err := config.LoadOrDefault(*configPath)
+	cfg, configDir, err := loadConfig(fs, *configPath)
 	if err != nil {
 		return err
 	}
@@ -414,7 +414,7 @@ func alloyDump(args []string) error {
 		return err
 	}
 
-	cfg, configDir, err := config.LoadOrDefault(*configPath)
+	cfg, configDir, err := loadConfig(fs, *configPath)
 	if err != nil {
 		return err
 	}
@@ -703,6 +703,22 @@ func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 // commands, and shell blocks that invoke specdown recursively) resolve the
 // same binary that is currently running.  Without this, a stale "specdown"
 // earlier on PATH can silently take precedence.
+// loadConfig loads the config file. When the -config flag was explicitly
+// provided, a missing file is an error. When using the default path,
+// a missing file falls back to built-in defaults.
+func loadConfig(fs *flag.FlagSet, configPath string) (config.Config, string, error) {
+	explicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			explicit = true
+		}
+	})
+	if explicit {
+		return config.Load(configPath)
+	}
+	return config.LoadOrDefault(configPath)
+}
+
 func prependSelfToPath() {
 	exe, err := os.Executable()
 	if err != nil {
