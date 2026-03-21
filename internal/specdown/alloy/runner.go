@@ -246,7 +246,7 @@ func (r Runner) runModel(javaPath, jarPath string, bundle modelBundle, checks []
 			message = err.Error()
 		}
 		location, ok := locateAlloyFailure(bundle.LineRefs, message)
-		failed := failedChecks(checks, bundle.AbsolutePath, bundle.SourceMapAbsolutePath, annotateAlloyFailure(message, location, ok), location, ok)
+		failed := failedChecks(checks, bundle.RelativePath, bundle.SourceMapRelativePath, annotateAlloyFailure(message, location, ok), location, ok)
 		for i := range failed {
 			failed[i].DurationMs = durationMs
 		}
@@ -330,8 +330,8 @@ func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
 			Model:         a.Model,
 			Assertion:     a.Assertion,
 			Scope:         a.Scope,
-			BundlePath:    bundle.AbsolutePath,
-			SourceMapPath: bundle.SourceMapAbsolutePath,
+			BundlePath:    bundle.RelativePath,
+			SourceMapPath: bundle.SourceMapRelativePath,
 			SourceRef:     formatSourceRef(check.ID.File, check.ID.HeadingPath),
 		},
 	}
@@ -400,7 +400,7 @@ func writeCounterexample(baseDir string, check core.CaseSpec, command receiptCom
 	if err := os.WriteFile(absolutePath, body, 0o644); err != nil {
 		return "", fmt.Errorf("write counterexample: %w", err)
 	}
-	return absolutePath, nil
+	return relativePath, nil
 }
 
 func summarizeCounterexample(command receiptCommand) string {

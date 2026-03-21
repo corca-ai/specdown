@@ -412,16 +412,16 @@ func TestFailedChecksAll(t *testing.T) {
 func TestFailedChecksWithLocation(t *testing.T) {
 	checks := []core.CaseSpec{alloyCheck("m", "a1", "5", 1)}
 	loc := failureLocation{BundleLine: 3, SourceRef: "test.md#Section"}
-	results := failedChecks(checks, "/bundle.als", "/bundle.als.map.json", "error msg", loc, true)
+	results := failedChecks(checks, "bundle.als", "bundle.als.map.json", "error msg", loc, true)
 	testutil.Len(t, results, 1)
 	testutil.Equal(t, results[0].Alloy.BundleLine, 3)
 	testutil.Equal(t, results[0].Alloy.SourceRef, "test.md#Section")
-	testutil.Equal(t, results[0].Alloy.BundlePath, "/bundle.als")
+	testutil.Equal(t, results[0].Alloy.BundlePath, "bundle.als")
 }
 
 func TestFailedChecksWithoutLocation(t *testing.T) {
 	checks := []core.CaseSpec{alloyCheck("m", "a1", "5", 1)}
-	results := failedChecks(checks, "/bundle.als", "/map.json", "error msg", failureLocation{}, false)
+	results := failedChecks(checks, "bundle.als", "map.json", "error msg", failureLocation{}, false)
 	testutil.Len(t, results, 1)
 	testutil.Equal(t, results[0].Alloy.BundleLine, 0)
 	testutil.Equal(t, results[0].Alloy.SourceRef, "")
@@ -433,7 +433,7 @@ func TestEvaluateCheckPasses(t *testing.T) {
 	root := t.TempDir()
 	runner := Runner{BaseDir: root}
 	check := alloyCheck("m", "a1", "5", 1)
-	bundle := modelBundle{Model: "m", AbsolutePath: "/b.als", SourceMapAbsolutePath: "/b.als.map.json"}
+	bundle := modelBundle{Model: "m", RelativePath: "b.als", SourceMapRelativePath: "b.als.map.json"}
 	commands := map[string]receiptCommand{
 		"check a1 for 5": {Type: "check", Source: "check a1 for 5", Solution: nil},
 	}
@@ -456,7 +456,7 @@ func TestEvaluateCheckCounterexample(t *testing.T) {
 	root := t.TempDir()
 	runner := Runner{BaseDir: root}
 	check := alloyCheck("m", "a1", "5", 1)
-	bundle := modelBundle{Model: "m", AbsolutePath: "/b.als", SourceMapAbsolutePath: "/b.als.map.json"}
+	bundle := modelBundle{Model: "m", RelativePath: "b.als", SourceMapRelativePath: "b.als.map.json"}
 	commands := map[string]receiptCommand{
 		"check a1 for 5": {
 			Type:   "check",
@@ -471,6 +471,7 @@ func TestEvaluateCheckCounterexample(t *testing.T) {
 	testutil.Equal(t, result.Status, core.StatusFailed)
 	testutil.Contains(t, result.Message, "counterexample")
 	testutil.True(t, result.Alloy.CounterexamplePath != "")
+	testutil.True(t, !filepath.IsAbs(result.Alloy.CounterexamplePath))
 }
 
 // --- summarizeCounterexample ---
@@ -527,8 +528,9 @@ func TestWriteCounterexample(t *testing.T) {
 	outPath, err := writeCounterexample(root, check, cmd)
 	testutil.NilErr(t, err)
 	testutil.True(t, strings.HasSuffix(outPath, ".json"))
+	testutil.True(t, !filepath.IsAbs(outPath))
 
-	body, err := os.ReadFile(outPath)
+	body, err := os.ReadFile(filepath.Join(root, outPath))
 	testutil.NilErr(t, err)
 	testutil.Contains(t, string(body), "check a1 for 5")
 }
@@ -660,11 +662,11 @@ func TestBundleFileName(t *testing.T) {
 
 func TestBaseCheckResult(t *testing.T) {
 	check := alloyCheck("m", "a1", "5", 1)
-	bundle := modelBundle{Model: "m", AbsolutePath: "/b.als", SourceMapAbsolutePath: "/b.als.map.json"}
+	bundle := modelBundle{Model: "m", RelativePath: "b.als", SourceMapRelativePath: "b.als.map.json"}
 	result := baseCheckResult(check, bundle)
 	testutil.Equal(t, result.Kind, core.CaseKindAlloy)
 	testutil.Equal(t, result.Alloy.Model, "m")
 	testutil.Equal(t, result.Alloy.Assertion, "a1")
 	testutil.Equal(t, result.Alloy.Scope, "5")
-	testutil.Equal(t, result.Alloy.BundlePath, "/b.als")
+	testutil.Equal(t, result.Alloy.BundlePath, "b.als")
 }
