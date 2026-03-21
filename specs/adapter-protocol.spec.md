@@ -279,8 +279,8 @@ indefinitely for the adapter to respond.
 
 If the adapter does not respond within the timeout:
 
-- **Exec requests**: the engine synthesizes an error response with the message `timeout after Nms`
-- **Assert requests**: the engine synthesizes a failed response with the message `timeout after Nms`
+- **Exec requests**: the engine synthesizes an error response with the message `timeout after Nms (exec: "source")` where *source* is the first 80 characters of the exec source
+- **Assert requests**: the engine synthesizes a failed response with the message `timeout after Nms (assert: check "name")` where *name* is the check name
 
 The adapter process is not killed — only the pending request is abandoned.
 
