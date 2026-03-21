@@ -240,6 +240,11 @@ $ specdown trace -config .tmp-test/trace/card/specdown.json 2>&1 | grep -c 'card
 1
 ```
 
+Cardinality constraints apply to **direct edges only**. Transitive edges
+(computed via `transitive: true`) do not count toward cardinality — an
+indirect link A → B → C does not satisfy a "must have at least 1 outgoing
+edge" constraint on A unless A also has a direct edge.
+
 ### Cycle Detection
 
 Edges with `acyclic: true` reject cycles.
@@ -265,6 +270,8 @@ $ specdown trace -config .tmp-test/trace/cycle/specdown.json 2>&1 | grep -c 'cyc
 
 When `transitive: true`, specdown computes the transitive closure.
 If A requires B and B requires C, A transitively requires C.
+Transitive edges appear in the report graph but do not affect cardinality
+checks — only direct edges satisfy `count` constraints.
 
 ```run:shell
 # Transitive closure adds indirect edges
