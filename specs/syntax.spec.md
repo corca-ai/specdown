@@ -144,9 +144,9 @@ $ test -f /tmp/specdown-test/file.txt
 ### Wildcard Matching
 
 A line containing exactly `...` in the expected output matches zero or more
-lines in the actual output. There is no escape for literal `...`. This is
-useful when output contains timestamps, PIDs, temporary paths, or other
-values that change between runs.
+lines in the actual output. To match a literal `...` line, escape it as
+`\...`. This is useful when output contains timestamps, PIDs, temporary
+paths, or other values that change between runs.
 
 A wildcard in the middle skips variable lines:
 
@@ -166,6 +166,13 @@ a
 c
 ...
 e
+```
+
+Escaped wildcard matches literal `...`:
+
+```run:shell
+$ echo '...'
+\...
 ```
 
 When no `...` line is present, matching is exact (backward compatible).

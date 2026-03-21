@@ -63,6 +63,18 @@ func TestMatchWithWildcard(t *testing.T) {
 	t.Run("wildcard matches zero lines", func(t *testing.T) {
 		testutil.True(t, MatchWithWildcard("first\nlast", "first\n...\nlast"))
 	})
+	t.Run("escaped wildcard matches literal dots", func(t *testing.T) {
+		testutil.True(t, MatchWithWildcard("...", `\...`))
+	})
+	t.Run("escaped wildcard does not match other text", func(t *testing.T) {
+		testutil.False(t, MatchWithWildcard("hello", `\...`))
+	})
+	t.Run("escaped wildcard with surrounding lines", func(t *testing.T) {
+		testutil.True(t, MatchWithWildcard("first\n...\nlast", "first\n\\...\nlast"))
+	})
+	t.Run("wildcard and escaped wildcard together", func(t *testing.T) {
+		testutil.True(t, MatchWithWildcard("a\nb\n...\nc", "a\n...\n\\...\nc"))
+	})
 }
 
 // --- StepStatus ---

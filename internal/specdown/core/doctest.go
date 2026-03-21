@@ -43,20 +43,30 @@ func ParseDoctestSource(source string) []DoctestCommand {
 
 // MatchWithWildcard checks if actual matches expected, where a line
 // containing exactly "..." in expected matches zero or more lines in actual.
+// A line containing exactly "\..." in expected matches a literal "..." in actual.
 func MatchWithWildcard(actual, expected string) bool {
 	expectedLines := strings.Split(expected, "\n")
+	needsLinewise := false
 	for _, line := range expectedLines {
-		if line == "..." {
-			return matchWildcardLines(strings.Split(actual, "\n"), expectedLines, 0, 0)
+		if line == "..." || line == `\...` {
+			needsLinewise = true
+			break
 		}
 	}
-	return actual == expected
+	if !needsLinewise {
+		return actual == expected
+	}
+	return matchWildcardLines(strings.Split(actual, "\n"), expectedLines, 0, 0)
 }
 
 func matchWildcardLines(actual, expected []string, ai, ei int) bool {
 	for ei < len(expected) {
 		if expected[ei] != "..." {
-			if ai >= len(actual) || actual[ai] != expected[ei] {
+			exp := expected[ei]
+			if exp == `\...` {
+				exp = "..."
+			}
+			if ai >= len(actual) || actual[ai] != exp {
 				return false
 			}
 			ai++
