@@ -15,8 +15,8 @@ This allows each project to build adapters with minimal effort in any language.
 ## Protocol Flow
 
 1. specdown launches the adapter process
-2. specdown sends `exec` or `assert` messages in document order, each with an integer `id`
-3. The adapter responds to each message, echoing the `id`
+2. specdown sends `exec` or `assert` messages in document order, each with an integer `id` starting from 1 and incrementing sequentially within the session
+3. The adapter responds to each message, echoing the exact `id`
 4. When the spec run finishes, specdown closes stdin and waits for the process to exit
 
 Sessions are scoped per-document. Each adapter session is started on first
@@ -83,6 +83,7 @@ For check table rows and check calls:
 
 Variables in `cells` are already substituted.
 Cell escape sequences are already resolved.
+All cell values are strings after substitution and unescaping.
 
 ## Assert Response
 
@@ -272,6 +273,9 @@ determined by (in priority order):
 
 1. Per-document `timeout` in frontmatter (milliseconds)
 2. `defaultTimeoutMsec` in `specdown.json` (default: `30000`)
+
+A timeout value of `0` disables the time limit — the engine waits
+indefinitely for the adapter to respond.
 
 If the adapter does not respond within the timeout:
 

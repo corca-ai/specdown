@@ -389,8 +389,8 @@ This deliberately wrong assertion is an expected failure:
 ### Inline check call
 
 A backtick code span of the form `` `check:name(key=value)` `` creates an inline
-check assertion. It reuses the adapter protocol with `kind: "tableRow"`,
-the check name, and `checkParams` populated with empty `columns`/`cells`.
+check assertion. It sends an `assert` message to the adapter with
+the check name and `checkParams` populated, with empty `columns`/`cells`.
 
 ```markdown
 The file `check:file-check(path=/tmp/data.txt, exists=yes)` was created.
@@ -457,7 +457,7 @@ An optional YAML frontmatter can be placed at the top of a spec file.
 
 | Key | Description |
 |-----|-------------|
-| `timeout` | Per-case execution time limit in milliseconds. Overrides `defaultTimeoutMsec` from config |
+| `timeout` | Per-case execution time limit in milliseconds. Overrides `defaultTimeoutMsec` from config. `0` disables the time limit |
 | `type` | Document type for [traceability](traceability.spec.md) (e.g. `spec`, `goal`, `feature`) |
 
 If frontmatter is absent, the global `defaultTimeoutMsec` from `specdown.json` applies (default: 30 seconds).
