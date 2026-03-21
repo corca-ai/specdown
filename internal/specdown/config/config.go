@@ -24,7 +24,7 @@ type Config struct {
 	TOC               []TOCEntry      `json:"toc,omitempty"`
 	Setup             string          `json:"setup,omitempty"`
 	Teardown          string          `json:"teardown,omitempty"`
-	DefaultTimeoutPtr *int            `json:"defaultTimeoutMsec,omitempty"`
+	DefaultTimeoutMs *int            `json:"defaultTimeoutMsec,omitempty"`
 }
 
 // TOCEntry represents a single item in the toc config array.
@@ -291,8 +291,8 @@ func parseMultiplicity(s string) (Multiplicity, error) {
 // EffectiveDefaultTimeout returns the configured default timeout, or
 // DefaultTimeoutMsec (30s) when not explicitly set in the config file.
 func (c Config) EffectiveDefaultTimeout() int {
-	if c.DefaultTimeoutPtr != nil {
-		return *c.DefaultTimeoutPtr
+	if c.DefaultTimeoutMs != nil {
+		return *c.DefaultTimeoutMs
 	}
 	return DefaultTimeoutMsec
 }

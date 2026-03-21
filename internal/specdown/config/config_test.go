@@ -151,13 +151,13 @@ func TestEffectiveDefaultTimeoutUsesConstantWhenNotSet(t *testing.T) {
 
 func TestEffectiveDefaultTimeoutUsesConfigValue(t *testing.T) {
 	v := 60000
-	cfg := Config{DefaultTimeoutPtr: &v}
+	cfg := Config{DefaultTimeoutMs: &v}
 	testutil.Equal(t, cfg.EffectiveDefaultTimeout(), 60000)
 }
 
 func TestEffectiveDefaultTimeoutAllowsZero(t *testing.T) {
 	v := 0
-	cfg := Config{DefaultTimeoutPtr: &v}
+	cfg := Config{DefaultTimeoutMs: &v}
 	testutil.Equal(t, cfg.EffectiveDefaultTimeout(), 0)
 }
 
