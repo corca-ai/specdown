@@ -180,13 +180,10 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	return out.String(), nil
 }
 
-func renderCodeSource(out *htmlBuilder, result core.CaseResult) {
-	source := ""
-	if result.Code != nil {
-		source = result.Code.Template
-		if result.Code.RenderedSource != "" {
-			source = result.Code.RenderedSource
-		}
+func renderCodeSource(out *strings.Builder, result core.CaseResult) {
+	source := result.Template
+	if result.RenderedSource != "" {
+		source = result.RenderedSource
 	}
 	out.raw(`<code>`)
 	out.text(source)
