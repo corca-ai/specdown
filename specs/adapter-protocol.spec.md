@@ -101,6 +101,13 @@ All cell values are strings after substitution and unescaping.
 | `actual` | Actual value for structured diff (optional) |
 | `label` | Human-readable row identifier, overrides default `row N` format (optional) |
 
+## Reserved Fields
+
+Both exec and assert responses may include an optional `"code"` field
+(string) for structured error classification. The engine currently
+ignores this field but it is reserved for future use. Adapter authors
+should not use `"code"` for other purposes.
+
 ## Registration
 
 Adapters declare their capabilities in `specdown.json`.
