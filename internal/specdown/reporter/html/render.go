@@ -115,6 +115,9 @@ func renderNode(node core.Node, caseResults map[string]core.CaseResult) (string,
 
 func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseResult) (string, error) {
 	if node.ID == nil {
+		if fields := strings.Fields(node.Block.Raw); len(fields) > 0 && fields[0] == "mermaid" {
+			return renderMermaidBlock(node), nil
+		}
 		return markdownToHTML(node.Markdown())
 	}
 
@@ -178,6 +181,16 @@ func renderCodeBlock(node core.CodeBlockNode, caseResults map[string]core.CaseRe
 	out.raw(`</p>`)
 	out.raw(`</section>`)
 	return out.String(), nil
+}
+
+func renderMermaidBlock(node core.CodeBlockNode) string {
+	var out strings.Builder
+	out.WriteString(`<div class="mermaid-diagram">`)
+	out.WriteString(`<pre class="mermaid">`)
+	out.WriteString(template.HTMLEscapeString(node.Source))
+	out.WriteString(`</pre>`)
+	out.WriteString(`</div>`)
+	return out.String()
 }
 
 func renderCodeSource(out *strings.Builder, result core.CaseResult) {
