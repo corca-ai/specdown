@@ -15,7 +15,7 @@ Prose is preserved as-is; only execution results are annotated with status.
 
 This page itself is an example of the report. Here is what to look for:
 
-- **Sidebar** (left) — lists every spec page with colored status dots. Documents in subdirectories are grouped; groups are collapsible and show aggregated status. See [depends::TOC Grouping](config.spec.md#toc-grouping) for configuration. When a document has a frontmatter `type`, a colored badge appears next to its title
+- **Sidebar** (left) — lists every spec page with colored status dots. Documents in subdirectories are grouped; groups are collapsible and show aggregated status. See [TOC Grouping](config.spec.md#toc-grouping) for configuration. When a document has a frontmatter `type`, a colored badge appears next to its title
 - **Header bar** — shows aggregate pass/fail/xfail counts as colored pills
 - **Section headings** — carry a colored left border: green for pass, red for fail
 - **Executable blocks** — a green left border means the block passed; red means it failed. Blocks with a summary line render collapsed and can be expanded with the `>` marker

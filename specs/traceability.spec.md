@@ -196,7 +196,9 @@ specdown validates every trace link against the configured edge definitions.
 | Dangling reference | Target file doesn't exist |
 | Self-loop | Document links to itself |
 
-Duplicate links (same edge + same target) are silently deduplicated.
+Duplicate links (same edge + same target from the same document) are
+deduplicated, but each duplicate is reported as a validation error.
+This catches copy-paste mistakes and accidental link repetition.
 
 Here is an example — a feature document using an undeclared edge name:
 

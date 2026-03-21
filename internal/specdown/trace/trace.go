@@ -121,12 +121,14 @@ func Validate(baseDir string, traceConfig *config.TraceConfig) (Graph, []TraceEr
 		linkErrs = append(linkErrs, errs...)
 		validEdges = append(validEdges, edges...)
 	}
-	validEdges = deduplicateEdges(validEdges)
+	var dedupErrs []TraceError
+	validEdges, dedupErrs = deduplicateEdges(validEdges)
 
 	graphErrs := validateGraph(docs, validEdges, traceConfig)
 
 	var allErrs []TraceError
 	allErrs = append(allErrs, linkErrs...)
+	allErrs = append(allErrs, dedupErrs...)
 	allErrs = append(allErrs, graphErrs...)
 
 	var transitiveEdges []Edge
@@ -439,18 +441,32 @@ func formatMultiplicity(m config.Multiplicity) string {
 	return fmt.Sprintf("%d..%d", m.Min, m.Max)
 }
 
-func deduplicateEdges(edges []Edge) []Edge {
-	seen := make(map[string]struct{})
+func deduplicateEdges(edges []Edge) ([]Edge, []TraceError) {
+	type edgeKey struct{ name, source, target string }
+	counts := make(map[edgeKey]int)
+	for _, e := range edges {
+		counts[edgeKey{e.EdgeName, e.Source, e.Target}]++
+	}
+
+	var errs []TraceError
+	seen := make(map[edgeKey]struct{})
 	var result []Edge
 	for _, e := range edges {
-		key := e.EdgeName + "|" + e.Source + "|" + e.Target
-		if _, ok := seen[key]; ok {
+		k := edgeKey{e.EdgeName, e.Source, e.Target}
+		if _, ok := seen[k]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
+		seen[k] = struct{}{}
 		result = append(result, e)
+		if n := counts[k]; n > 1 {
+			errs = append(errs, TraceError{
+				File:    e.Source,
+				Edge:    e.EdgeName,
+				Message: fmt.Sprintf("duplicate link to %s (%d occurrences)", e.Target, n),
+			})
+		}
 	}
-	return result
+	return result, errs
 }
 
 // detectCycles finds cycles in the given edges using DFS.

@@ -384,7 +384,20 @@ func TestDeduplicateEdges(t *testing.T) {
 		{Source: "a", Target: "b", EdgeName: "e"},
 		{Source: "a", Target: "c", EdgeName: "e"},
 	}
-	testutil.Len(t, deduplicateEdges(edges), 2)
+	deduped, errs := deduplicateEdges(edges)
+	testutil.Len(t, deduped, 2)
+	testutil.Len(t, errs, 1)
+	testutil.Contains(t, errs[0].Message, "duplicate link to b (2 occurrences)")
+}
+
+func TestDeduplicateEdgesNoDuplicates(t *testing.T) {
+	edges := []Edge{
+		{Source: "a", Target: "b", EdgeName: "e"},
+		{Source: "a", Target: "c", EdgeName: "e"},
+	}
+	deduped, errs := deduplicateEdges(edges)
+	testutil.Len(t, deduped, 2)
+	testutil.Len(t, errs, 0)
 }
 
 // --- checkCardinality ---

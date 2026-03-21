@@ -8,8 +8,7 @@ Adapters are how specs talk to real code.
 The boundary is a process protocol, not an in-process language API —
 any executable that reads NDJSON from stdin and writes NDJSON to stdout is an adapter.
 
-Adapters execute the [depends::executable blocks](syntax.spec.md) defined in spec documents
-and evaluate [depends::check table](syntax.spec.md) rows.
+Adapters execute the [depends::executable blocks and check tables](syntax.spec.md) defined in spec documents.
 This allows each project to build adapters with minimal effort in any language.
 
 ## Protocol Flow
