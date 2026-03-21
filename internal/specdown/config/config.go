@@ -77,6 +77,7 @@ type TraceEdge struct {
 
 type ModelConfig struct {
 	Builtin string `json:"builtin"`
+	JarPath string `json:"jarPath,omitempty"`
 }
 
 type AdapterConfig struct {

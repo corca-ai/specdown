@@ -26,6 +26,7 @@ var alloyJarURL = "https://github.com/AlloyTools/org.alloytools.alloy/releases/d
 
 type Runner struct {
 	BaseDir    string
+	JarPath    string // user-provided JAR path; empty means auto-download
 	HTTPClient *http.Client
 }
 
@@ -451,7 +452,17 @@ func alloyCacheDir() (string, error) {
 	return filepath.Join(cacheDir, "specdown"), nil
 }
 
-func (r Runner) ensureAlloyJar() (_ string, err error) {
+func (r Runner) ensureAlloyJar() (string, error) {
+	if r.JarPath != "" {
+		if _, err := os.Stat(r.JarPath); err != nil {
+			return "", fmt.Errorf("configured Alloy JAR not found: %w", err)
+		}
+		return r.JarPath, nil
+	}
+	return r.downloadAlloyJar()
+}
+
+func (r Runner) downloadAlloyJar() (_ string, err error) {
 	cacheDir, err := alloyCacheDir()
 	if err != nil {
 		return "", err

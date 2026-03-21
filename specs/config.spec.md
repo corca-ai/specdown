@@ -147,7 +147,7 @@ precedence over the built-in.
 | `entry` | Path to the entry Markdown file. Starting point for recursive link crawling |
 | `adapters` | List of adapters that handle executable blocks and checks |
 | `reporters` | Output generators. `html` and `json` builtins provided |
-| `models` | Alloy model verification (default: `alloy`). Accepted for explicit configuration; omit to use the default |
+| `models` | Alloy model verification (default: `alloy`). Accepted for explicit configuration; omit to use the default. Set `models.jarPath` to use a local Alloy JAR instead of auto-downloading |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
 | `trace` | Traceability configuration. See [Traceability](traceability.spec.md) |
 | `toc` | Sidebar table-of-contents grouping. See [TOC Grouping](#toc-grouping) below |
