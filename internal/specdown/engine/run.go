@@ -542,6 +542,11 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 				Label:   specCase.DefaultLabel(),
 				Status:  core.StatusFailed,
 				Message: "missing model verification result for " + specCase.ID.Key(),
+				Alloy: &core.AlloyResultDetail{
+					Model:     specCase.Alloy.Model,
+					Assertion: specCase.Alloy.Assertion,
+					Scope:     specCase.Alloy.Scope,
+				},
 			}
 		}
 		if err := c.recordResult(result, specCase.ID.HeadingPath); err != nil {
@@ -1201,6 +1206,12 @@ func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {
 			RowNumber:     tr.RowNumber,
 			TemplateCells: append([]string(nil), tr.Cells...),
 			RenderedCells: append([]string(nil), tr.Cells...),
+		}
+	case core.CaseKindAlloy:
+		result.Alloy = &core.AlloyResultDetail{
+			Model:     specCase.Alloy.Model,
+			Assertion: specCase.Alloy.Assertion,
+			Scope:     specCase.Alloy.Scope,
 		}
 	}
 
