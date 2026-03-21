@@ -332,6 +332,11 @@ register a single generic check and pass the differences as parameters:
 The adapter reads `checkParams.endpoint` and `checkParams.mode`
 to decide how to fetch and validate, eliminating per-endpoint check code.
 
+When a table column name matches a directive parameter name, the table
+cell value takes precedence over the directive value. This allows
+directive parameters to act as defaults that individual rows can
+override.
+
 ### Parameterized check call
 
 A check directive with parameters but no following table creates a single
