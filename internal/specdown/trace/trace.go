@@ -61,7 +61,7 @@ type Graph struct {
 }
 
 // traceLinkPattern matches [edgeName::display text](target) in markdown links.
-var traceLinkPattern = regexp.MustCompile(`\[([a-z][a-z0-9_]*)::([^\]]+)\]\(([^)]+)\)`)
+var traceLinkPattern = regexp.MustCompile(`\[([a-z][a-z0-9_-]*)::([^\]]+)\]\(([^)]+)\)`)
 
 // fencedCodeBlockPattern strips fenced code blocks from markdown.
 var fencedCodeBlockPattern = regexp.MustCompile("(?m)^```[^\n]*\n(?s:.*?)\n```\\s*$")

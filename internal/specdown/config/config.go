@@ -193,7 +193,7 @@ func validateAdapters(adapters []AdapterConfig) error {
 	return nil
 }
 
-var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
 func validateTrace(trace *TraceConfig) error {
 	if len(trace.Types) == 0 {
@@ -213,7 +213,7 @@ func validateTraceTypes(types []string) (map[string]struct{}, error) {
 	typeSet := make(map[string]struct{}, len(types))
 	for _, t := range types {
 		if !identifierPattern.MatchString(t) {
-			return nil, fmt.Errorf("trace type %q is not a valid identifier (must match [a-z][a-z0-9_]*)", t)
+			return nil, fmt.Errorf("trace type %q is not a valid identifier (must match [a-z][a-z0-9_-]*)", t)
 		}
 		if _, ok := typeSet[t]; ok {
 			return nil, fmt.Errorf("trace type %q is declared more than once", t)

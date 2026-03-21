@@ -49,7 +49,7 @@ type: spec
 ---
 ```
 
-A type is an identifier (`[a-z][a-z0-9_]*`). Valid types must be declared in the
+A type is an identifier (`[a-z][a-z0-9_-]*`). Valid types must be declared in the
 `trace.types` config array. A document with a type not listed in config is an error.
 Documents without `type` are untyped — they may be navigation link targets but
 cannot be trace link sources or targets.

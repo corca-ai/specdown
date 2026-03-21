@@ -38,6 +38,13 @@ func TestParseTraceLinks_SimpleLinks(t *testing.T) {
 	testutil.Equal(t, links[1].DisplayText, "Other")
 }
 
+func TestParseTraceLinks_HyphenatedEdgeName(t *testing.T) {
+	md := `See [covers-requirement::Feature X](feature.md).`
+	links := ParseTraceLinks("test.md", md)
+	testutil.Len(t, links, 1)
+	testutil.Equal(t, links[0].EdgeName, "covers-requirement")
+}
+
 func TestParseTraceLinks_CodeBlocksIgnored(t *testing.T) {
 	md := "```\n[covers::X](y.md)\n```\n[covers::Z](z.md)"
 	links := ParseTraceLinks("test.md", md)

@@ -305,6 +305,12 @@ func TestValidateTraceEdgesInvalidName(t *testing.T) {
 	testutil.ErrContains(t, err, "not a valid identifier")
 }
 
+func TestValidateTraceEdgesHyphenatedName(t *testing.T) {
+	types := map[string]struct{}{"spec": {}}
+	err := validateTraceEdges(map[string]TraceEdge{"covers-requirement": {From: "spec", To: "spec"}}, types)
+	testutil.NilErr(t, err)
+}
+
 func TestValidateTraceEdgesUndeclaredFrom(t *testing.T) {
 	types := map[string]struct{}{"spec": {}}
 	err := validateTraceEdges(map[string]TraceEdge{"covers": {From: "unknown", To: "spec"}}, types)
