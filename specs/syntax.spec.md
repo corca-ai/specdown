@@ -420,6 +420,26 @@ are registered in [`specdown.json`](config.spec.md).
 | `run:<target>` | Executable block dispatched to an adapter |
 | `alloy:model(<name>)` | Alloy model definition (see [Alloy](alloy.spec.md)) |
 | `alloy:ref(<model>#<assertion>)` | Alloy model reference (see [Alloy](alloy.spec.md)) |
+| `mermaid` | Diagram block rendered by Mermaid (see [Report](report.spec.md#mermaid-diagrams)) |
+
+### Diagram Blocks
+
+A fenced code block with `mermaid` as the info string is a **diagram block**.
+Diagram blocks are non-executable — they have no test case and are not
+dispatched to any adapter. In the HTML report, the content is rendered as
+an interactive diagram via the Mermaid library.
+
+The info string match is case-sensitive: `mermaid` is recognized,
+but `Mermaid` or `MERMAID` falls through to plain code rendering.
+
+````markdown
+```mermaid
+graph LR
+    A[Parse] --> B[Plan]
+    B --> C[Execute]
+    C --> D[Report]
+```
+````
 
 ## Setup and Teardown Hooks
 

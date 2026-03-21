@@ -21,6 +21,7 @@ This page itself is an example of the report. Here is what to look for:
 - **Executable blocks** — a green left border means the block passed; red means it failed. Blocks with a summary line render collapsed and can be expanded with the `>` marker
 - **Check tables** — each row shows pass/fail individually; failed rows display expected/actual diff inline
 - **Alloy badges** — Alloy check results appear as small status badges next to the relevant section
+- **Mermaid diagrams** — fenced blocks with `mermaid` info string render as interactive diagrams
 - **Footer** — links to the project repository
 
 ## Multi-page Structure
@@ -77,6 +78,43 @@ Markdown links to `.md` and `.spec.md` files are rewritten to `.html` in the out
 When trace is configured, each spec page gains a sticky **Traceability** panel
 on the right side showing the document's parents (incoming edges), the current
 document highlighted, and its children (outgoing edges) with relationship labels.
+
+## Mermaid Diagrams
+
+Fenced code blocks with `mermaid` as the info string are rendered as
+interactive diagrams in the HTML report. These blocks are non-executable
+— they carry no test case and are not sent to any adapter.
+
+The Mermaid library is loaded from a CDN via progressive enhancement:
+
+- If the page contains no `<pre class="mermaid">` elements, no script is loaded
+- On load failure (e.g. offline), the raw diagram source remains visible as a styled code block
+- The library version is pinned with an SRI integrity hash
+
+Here is a live example — this block renders as a diagram in the report
+and as plain source when viewed as Markdown:
+
+```mermaid
+graph TD
+    Spec[Spec File] --> Parse
+    Parse --> Plan
+    Plan --> Execute
+    Execute --> Report[HTML Report]
+```
+
+Flowcharts, sequence diagrams, and other Mermaid diagram types are all
+supported — any valid Mermaid syntax works:
+
+```mermaid
+sequenceDiagram
+    participant Core
+    participant Adapter
+    Core->>Adapter: run(source, bindings)
+    Adapter-->>Core: {status, bindings, stdout}
+```
+
+The diagram source is HTML-escaped before embedding, preventing XSS
+through crafted diagram content.
 
 ## Failure Diagnostics
 

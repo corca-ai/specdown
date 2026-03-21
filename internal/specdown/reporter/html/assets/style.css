@@ -870,7 +870,7 @@ code, pre, kbd, samp {
 /* ── Mermaid diagrams ── */
 .mermaid-diagram {
   margin: 1.25rem 0;
-  overflow-x: auto;
+  min-width: 0;
 }
 .mermaid-diagram pre.mermaid {
   /* Fallback: raw source shown as readable code until JS renders SVG */
@@ -882,11 +882,14 @@ code, pre, kbd, samp {
   border-radius: 4px;
   padding: 1rem;
   white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .mermaid-diagram svg {
   display: block;
   max-width: 100%;
   height: auto;
+  overflow: visible;
 }
 
 /* ── Trace tag (type badge) ── */
