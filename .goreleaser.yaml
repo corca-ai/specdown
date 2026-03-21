@@ -31,7 +31,9 @@ checksum:
   name_template: checksums.txt
 
 changelog:
+  use: github
   sort: asc
+  format: "{{ .SHA }}: {{ .Message }}{{ if .Logins }} ({{ .Logins | englishJoin }}){{ end }}"
   groups:
     - title: Breaking Changes
       regexp: '(?i)BREAKING'
