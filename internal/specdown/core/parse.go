@@ -474,6 +474,9 @@ func parseAlloyRefDirective(line string) (AlloyRefNode, bool, error) {
 	if scope == "" {
 		return AlloyRefNode{}, false, fmt.Errorf("invalid alloy reference directive %q (expected format: \"> alloy:ref(model#assertion, scope=...)\")", trimmed)
 	}
+	if err := validateAlloyScope(scope); err != nil {
+		return AlloyRefNode{}, false, fmt.Errorf("alloy reference directive %q: %w", trimmed, err)
+	}
 
 	return AlloyRefNode{
 		Model:     matches[1],

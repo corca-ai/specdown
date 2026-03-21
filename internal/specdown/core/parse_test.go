@@ -537,6 +537,44 @@ func TestParseDocumentRejectsInvalidAlloyReferenceDirective(t *testing.T) {
 	}
 }
 
+func TestParseDocumentRejectsInvalidAlloyScope(t *testing.T) {
+	_, err := ParseDocument("bad.spec.md", strings.Join([]string{
+		"# Bad",
+		"",
+		"```alloy:model(m)",
+		"sig A {}",
+		"```",
+		"",
+		"> alloy:ref(m#a, scope=abc)",
+		"",
+	}, "\n"), nil)
+
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "invalid Alloy scope") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestParseDocumentAcceptsValidAlloyScopes(t *testing.T) {
+	for _, scope := range []string{"5", "3 but 6 Int", "exactly 5", "5 but 3 Card, 6 Int"} {
+		_, err := ParseDocument("ok.spec.md", strings.Join([]string{
+			"# OK",
+			"",
+			"```alloy:model(m)",
+			"sig A {}",
+			"```",
+			"",
+			"> alloy:ref(m#a, scope=" + scope + ")",
+			"",
+		}, "\n"), nil)
+		if err != nil {
+			t.Fatalf("scope %q: unexpected error %v", scope, err)
+		}
+	}
+}
+
 func TestParseDocumentWarnsOnUnknownBlockPrefix(t *testing.T) {
 	doc, err := ParseDocument("test.spec.md", strings.Join([]string{
 		"# Test",

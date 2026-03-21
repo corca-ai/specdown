@@ -19,10 +19,18 @@ type AlloyModelSpec struct {
 
 var moduleDeclPattern = regexp.MustCompile(`(?m)^\s*module\b`)
 var alloyCheckPattern = regexp.MustCompile(`(?m)^\s*check\s+([A-Za-z_][A-Za-z0-9_]*)\s+for\s+(.+?)\s*$`)
+var alloyScopePattern = regexp.MustCompile(`^(?:exactly\s+)?\d+(?:\s+but\s+\d+\s+[A-Za-z_]\w*(?:/[A-Za-z_]\w*)*(?:\s*,\s*\d+\s+[A-Za-z_]\w*(?:/[A-Za-z_]\w*)*)*)?$`)
 
 type parsedCheck struct {
 	assertion string
 	scope     string
+}
+
+func validateAlloyScope(scope string) error {
+	if !alloyScopePattern.MatchString(scope) {
+		return fmt.Errorf("invalid Alloy scope %q (expected format: \"N\", \"N but M Type\", or \"exactly N\")", scope)
+	}
+	return nil
 }
 
 func parseCheckStatements(source string) []parsedCheck {
