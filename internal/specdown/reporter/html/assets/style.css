@@ -519,15 +519,15 @@ main {
   color: var(--muted);
   background: var(--bg);
 }
-.exec-table thead th:first-child { border-left: 3px solid transparent; }
-.exec-table tbody td:first-child { border-left: 3px solid transparent; }
+.exec-table { border-left: 3px solid transparent; }
+
+.exec-table-block.passed .exec-table { border-left-color: var(--pass-mark); }
+.exec-table-block.failed .exec-table { border-left-color: var(--fail-mark); }
+.exec-table-block.expected-fail .exec-table { border-left-color: var(--xfail-mark); }
 
 .exec-table tbody tr.passed td { background: var(--pass-bg); }
-.exec-table tbody tr.passed td:first-child { border-left-color: var(--pass-mark); }
 .exec-table tbody tr.failed td { background: var(--fail-bg); }
-.exec-table tbody tr.failed td:first-child { border-left-color: var(--fail-mark); }
 .exec-table tbody tr.expected-fail td { background: var(--xfail-bg); }
-.exec-table tbody tr.expected-fail td:first-child { border-left-color: var(--xfail-mark); }
 
 /* ── Prose code blocks & tables ── */
 .spec-body :not(.exec-source) > pre {

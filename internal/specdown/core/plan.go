@@ -436,18 +436,19 @@ func executableCases(doc Document) ([]CaseSpec, error) {
 // processCheckDirective pairs a CheckDirectiveNode with the following table
 // or emits a standalone check call. Returns new cases and how many nodes to skip.
 func processCheckDirective(current CheckDirectiveNode, doc Document, i int, maxOrd *int) ([]CaseSpec, int, error) {
-	table, found := findFollowingTable(doc.Nodes, i+1)
+	table, tableIdx, found := findFollowingTable(doc.Nodes, i+1)
 	switch {
 	case found:
 		cases := appendCheckTableCases(nil, current, table, doc.RelativeTo, maxOrd)
-		// Count nodes to skip past the table.
-		skip := 0
-		for j := i + 1; j < len(doc.Nodes); j++ {
-			if _, ok := doc.Nodes[j].(TableNode); ok {
-				skip = j - i
-				break
-			}
+		// Write check info and row IDs back to the table node so the
+		// renderer can produce styled exec-table-block output.
+		table.Check = current.Check
+		table.CheckParams = current.CheckParams
+		for ci := range cases {
+			table.Rows[ci].ID = &cases[ci].ID
 		}
+		doc.Nodes[tableIdx] = table
+		skip := tableIdx - i
 		return cases, skip, nil
 	case len(current.CheckParams) > 0:
 		*maxOrd++
@@ -469,23 +470,23 @@ func processCheckDirective(current CheckDirectiveNode, doc Document, i int, maxO
 }
 
 // findFollowingTable looks for a TableNode after position start,
-// skipping whitespace-only ProseNodes.
-func findFollowingTable(nodes []Node, start int) (TableNode, bool) {
+// skipping whitespace-only ProseNodes. Returns the table, its index, and whether it was found.
+func findFollowingTable(nodes []Node, start int) (TableNode, int, bool) {
 	for i := start; i < len(nodes); i++ {
 		switch n := nodes[i].(type) {
 		case TableNode:
-			return n, true
+			return n, i, true
 		case ProseNode:
 			// Skip blank prose (whitespace between directive and table).
 			if strings.TrimSpace(n.Raw) == "" {
 				continue
 			}
-			return TableNode{}, false
+			return TableNode{}, 0, false
 		default:
-			return TableNode{}, false
+			return TableNode{}, 0, false
 		}
 	}
-	return TableNode{}, false
+	return TableNode{}, 0, false
 }
 
 // appendCheckTableCases creates executable cases from a check directive + table pair.
