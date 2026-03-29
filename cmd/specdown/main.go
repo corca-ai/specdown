@@ -660,6 +660,17 @@ func caseKindLabel(c core.CaseResult) string {
 	}
 }
 
+// printIndented prints a possibly-multiline string with a prefix on the first
+// line and consistent indentation on subsequent lines.
+func printIndented(prefix, s string) {
+	lines := strings.Split(s, "\n")
+	fmt.Printf("%s%s\n", prefix, lines[0])
+	indent := strings.Repeat(" ", len(prefix))
+	for _, line := range lines[1:] {
+		fmt.Printf("%s%s\n", indent, line)
+	}
+}
+
 func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 	tag := caseTag(c.Status, c.ExpectFail)
 	kind := caseKindLabel(c)
@@ -673,11 +684,23 @@ func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 	}
 	fmt.Printf("  %s%s  %s  [%s]%s  (%dms)\n", counter, tag, strings.Join(c.ID.HeadingPath, " > "), kind, label, c.DurationMs)
 
-	if c.Status != core.StatusFailed {
-		return
+	if c.Status == core.StatusFailed {
+		printFailureDetail(c)
+	}
+}
+
+func printFailureDetail(c core.CaseResult) {
+	if c.ID.Line > 0 {
+		fmt.Printf("        %s:%d\n", c.ID.File, c.ID.Line)
+	}
+	if c.Code != nil && c.Code.ExitCode != nil {
+		fmt.Printf("        exit code %d\n", *c.Code.ExitCode)
 	}
 	if c.Message != "" {
-		fmt.Printf("        %s\n", c.Message)
+		printIndented("        ", c.Message)
+	}
+	if c.Code != nil && c.Code.Stderr != "" && c.Code.Stderr != c.Message {
+		printIndented("        stderr: ", c.Code.Stderr)
 	}
 	if c.Expected != "" {
 		fmt.Printf("        expected: %s\n", c.Expected)
@@ -685,11 +708,51 @@ func printCaseResult(c core.CaseResult, caseNum, casesTotal int) {
 	if c.Actual != "" {
 		fmt.Printf("        actual:   %s\n", c.Actual)
 	}
-	var steps []core.DoctestStep
-	if c.Code != nil {
-		steps = c.Code.Steps
+	printCodeDetail(c)
+	printFailureBindings(c)
+	printTableDetail(c)
+	printFailedDoctestSteps(c)
+}
+
+func printCodeDetail(c core.CaseResult) {
+	if c.Code == nil || c.Code.RenderedSource == "" || len(c.Code.Steps) > 0 {
+		return
 	}
-	for _, step := range steps {
+	fmt.Printf("        source:\n")
+	for _, line := range strings.Split(c.Code.RenderedSource, "\n") {
+		fmt.Printf("          %s\n", line)
+	}
+}
+
+func printFailureBindings(c core.CaseResult) {
+	if len(c.VisibleBindings) == 0 {
+		return
+	}
+	var pairs []string
+	for _, b := range c.VisibleBindings {
+		pairs = append(pairs, fmt.Sprintf("$%s=%v", b.Name, b.Value))
+	}
+	fmt.Printf("        bindings: %s\n", strings.Join(pairs, ", "))
+}
+
+func printTableDetail(c core.CaseResult) {
+	if c.Table == nil || len(c.Table.Columns) == 0 || len(c.Table.RenderedCells) == 0 {
+		return
+	}
+	var pairs []string
+	for ci, col := range c.Table.Columns {
+		if ci < len(c.Table.RenderedCells) {
+			pairs = append(pairs, fmt.Sprintf("%s=%s", col, c.Table.RenderedCells[ci]))
+		}
+	}
+	fmt.Printf("        row: %s\n", strings.Join(pairs, ", "))
+}
+
+func printFailedDoctestSteps(c core.CaseResult) {
+	if c.Code == nil {
+		return
+	}
+	for _, step := range c.Code.Steps {
 		if step.Status != core.StatusFailed {
 			continue
 		}

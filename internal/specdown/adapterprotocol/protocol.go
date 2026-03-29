@@ -31,6 +31,8 @@ type ExecResponse struct {
 	HasOutput bool
 	Output    json.RawMessage // raw JSON value
 	Error     string
+	ExitCode  *int   // optional; nil when not reported by adapter
+	Stderr    string // optional; separate stderr stream when adapter reports it
 }
 
 // AssertResponse is the adapter's response to an assert request.
@@ -75,6 +77,20 @@ func ParseExecResponse(raw []byte) (ExecResponse, error) {
 			return ExecResponse{}, fmt.Errorf("decode exec response error: %w", err)
 		}
 		resp.Error = errMsg
+	}
+
+	// Optional fields — backward-compatible; missing keys are silently ignored.
+	if raw, ok := fields["exitCode"]; ok {
+		var code int
+		if err := json.Unmarshal(raw, &code); err == nil {
+			resp.ExitCode = &code
+		}
+	}
+	if raw, ok := fields["stderr"]; ok {
+		var s string
+		if err := json.Unmarshal(raw, &s); err == nil {
+			resp.Stderr = s
+		}
 	}
 
 	return resp, nil

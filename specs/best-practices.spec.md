@@ -202,6 +202,51 @@ The prime operator (`e'`) refers to the value of `e` in the next state. Without 
 - **Hardcoded paths in [explains::config](config.spec.md)** — use relative paths so the project works from any checkout location.
 - **Monolithic [explains::adapter](adapter-protocol.spec.md)** — keep adapters focused on one execution environment. Split when complexity grows.
 
+## Hooks vs Inline Cleanup
+
+Use `> setup` / `> teardown` hooks when the same preparation or cleanup
+applies to all cases in a section. Teardown hooks always run, even if a
+case fails — inline cleanup at the start of the next block does not have
+this guarantee.
+
+Use `> setup:each` / `> teardown:each` when every child section needs
+identical preparation (e.g., resetting a database or clearing temp files).
+
+Inline cleanup at the start of a block is simpler when the cleanup is
+specific to one case. Avoid mixing both in the same section — pick one
+and use it consistently.
+
+## When to Build an Adapter
+
+Stay with `run:shell` when commands are one-off and vary between cases.
+
+Build an adapter when:
+
+- Three or more shell blocks repeat the same execution pattern with different inputs
+- You need domain-specific checks (database state, UI content, API responses)
+- Shell blocks grow complex with parsing (`awk`/`grep` chains to extract values)
+
+A check table with an adapter reads as data; a shell block reads as a script.
+The tradeoff is the upfront cost of writing the adapter.
+
+## Choosing the Right Block Style
+
+| Goal | Style |
+|------|-------|
+| Verify command output matches exactly | Doctest (`$ ` lines with expected output) |
+| Run a command and check exit status only | Plain `run:shell` block |
+| Test many input/output pairs | Check table (`> check:name`) |
+| Assert a value inline in prose | `` `expect: ${n} == 3` `` |
+| Quick spot-check with an adapter | Inline `` `check:jq(...)` `` |
+
+Doctest blocks are a natural fit for CLI specs — the reader sees the
+command and its output together. Use `...` wildcards for lines that
+change between runs (timestamps, PIDs, paths).
+
+Inline `expect:` is useful when the assertion belongs in the narrative —
+e.g. `` `expect: ${total} == 42` `` renders as a green/red badge
+in the HTML report without breaking the flow into a separate block.
+
 ## Choosing the Right Tool
 
 | Situation | Tool |

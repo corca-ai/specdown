@@ -55,6 +55,7 @@ func parseFrontmatter(markdown string) (fm Frontmatter, rest string) {
 type documentParser struct {
 	file            string
 	lines           []string
+	lineOffset      int // number of lines consumed by frontmatter (0-based line index → 1-based source line)
 	ignorePrefixSet map[string]bool
 	nodes           []Node
 	headingPath     []string
@@ -66,8 +67,21 @@ type documentParser struct {
 	warnings        []string
 }
 
+// sourceLine converts a 0-based index into p.lines to a 1-based line number
+// in the original markdown source (accounting for frontmatter).
+func (p *documentParser) sourceLine(i int) int {
+	return p.lineOffset + i + 1
+}
+
 func ParseDocument(relativePath, markdown string, ignorePrefixes []string) (Document, error) {
 	fm, content := parseFrontmatter(markdown)
+
+	// Compute how many lines the frontmatter consumed so we can map
+	// 0-based content line indices back to 1-based source line numbers.
+	fmLines := 0
+	if len(content) < len(markdown) {
+		fmLines = strings.Count(markdown[:len(markdown)-len(content)], "\n")
+	}
 
 	ignorePrefixSet := make(map[string]bool, len(ignorePrefixes))
 	for _, p := range ignorePrefixes {
@@ -77,6 +91,7 @@ func ParseDocument(relativePath, markdown string, ignorePrefixes []string) (Docu
 	p := &documentParser{
 		file:            relativePath,
 		lines:           splitLines(content),
+		lineOffset:      fmLines,
 		ignorePrefixSet: ignorePrefixSet,
 	}
 
@@ -164,6 +179,7 @@ func (p *documentParser) handleAlloyRef(i int, ref AlloyRefNode) (int, error) {
 		File:        p.file,
 		HeadingPath: copyPath(p.headingPath),
 		Ordinal:     p.ordinal,
+		Line:        p.sourceLine(i),
 	}
 	p.nodes = append(p.nodes, ref)
 	return i + 1, nil
@@ -187,6 +203,7 @@ func (p *documentParser) handleCheckDirective(i int, check string, params map[st
 		Check:       check,
 		CheckParams: params,
 		Raw:         p.lines[i],
+		Line:        p.sourceLine(i),
 		HeadingPath: copyPath(p.headingPath),
 	})
 	return i + 1, nil
@@ -299,6 +316,7 @@ func (p *documentParser) parseCodeBlock(i int, info string) (int, error) {
 			File:        p.file,
 			HeadingPath: copyPath(p.headingPath),
 			Ordinal:     p.ordinal,
+			Line:        p.sourceLine(i),
 		}
 	}
 	p.nodes = append(p.nodes, node)
@@ -312,6 +330,11 @@ func (p *documentParser) handleTable(i int) (int, error) {
 	table, next, err := parseTableNode(p.file, p.lines, i)
 	if err != nil {
 		return 0, err
+	}
+	// Set 1-based source line numbers on table rows.
+	// Rows start at i+2 (header=i, separator=i+1, first row=i+2).
+	for ri := range table.Rows {
+		table.Rows[ri].Line = p.sourceLine(i + 2 + ri)
 	}
 	p.nodes = append(p.nodes, table)
 	return next, nil
@@ -358,7 +381,7 @@ func (p *documentParser) handleProse(i int) (int, error) {
 		Raw:         raw,
 		HeadingPath: copyPath(p.headingPath),
 	}
-	proseNode.Inlines = parseInlineElements(raw, p.file, &p.ordinal, p.headingPath)
+	proseNode.Inlines = parseInlineElements(raw, p.file, &p.ordinal, p.headingPath, p.sourceLine(start))
 	p.nodes = append(p.nodes, proseNode)
 	return i, nil
 }
@@ -683,7 +706,7 @@ func insideCodeSpan(raw string, start, end int) bool {
 	return false
 }
 
-func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []string) []InlineElement {
+func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []string, startLine int) []InlineElement {
 	var elements []InlineElement
 
 	for _, loc := range inlineExpectPattern.FindAllStringSubmatchIndex(raw, -1) {
@@ -692,6 +715,8 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 		}
 		*ordinal++
 		expectFail := loc[6] >= 0 && loc[7] > loc[6]
+		// Count newlines before match to find the line within the prose block.
+		line := startLine + strings.Count(raw[:loc[0]], "\n")
 		elements = append(elements, InlineElement{
 			Kind:        InlineExpect,
 			Raw:         raw[loc[0]:loc[1]],
@@ -702,6 +727,7 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 				File:        relativePath,
 				HeadingPath: copyPath(headingPath),
 				Ordinal:     *ordinal,
+				Line:        line,
 			},
 		})
 	}
@@ -711,6 +737,7 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 			continue
 		}
 		*ordinal++
+		line := startLine + strings.Count(raw[:loc[0]], "\n")
 		elements = append(elements, InlineElement{
 			Kind:        InlineCheck,
 			Raw:         raw[loc[0]:loc[1]],
@@ -720,6 +747,7 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 				File:        relativePath,
 				HeadingPath: copyPath(headingPath),
 				Ordinal:     *ordinal,
+				Line:        line,
 			},
 		})
 	}

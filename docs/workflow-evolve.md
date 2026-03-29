@@ -31,6 +31,42 @@ If a spec case becomes irrelevant, remove it. If a new edge case appears, add it
 
 Improve coverage without changing behavior.
 
+### Use doctest blocks for CLI output
+
+When a spec verifies CLI output, doctest style (`$ ` command lines with expected output) is often clearer than a plain `run:shell` with manual `test` commands:
+
+````markdown
+```run:shell
+$ my-cli whoami
+alice@example.com (admin)
+$ my-cli list
+workspace-1
+workspace-2
+```
+````
+
+Use `...` to skip lines that change between runs (timestamps, IDs):
+
+````markdown
+```run:shell
+$ my-cli status
+connected to ...
+uptime: ...
+```
+````
+
+See [Doctest Blocks](../specs/syntax.spec.md#doctest-blocks) for full syntax.
+
+### Use inline assertions in prose
+
+When a single value check belongs in the narrative rather than a separate block, use `` `expect:` ``:
+
+```markdown
+After provisioning, the workspace count is `expect: ${count} == 3`.
+```
+
+This renders as a green/red badge in the HTML report without interrupting the prose flow. See [Inline expect](../specs/syntax.spec.md#inline-expect).
+
 ### Add check tables for repeated patterns
 
 If you see three or more `run:shell` blocks testing variations of the same thing, refactor into a [check table](../specs/syntax.spec.md#check-tables):
@@ -58,6 +94,14 @@ After:
 
 This requires an [adapter check](../specs/adapter-protocol.spec.md), but the spec becomes pure data.
 
+For JSON data, the built-in `check:jq` works without an adapter:
+
+```markdown
+> check:jq
+| input           | expr   | expected |
+| {"a":1, "b":2}  | .a + .b | 3       |
+```
+
 ### Add Alloy models for structural properties
 
 When the state space is too large for examples, add an [Alloy model](../specs/alloy.spec.md) in the same section as the implementation checks. Use models for:
@@ -82,6 +126,19 @@ When `specdown run` fails:
    - **Spec is wrong** — the spec described the wrong behavior. Update the spec.
    - **Environment issue** — missing dependency, stale state, ordering problem. Fix setup/teardown or add [hooks](../specs/syntax.spec.md#setup-and-teardown-hooks).
 3. **Re-run** with `-filter` to iterate quickly: `specdown run -filter "Section Name"`.
+
+## Iterating quickly with filters
+
+Use `-filter` to run a subset of cases during development:
+
+```sh
+specdown run -filter "Login"              # heading substring
+specdown run -filter type:table           # only check tables
+specdown run -filter block:shell          # only shell blocks
+specdown run -filter check:jq             # only jq checks
+```
+
+Only one filter can be active at a time. See [Filter](../specs/cli.spec.md#filter).
 
 ## Refactoring specs
 

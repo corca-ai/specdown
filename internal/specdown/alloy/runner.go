@@ -111,9 +111,9 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
 
 func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
 	var result []core.CaseSpec
-	for _, c := range cases {
-		if c.Alloy != nil {
-			result = append(result, c)
+	for i := range cases {
+		if cases[i].Alloy != nil {
+			result = append(result, cases[i])
 		}
 	}
 	return result
@@ -121,8 +121,8 @@ func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
 
 func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath, jarPath string) (map[string]core.CaseResult, error) {
 	checksByModel := make(map[string][]core.CaseSpec)
-	for _, check := range alloyChecks {
-		checksByModel[check.Alloy.Model] = append(checksByModel[check.Alloy.Model], check)
+	for i := range alloyChecks {
+		checksByModel[alloyChecks[i].Alloy.Model] = append(checksByModel[alloyChecks[i].Alloy.Model], alloyChecks[i])
 	}
 
 	resultsByKey := make(map[string]core.CaseResult, len(alloyChecks))
@@ -150,10 +150,10 @@ func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec
 
 func collectOrderedResults(checks []core.CaseSpec, resultsByKey map[string]core.CaseResult) ([]core.CaseResult, error) {
 	results := make([]core.CaseResult, 0, len(checks))
-	for _, check := range checks {
-		result, ok := resultsByKey[check.ID.Key()]
+	for i := range checks {
+		result, ok := resultsByKey[checks[i].ID.Key()]
 		if !ok {
-			return nil, fmt.Errorf("missing alloy result for %s", check.ID.Key())
+			return nil, fmt.Errorf("missing alloy result for %s", checks[i].ID.Key())
 		}
 		results = append(results, result)
 	}
@@ -210,8 +210,8 @@ func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []
 	}
 
 	appendedHeader := false
-	for _, check := range checks {
-		command := checkCommandSource(check)
+	for i := range checks {
+		command := checkCommandSource(checks[i])
 		if _, ok := seenCheck[command]; ok {
 			continue
 		}
@@ -222,7 +222,7 @@ func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []
 				appendLine("-- specdown-generated-checks", "")
 				appendedHeader = true
 			}
-			appendLine(command, formatSourceRef(check.ID.File, check.ID.HeadingPath))
+			appendLine(command, formatSourceRef(checks[i].ID.File, checks[i].ID.HeadingPath))
 		}
 	}
 
@@ -260,8 +260,8 @@ func (r Runner) runModel(javaPath, jarPath string, bundle modelBundle, checks []
 	}
 
 	results := make([]core.CaseResult, 0, len(checks))
-	for _, check := range checks {
-		result, err := r.evaluateCheck(check, bundle, commandResults)
+	for i := range checks {
+		result, err := r.evaluateCheck(checks[i], bundle, commandResults)
 		if err != nil {
 			return nil, err
 		}
@@ -340,12 +340,12 @@ func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
 
 func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
 	results := make([]core.CaseResult, 0, len(checks))
-	for _, check := range checks {
-		a := check.Alloy
+	for i := range checks {
+		a := checks[i].Alloy
 		result := core.CaseResult{
-			ID:      check.ID,
+			ID:      checks[i].ID,
 			Kind:    core.CaseKindAlloy,
-			Label:   check.DefaultLabel(),
+			Label:   checks[i].DefaultLabel(),
 			Status:  core.StatusFailed,
 			Message: message,
 			Alloy: &core.AlloyResultDetail{
@@ -361,8 +361,8 @@ func failedChecksAll(checks []core.CaseSpec, message string) []core.CaseResult {
 
 func failedChecks(checks []core.CaseSpec, bundlePath, sourceMapPath, message string, location failureLocation, hasLocation bool) []core.CaseResult {
 	results := make([]core.CaseResult, 0, len(checks))
-	for _, check := range checks {
-		a := check.Alloy
+	for i := range checks {
+		a := checks[i].Alloy
 		detail := &core.AlloyResultDetail{
 			Model:         a.Model,
 			Assertion:     a.Assertion,
@@ -375,9 +375,9 @@ func failedChecks(checks []core.CaseSpec, bundlePath, sourceMapPath, message str
 			detail.SourceRef = location.SourceRef
 		}
 		result := core.CaseResult{
-			ID:      check.ID,
+			ID:      checks[i].ID,
 			Kind:    core.CaseKindAlloy,
-			Label:   check.DefaultLabel(),
+			Label:   checks[i].DefaultLabel(),
 			Status:  core.StatusFailed,
 			Message: message,
 			Alloy:   detail,

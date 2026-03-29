@@ -25,11 +25,22 @@ func Exec(id int, source string) ExecRawResponse {
 		if message == "" {
 			message = err.Error()
 		}
-		return ExecRawResponse{"id": id, "error": message}
+		resp := ExecRawResponse{"id": id, "error": message}
+		if cmd.ProcessState != nil {
+			resp["exitCode"] = cmd.ProcessState.ExitCode()
+		}
+		if stderrStr := strings.TrimSpace(stderr.String()); stderrStr != "" {
+			resp["stderr"] = stderrStr
+		}
+		return resp
 	}
 
 	output := strings.TrimRight(stdout.String(), "\n")
-	return ExecRawResponse{"id": id, "output": output}
+	resp := ExecRawResponse{"id": id, "output": output}
+	if stderrStr := strings.TrimSpace(stderr.String()); stderrStr != "" {
+		resp["stderr"] = stderrStr
+	}
+	return resp
 }
 
 // DoctestStep is an alias for core.DoctestCommand for backward compatibility.
@@ -70,7 +81,7 @@ func ExecForDoctest(command string) (stdout, errMsg string, ok bool) {
 		if message == "" {
 			message = err.Error()
 		}
-		return "", message, false
+		return strings.TrimRight(outBuf.String(), "\n"), message, false
 	}
 	return strings.TrimRight(outBuf.String(), "\n"), "", true
 }

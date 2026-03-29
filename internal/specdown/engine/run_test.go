@@ -1135,18 +1135,18 @@ type fakeAlloyRunner struct {
 
 func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
 	var alloyChecks []core.CaseSpec
-	for _, c := range plan.Cases {
-		if c.Kind == core.CaseKindAlloy {
-			alloyChecks = append(alloyChecks, c)
+	for i := range plan.Cases {
+		if plan.Cases[i].Kind == core.CaseKindAlloy {
+			alloyChecks = append(alloyChecks, plan.Cases[i])
 		}
 	}
 	results := make([]core.CaseResult, 0, len(alloyChecks))
-	for _, check := range alloyChecks {
-		result, ok := f.results[check.ID.Key()]
+	for i := range alloyChecks {
+		result, ok := f.results[alloyChecks[i].ID.Key()]
 		if !ok {
-			a := check.Alloy
+			a := alloyChecks[i].Alloy
 			result = core.CaseResult{
-				ID:     check.ID,
+				ID:     alloyChecks[i].ID,
 				Kind:   core.CaseKindAlloy,
 				Label:  "alloy:ref(" + a.Model + "#" + a.Assertion + ", scope=" + a.Scope + ")",
 				Status: core.StatusPassed,

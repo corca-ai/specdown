@@ -457,6 +457,7 @@ func processCheckDirective(current CheckDirectiveNode, doc Document, i int, maxO
 				File:        doc.RelativeTo,
 				HeadingPath: copyPath(current.HeadingPath),
 				Ordinal:     *maxOrd,
+				Line:        current.Line,
 			},
 			Kind: CaseKindTableRow,
 			TableRow: &TableRowCaseSpec{
@@ -498,6 +499,7 @@ func appendCheckTableCases(cases []CaseSpec, directive CheckDirectiveNode, table
 				File:        file,
 				HeadingPath: copyPath(directive.HeadingPath),
 				Ordinal:     *ordinal,
+				Line:        row.Line,
 			},
 			Kind: CaseKindTableRow,
 			TableRow: &TableRowCaseSpec{

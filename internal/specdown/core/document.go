@@ -17,6 +17,7 @@ type SpecID struct {
 	File        string      `json:"file"`
 	HeadingPath HeadingPath `json:"headingPath"`
 	Ordinal     int         `json:"ordinal"`
+	Line        int         `json:"line,omitempty"`
 }
 
 func (id SpecID) Key() string {
@@ -133,6 +134,7 @@ func (n AlloyRefNode) Markdown() string {
 type TableRowNode struct {
 	Cells []string `json:"cells"`
 	Raw   string   `json:"raw"`
+	Line  int      `json:"line,omitempty"` // 1-based source line number
 	ID    *SpecID  `json:"id,omitempty"`
 }
 
@@ -188,6 +190,7 @@ type CheckDirectiveNode struct {
 	Check       string            `json:"check"`
 	CheckParams map[string]string `json:"checkParams,omitempty"`
 	Raw         string            `json:"raw"`
+	Line        int               `json:"line,omitempty"`
 	HeadingPath HeadingPath       `json:"headingPath,omitempty"`
 }
 

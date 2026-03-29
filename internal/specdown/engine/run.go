@@ -276,9 +276,9 @@ func filterPlan(plan core.Plan, filter string) core.Plan {
 	var filtered []core.DocumentPlan
 	for i := range plan.Documents {
 		var cases []core.CaseSpec
-		for _, c := range plan.Documents[i].Cases {
-			if f.matches(c) {
-				cases = append(cases, c)
+		for j := range plan.Documents[i].Cases {
+			if f.matches(plan.Documents[i].Cases[j]) {
+				cases = append(cases, plan.Documents[i].Cases[j])
 			}
 		}
 		if len(cases) > 0 {
@@ -299,11 +299,12 @@ func dryRunReport(plan core.Plan) core.Report {
 	for i := range plan.Documents {
 		doc := &plan.Documents[i]
 		cases := make([]core.CaseResult, 0, len(doc.Cases))
-		for _, c := range doc.Cases {
+		for j := range doc.Cases {
+			c := &doc.Cases[j]
 			cr := core.CaseResult{
 				ID:    c.ID,
 				Kind:  c.Kind,
-				Label: dryRunLabel(c),
+				Label: dryRunLabel(*c),
 			}
 			switch c.Kind {
 			case core.CaseKindCode:
@@ -312,8 +313,8 @@ func dryRunReport(plan core.Plan) core.Report {
 				}
 			case core.CaseKindTableRow:
 				cr.Table = &core.TableResultDetail{
-					Check:   c.TableRow.Check,
-					Columns: append([]string(nil), c.TableRow.Columns...),
+					Check:     c.TableRow.Check,
+					Columns:   append([]string(nil), c.TableRow.Columns...),
 					RowNumber: c.TableRow.RowNumber,
 				}
 			case core.CaseKindAlloy:
@@ -500,9 +501,9 @@ func (ec *executionContext) runDocumentCases(plan core.DocumentPlan, sm *session
 		precomputed: precomputed,
 	}
 
-	for i, specCase := range plan.Cases {
+	for i := range plan.Cases {
 		nextPath := peekNextPath(plan.Cases, i)
-		if err := ctx.processCase(specCase, nextPath); err != nil {
+		if err := ctx.processCase(plan.Cases[i], nextPath); err != nil {
 			if errors.Is(err, errMaxFailures) {
 				return ctx.results, err
 			}
@@ -775,6 +776,11 @@ func runCodeCase(specCase, prepared core.CaseSpec, session *adapterhost.Session,
 		return result, err
 	}
 
+	result.Code.ExitCode = resp.ExitCode
+	if resp.Stderr != "" {
+		result.Code.Stderr = resp.Stderr
+	}
+
 	if resp.Error != "" {
 		result.Status = core.StatusFailed
 		result.Message = resp.Error
@@ -824,6 +830,10 @@ func runDoctestCase(_, prepared core.CaseSpec, session *adapterhost.Session, res
 
 		if stepStatus == core.StatusFailed {
 			result.Status = core.StatusFailed
+			result.Code.ExitCode = resp.ExitCode
+			if resp.Stderr != "" {
+				result.Code.Stderr = resp.Stderr
+			}
 		}
 	}
 

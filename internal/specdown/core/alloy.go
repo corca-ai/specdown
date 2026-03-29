@@ -138,12 +138,12 @@ func validateAlloyModelRefs(file string, models []AlloyModelSpec, checks []CaseS
 	for _, model := range models {
 		knownModels[model.Name] = struct{}{}
 	}
-	for _, check := range checks {
-		if check.Alloy == nil {
+	for i := range checks {
+		if checks[i].Alloy == nil {
 			continue
 		}
-		if _, ok := knownModels[check.Alloy.Model]; !ok {
-			return fmt.Errorf("%s: alloy reference %q targets unknown model %q", file, check.ID.Key(), check.Alloy.Model)
+		if _, ok := knownModels[checks[i].Alloy.Model]; !ok {
+			return fmt.Errorf("%s: alloy reference %q targets unknown model %q", file, checks[i].ID.Key(), checks[i].Alloy.Model)
 		}
 	}
 	return nil

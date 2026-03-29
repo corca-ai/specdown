@@ -58,6 +58,8 @@ type CodeResultDetail struct {
 	Template       string        `json:"template,omitempty"`
 	RenderedSource string        `json:"renderedSource,omitempty"`
 	Steps          []DoctestStep `json:"steps,omitempty"`
+	ExitCode       *int          `json:"exitCode,omitempty"`
+	Stderr         string        `json:"stderr,omitempty"`
 }
 
 type TableResultDetail struct {
