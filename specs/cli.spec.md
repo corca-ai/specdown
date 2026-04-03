@@ -158,9 +158,10 @@ specdown run -dry-run -filter "NoSuchHeading" 2>&1 | grep -q '0 case'
 
 ## Install Skills
 
-`specdown install skills` creates a `.claude/skills/specdown/` directory
+`specdown install skills` creates an `.agents/skills/specdown/` directory
 with a `SKILL.md` and all reference specs so that Claude Code can write,
-run, and fix specs without leaving the editor.
+run, and fix specs without leaving the editor. A `.claude/skills` symlink
+pointing to `.agents/skills` is created for Claude Code compatibility.
 
 ```run:shell
 # Install skills into a fresh directory and list created files
@@ -171,7 +172,7 @@ cd .tmp-test/skill-install && specdown install skills 2>/dev/null
 The installed files are the skill definition plus one reference per spec:
 
 ```run:shell
-$ ls .tmp-test/skill-install/.claude/skills/specdown/ | LC_ALL=C sort
+$ ls .tmp-test/skill-install/.agents/skills/specdown/ | LC_ALL=C sort
 SKILL.md
 adapter-protocol.md
 alloy.md
@@ -189,6 +190,13 @@ workflow-evolve.md
 workflow-new-project.md
 ```
 
+The `.claude/skills` path is a symlink to `.agents/skills`:
+
+```run:shell
+$ readlink .tmp-test/skill-install/.claude/skills
+.agents/skills
+```
+
 Running the command again without `--overwrite` is rejected:
 
 ```run:shell
@@ -201,6 +209,23 @@ With `--overwrite`, existing files are replaced:
 ```run:shell
 # Overwrite succeeds
 cd .tmp-test/skill-install && specdown install skills --overwrite 2>/dev/null
+```
+
+Existing `.claude/skills` directories are migrated automatically:
+
+```run:shell
+# Create a legacy .claude/skills directory
+rm -rf .tmp-test/skill-migrate && mkdir -p .tmp-test/skill-migrate/.claude/skills/specdown
+echo "old" > .tmp-test/skill-migrate/.claude/skills/specdown/SKILL.md
+cd .tmp-test/skill-migrate && specdown install skills --overwrite 2>/dev/null
+# Verify migration: .agents/skills exists and .claude/skills is a symlink
+test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
+```
+
+```run:shell
+$ cd .tmp-test/skill-migrate && test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
+.agents/skills
+migrated
 ```
 
 ## Error Messages

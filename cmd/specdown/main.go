@@ -444,12 +444,51 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Run 'specdown <command> --help' for details on a specific command.")
 }
 
+// migrateSkillsDir moves a legacy .claude/skills directory to .agents/skills.
+func migrateSkillsDir() error {
+	claudeSkills := filepath.Join(".claude", "skills")
+	agentsSkills := filepath.Join(".agents", "skills")
+	info, err := os.Lstat(claudeSkills)
+	if err != nil {
+		return nil //nolint:nilerr // Lstat error means path doesn't exist; nothing to migrate.
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil // not a real directory; nothing to migrate
+	}
+	if _, err := os.Stat(agentsSkills); !os.IsNotExist(err) {
+		// Both exist; remove the legacy directory since canonical takes precedence.
+		return os.RemoveAll(claudeSkills)
+	}
+	if err := os.MkdirAll(".agents", 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(claudeSkills, agentsSkills); err != nil {
+		return fmt.Errorf("migrate %s → %s: %w", claudeSkills, agentsSkills, err)
+	}
+	fmt.Printf("Migrated %s → %s\n", claudeSkills, agentsSkills)
+	return nil
+}
+
+// ensureSkillsSymlink creates .claude/skills → .agents/skills if needed.
+func ensureSkillsSymlink() error {
+	claudeSkills := filepath.Join(".claude", "skills")
+	agentsSkills := filepath.Join(".agents", "skills")
+	if target, err := os.Readlink(claudeSkills); err == nil && target == agentsSkills {
+		return nil
+	}
+	_ = os.Remove(claudeSkills) // remove stale entry if any
+	if err := os.MkdirAll(".claude", 0o755); err != nil {
+		return err
+	}
+	return os.Symlink(agentsSkills, claudeSkills)
+}
+
 func installSkillsCmd(args []string) error {
 	if len(args) == 0 || hasHelpFlag(args) {
 		fmt.Fprintln(os.Stderr, "Usage: specdown install skills [--overwrite]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Install Claude Code skills for this project.")
-		fmt.Fprintln(os.Stderr, "Creates .claude/skills/specdown/SKILL.md in the current directory.")
+		fmt.Fprintln(os.Stderr, "Creates .agents/skills/specdown/SKILL.md in the current directory.")
 		fmt.Fprintln(os.Stderr, "Use --overwrite to replace existing files.")
 		return nil
 	}
@@ -464,14 +503,22 @@ func installSkillsCmd(args []string) error {
 		}
 	}
 
-	dir := filepath.Join(".claude", "skills", "specdown")
+	dir := filepath.Join(".agents", "skills", "specdown")
 	dest := filepath.Join(dir, "SKILL.md")
+
+	if err := migrateSkillsDir(); err != nil {
+		return err
+	}
 
 	if _, err := os.Stat(dest); err == nil && !overwrite {
 		return fmt.Errorf("%s already exists\nhint: use --overwrite to replace existing files", dest)
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	if err := ensureSkillsSymlink(); err != nil {
 		return err
 	}
 	files := []struct{ name, content string }{
