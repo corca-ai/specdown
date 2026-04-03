@@ -473,14 +473,18 @@ func migrateSkillsDir() error {
 func ensureSkillsSymlink() error {
 	claudeSkills := filepath.Join(".claude", "skills")
 	agentsSkills := filepath.Join(".agents", "skills")
-	if target, err := os.Readlink(claudeSkills); err == nil && target == agentsSkills {
+	// The symlink lives inside .claude/, so the target must be relative to
+	// that directory: ../.agents/skills (not .agents/skills which would
+	// resolve to .claude/.agents/skills).
+	relTarget := filepath.Join("..", agentsSkills)
+	if target, err := os.Readlink(claudeSkills); err == nil && target == relTarget {
 		return nil
 	}
 	_ = os.Remove(claudeSkills) // remove stale entry if any
 	if err := os.MkdirAll(".claude", 0o755); err != nil {
 		return err
 	}
-	return os.Symlink(agentsSkills, claudeSkills)
+	return os.Symlink(relTarget, claudeSkills)
 }
 
 func installSkillsCmd(args []string) error {

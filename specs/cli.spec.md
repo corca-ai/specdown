@@ -194,7 +194,7 @@ The `.claude/skills` path is a symlink to `.agents/skills`:
 
 ```run:shell
 $ readlink .tmp-test/skill-install/.claude/skills
-.agents/skills
+../.agents/skills
 ```
 
 Running the command again without `--overwrite` is rejected:
@@ -224,7 +224,7 @@ test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
 
 ```run:shell
 $ cd .tmp-test/skill-migrate && test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
-.agents/skills
+../.agents/skills
 migrated
 ```
 
