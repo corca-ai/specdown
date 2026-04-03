@@ -1,6 +1,6 @@
 module github.com/corca-ai/specdown
 
-go 1.24.0
+go 1.24.4
 
 require (
 	github.com/itchyny/gojq v0.12.18
