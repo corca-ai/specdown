@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
 
@@ -15,7 +18,16 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - run: go generate ./cmd/specdown/...
+      - run: go mod verify
+      - run: go mod tidy && git diff --exit-code go.mod go.sum
       - run: go test -race ./...
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
 
       - uses: golangci/golangci-lint-action@v7
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4

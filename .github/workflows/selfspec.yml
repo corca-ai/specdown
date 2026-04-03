@@ -17,7 +17,9 @@ concurrency:
 jobs:
   selfspec:
     runs-on: ubuntu-latest
-
+    env:
+      CGO_ENABLED: "0"
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
 
