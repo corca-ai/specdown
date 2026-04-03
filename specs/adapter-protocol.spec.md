@@ -250,8 +250,8 @@ printf '{"entry":"index.spec.md","adapters":[{"name":"echo","command":["sh","./e
 ```
 
 ```run:shell
-$ specdown run -config e2e-cfg.json 2>&1 | head -1
-...
+$ specdown run -config e2e-cfg.json 2>&1 | grep 'spec(s)' | sed 's/ in [0-9]*ms//'
+PASS 2 spec(s), 1 case(s)
 ```
 
 ### Structured Failure Reporting

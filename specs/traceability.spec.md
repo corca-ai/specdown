@@ -120,6 +120,9 @@ assert crossTypeNoReverse {
 }
 
 check crossTypeNoReverse for 5
+
+pred sanityCheck {}
+run sanityCheck {} for 5
 ```
 
 ## Configuration

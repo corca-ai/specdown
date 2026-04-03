@@ -19,6 +19,7 @@ type AlloyModelSpec struct {
 
 var moduleDeclPattern = regexp.MustCompile(`(?m)^\s*module\b`)
 var alloyCheckPattern = regexp.MustCompile(`(?m)^\s*check\s+([A-Za-z_][A-Za-z0-9_]*)\s+for\s+(.+?)\s*$`)
+var alloyRunPattern = regexp.MustCompile(`(?m)^\s*run\s+([A-Za-z_][A-Za-z0-9_]*)\s+\{[^}]*\}\s+for\s+(.+?)\s*$`)
 var alloyScopePattern = regexp.MustCompile(`^(?:exactly\s+)?\d+(?:\s+but\s+\d+\s+[A-Za-z_]\w*(?:/[A-Za-z_]\w*)*(?:\s*,\s*\d+\s+[A-Za-z_]\w*(?:/[A-Za-z_]\w*)*)*)?$`)
 
 type parsedCheck struct {
@@ -43,6 +44,18 @@ func parseCheckStatements(source string) []parsedCheck {
 		})
 	}
 	return checks
+}
+
+func parseRunStatements(source string) []parsedCheck {
+	matches := alloyRunPattern.FindAllStringSubmatch(source, -1)
+	var runs []parsedCheck
+	for _, m := range matches {
+		runs = append(runs, parsedCheck{
+			assertion: m[1],
+			scope:     strings.TrimSpace(m[2]),
+		})
+	}
+	return runs
 }
 
 //nolint:gocognit // alloy compilation is inherently complex
@@ -107,30 +120,37 @@ func collectAlloyNodes(doc Document) ([]AlloyModelSpec, []CaseSpec, map[string]s
 func appendImplicitChecks(file string, models []AlloyModelSpec, checks []CaseSpec, seen map[string]struct{}, ordinal int) []CaseSpec {
 	for _, model := range models {
 		for _, fragment := range model.Fragments {
-			for _, pc := range parseCheckStatements(fragment.Source) {
-				key := model.Name + "#" + pc.assertion
-				if _, exists := seen[key]; exists {
-					continue
-				}
-				seen[key] = struct{}{}
-				ordinal++
-				checks = append(checks, CaseSpec{
-					ID: SpecID{
-						File:        file,
-						HeadingPath: copyPath(fragment.HeadingPath),
-						Ordinal:     ordinal,
-					},
-					Kind: CaseKindAlloy,
-					Alloy: &AlloyCaseSpec{
-						Model:     model.Name,
-						Assertion: pc.assertion,
-						Scope:     pc.scope,
-					},
-				})
-			}
+			checks, ordinal = appendParsedStatements(file, model.Name, fragment, parseCheckStatements(fragment.Source), false, checks, seen, ordinal)
+			checks, ordinal = appendParsedStatements(file, model.Name, fragment, parseRunStatements(fragment.Source), true, checks, seen, ordinal)
 		}
 	}
 	return checks
+}
+
+func appendParsedStatements(file, modelName string, fragment AlloyFragmentSpec, stmts []parsedCheck, isRun bool, checks []CaseSpec, seen map[string]struct{}, ordinal int) (updated []CaseSpec, next int) {
+	for _, s := range stmts {
+		key := modelName + "#" + s.assertion
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		ordinal++
+		checks = append(checks, CaseSpec{
+			ID: SpecID{
+				File:        file,
+				HeadingPath: copyPath(fragment.HeadingPath),
+				Ordinal:     ordinal,
+			},
+			Kind: CaseKindAlloy,
+			Alloy: &AlloyCaseSpec{
+				Model:     modelName,
+				Assertion: s.assertion,
+				Scope:     s.scope,
+				IsRun:     isRun,
+			},
+		})
+	}
+	return checks, ordinal
 }
 
 func validateAlloyModelRefs(file string, models []AlloyModelSpec, checks []CaseSpec) error {

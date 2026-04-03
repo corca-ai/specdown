@@ -252,6 +252,9 @@ assert noUpwardLeak {
 }
 
 check noUpwardLeak for 6
+
+pred sanityCheck {}
+run sanityCheck {} for 6
 ```
 
 Variables captured in a parent section are available in child sections.

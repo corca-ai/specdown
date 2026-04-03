@@ -352,6 +352,9 @@ assert noConflict {
 }
 
 check noConflict for 6
+
+pred sanityCheck {}
+run sanityCheck {} for 6
 ```
 
 Two adapters with the same name must be rejected.

@@ -51,6 +51,9 @@ sig Block {
 sig TableRow {
   scope: one Heading
 }
+
+pred sanityCheck {}
+run sanityCheck {} for 5
 ```
 
 The `one` multiplicity on `scope` already guarantees single ownership,
@@ -100,6 +103,9 @@ assert scoreBound {
 }
 
 check scoreBound for 3 but 6 Int
+
+pred sanityCheck {}
+run sanityCheck {} for 3 but 6 Int
 ```
 
 Without `but 6 Int`, Alloy's default 4-bit integers only cover -8 to 7,
@@ -155,6 +161,9 @@ assert noGreenToRed {
 }
 
 check noGreenToRed for 5
+
+pred sanityCheck {}
+run sanityCheck {} for 5
 ```
 
 ## Counterexample Artifacts

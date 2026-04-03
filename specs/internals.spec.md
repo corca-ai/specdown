@@ -13,7 +13,7 @@ You can verify the tool is available and see its version:
 
 ```run:shell
 $ specdown version
-...
+dev
 ```
 
 ## Design Pillars

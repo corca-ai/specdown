@@ -69,6 +69,7 @@ type AlloyCaseSpec struct {
 	Model     string
 	Assertion string
 	Scope     string
+	IsRun     bool // true for `run` statements (sanity checks), false for `check`
 }
 
 func (c *AlloyCaseSpec) DisplayKind() string {

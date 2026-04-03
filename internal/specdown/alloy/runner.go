@@ -301,6 +301,10 @@ func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandRe
 		return base, nil
 	}
 
+	if check.Alloy.IsRun {
+		return evaluateRun(base, check, command), nil
+	}
+
 	if len(command.Solution) == 0 {
 		base.Status = core.StatusPassed
 		return base, nil
@@ -319,6 +323,17 @@ func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandRe
 	base.Message = message
 	base.Alloy.CounterexamplePath = counterexamplePath
 	return base, nil
+}
+
+func evaluateRun(base core.CaseResult, check core.CaseSpec, command receiptCommand) core.CaseResult {
+	hasInstances := len(command.Solution) > 0 && len(command.Solution[0].Instances) > 0
+	if hasInstances {
+		base.Status = core.StatusPassed
+	} else {
+		base.Status = core.StatusFailed
+		base.Message = "no instances found for " + strconvQuote(check.Alloy.Assertion) + " — model may be unsatisfiable"
+	}
+	return base
 }
 
 func baseCheckResult(check core.CaseSpec, bundle modelBundle) core.CaseResult {
@@ -566,6 +581,9 @@ func bundleContainsCommand(lines []string, command string) bool {
 }
 
 func checkCommandSource(check core.CaseSpec) string {
+	if check.Alloy.IsRun {
+		return "run " + check.Alloy.Assertion + " for " + check.Alloy.Scope
+	}
 	return "check " + check.Alloy.Assertion + " for " + check.Alloy.Scope
 }
 

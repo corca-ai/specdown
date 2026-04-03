@@ -17,7 +17,7 @@ and the `specdown run` command.
 
 ```run:shell
 $ specdown version
-...
+dev
 ```
 
 Dry-run mode parses and validates spec files without executing adapters.
@@ -113,8 +113,16 @@ The `-filter` flag selects which cases to run. Without a prefix it
 matches heading paths by substring, preserving backward compatibility.
 
 ```run:shell
-$ specdown run -dry-run -filter "Filter" 2>&1 | head -1
-...
+# Create a minimal project to test filter
+BT=$(printf '\140\140\140')
+printf '%s\n' '# F' '' '## Filter Target' '' "\${BT}run:shell" 'true' "\${BT}" '' '## Other' '' "\${BT}run:shell" 'true' "\${BT}" > filter-demo.spec.md
+printf '# T\n\n- [F](filter-demo.spec.md)\n' > filter-demo-index.spec.md
+printf '{"entry":"filter-demo-index.spec.md","adapters":[]}\n' > filter-demo-cfg.json
+```
+
+```run:shell
+$ specdown run -config filter-demo-cfg.json -dry-run -filter "Filter Target" 2>&1 | grep 'case(s)'
+total: 1 spec(s), 1 case(s)
 ```
 
 ### Type Filter

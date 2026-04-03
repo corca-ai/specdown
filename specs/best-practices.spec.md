@@ -103,6 +103,9 @@ assert everyItemHasOwner {
 }
 
 check everyItemHasOwner for 5
+
+pred sanityCheck {}
+run sanityCheck {} for 5
 ```
 
 ### 2. Counterexample Harvesting
@@ -145,6 +148,9 @@ assert exclusive {
 
 check complete for 5
 check exclusive for 5
+
+pred sanityCheck {}
+run sanityCheck {} for 5
 ```
 
 With this proof, a check table needs only one representative per level
@@ -179,7 +185,8 @@ When refactoring, prove the old and new models are equivalent in Alloy. Then reu
 
 ### Vacuous satisfaction
 
-If the model's facts are contradictory, every assertion passes trivially. Always include `run sanityCheck {} for 5` to confirm the model has at least one instance. If it finds no instance, the model is inconsistent and all `check` results are meaningless.
+If the model's facts are contradictory, every assertion passes trivially. Always include `pred sanityCheck {}
+run sanityCheck {} for 5` to confirm the model has at least one instance. If it finds no instance, the model is inconsistent and all `check` results are meaningless.
 
 ### Missing `always` in temporal models
 
