@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -422,7 +423,15 @@ func (ec *executionContext) runDocument(plan core.DocumentPlan) (core.DocumentRe
 		}, nil
 	}
 
-	sm := newSessionManager(ec.host)
+	host := ec.host
+	if wd := plan.Document.Frontmatter.Workdir; wd != "" {
+		resolved := filepath.Join(ec.host.BaseDir, wd)
+		if err := os.MkdirAll(resolved, 0o755); err != nil {
+			return core.DocumentResult{}, fmt.Errorf("create workdir %q: %w", wd, err)
+		}
+		host = adapterhost.Host{BaseDir: resolved}
+	}
+	sm := newSessionManager(host)
 
 	// Pre-compute model verification results via ModelRunner before the case loop.
 	modelResults, modelErr := ec.alloyRunner.RunDocument(plan)

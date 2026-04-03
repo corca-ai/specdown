@@ -200,6 +200,7 @@ func (n CheckDirectiveNode) Markdown() string { return n.Raw }
 type Frontmatter struct {
 	Timeout int    `json:"timeout,omitempty"` // milliseconds, 0 = no limit
 	Type    string `json:"type,omitempty"`    // trace node type (e.g. "goal", "feature", "test")
+	Workdir string `json:"workdir,omitempty"` // working directory relative to spec file
 }
 
 type Document struct {

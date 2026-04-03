@@ -212,7 +212,7 @@ func TestHandleBuiltinMessageExec(t *testing.T) {
 	var results []json.RawMessage
 	encoder := json.NewEncoder(&capturingWriter{results: &results})
 
-	if err := handleBuiltinMessage(raw, encoder); err != nil {
+	if err := handleBuiltinMessage(raw, encoder, ""); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if len(results) != 1 {
@@ -236,7 +236,7 @@ func TestHandleBuiltinMessageUnknownType(t *testing.T) {
 	var results []json.RawMessage
 	encoder := json.NewEncoder(&capturingWriter{results: &results})
 
-	err := handleBuiltinMessage(raw, encoder)
+	err := handleBuiltinMessage(raw, encoder, "")
 	if err == nil {
 		t.Fatal("expected error for unknown type")
 	}
@@ -247,7 +247,7 @@ func TestHandleBuiltinMessageInvalidJSON(t *testing.T) {
 	var results []json.RawMessage
 	encoder := json.NewEncoder(&capturingWriter{results: &results})
 
-	err := handleBuiltinMessage(raw, encoder)
+	err := handleBuiltinMessage(raw, encoder, "")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -258,7 +258,7 @@ func TestHandleBuiltinMessageMissingType(t *testing.T) {
 	var results []json.RawMessage
 	encoder := json.NewEncoder(&capturingWriter{results: &results})
 
-	err := handleBuiltinMessage(raw, encoder)
+	err := handleBuiltinMessage(raw, encoder, "")
 	if err == nil {
 		t.Fatal("expected error for missing type")
 	}

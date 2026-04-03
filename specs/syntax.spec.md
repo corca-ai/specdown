@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # Spec Syntax
@@ -467,13 +468,12 @@ A setup or teardown directive followed by an executable code block must parse su
 
 ```run:shell
 # Verify spec with setup:each hook parses successfully
-mkdir -p .tmp-test
-printf '# Hook Test\n\n## Group\n\n> setup:each\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > .tmp-test/hook-good.spec.md
-printf '# T\n\n- [Hook](hook-good.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/hook-good-cfg.json
+printf '# Hook Test\n\n## Group\n\n> setup:each\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > hook-good.spec.md
+printf '# T\n\n- [Hook](hook-good.spec.md)\n' > index.spec.md
+cat <<'CFG' > hook-good-cfg.json
 {"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
 CFG
-specdown run -config .tmp-test/hook-good-cfg.json -dry-run 2>&1
+specdown run -config hook-good-cfg.json -dry-run 2>&1
 ```
 
 ## Frontmatter
@@ -484,6 +484,7 @@ An optional YAML frontmatter can be placed at the top of a spec file.
 |-----|-------------|
 | `timeout` | Per-case execution time limit in milliseconds. Overrides `defaultTimeoutMsec` from config. `0` disables the time limit |
 | `type` | Document type for [traceability](traceability.spec.md) (e.g. `spec`, `goal`, `feature`) |
+| `workdir` | Working directory for all shell blocks, relative to the spec file's location. Created automatically if it does not exist |
 
 If frontmatter is absent, the global `defaultTimeoutMsec` from `specdown.json` applies (default: 30 seconds).
 
@@ -491,8 +492,7 @@ A spec with a timeout must still pass when the adapter responds quickly.
 
 ```run:shell
 # Verify spec with YAML frontmatter timeout parses successfully
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/timeout.spec.md
+cat <<'SPEC' > timeout.spec.md
 ---
 timeout: 5000
 ---
@@ -503,9 +503,21 @@ timeout: 5000
 
 A simple command that completes well within the timeout.
 SPEC
-printf '# T\n\n- [Timeout](timeout.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/timeout-cfg.json
+printf '# T\n\n- [Timeout](timeout.spec.md)\n' > index.spec.md
+cat <<'CFG' > timeout-cfg.json
 {"entry":"index.spec.md","adapters":[]}
 CFG
-specdown run -config .tmp-test/timeout-cfg.json -dry-run 2>&1
+specdown run -config timeout-cfg.json -dry-run 2>&1
+```
+
+A spec with a `workdir` frontmatter runs all shell blocks inside that directory.
+
+```run:shell
+# Verify spec with workdir frontmatter executes in the correct directory
+bt=$(printf '\x60\x60\x60')
+pw=$(printf '\x24PWD')
+printf '%s\n' '---' 'workdir: mywork' '---' '' '# Workdir Test' '' '## Cwd' '' "$bt""run:shell" "basename \"$pw\"" "$bt" '' '> mywork' > workdir.spec.md
+printf '# W\n\n- [Workdir](workdir.spec.md)\n' > wd-index.spec.md
+printf '{"entry":"wd-index.spec.md","adapters":[]}\n' > workdir-cfg.json
+specdown run -config workdir-cfg.json 2>&1
 ```

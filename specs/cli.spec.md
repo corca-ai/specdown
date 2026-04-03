@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # CLI
@@ -34,11 +35,11 @@ The generated project is runnable immediately.
 
 ```run:shell
 # Scaffold a new project and verify it runs
-rm -rf .tmp-test/init-test && mkdir -p .tmp-test/init-test && cd .tmp-test/init-test && specdown init 2>&1
+rm -rf init-test && mkdir -p init-test && cd init-test && specdown init 2>&1
 ```
 
 ```run:shell
-$ cd .tmp-test/init-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
+$ cd init-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
 
@@ -103,7 +104,7 @@ The trace command requires a `trace` key in the config file.
 
 ```run:shell
 # Verify trace command rejects configs without trace key
-! specdown trace -config .tmp-test/builtin-shell-cfg.json 2>/dev/null
+! specdown trace -config builtin-shell-cfg.json 2>/dev/null
 ```
 
 ## Filter
@@ -129,14 +130,13 @@ A `type:` prefix selects cases by kind.
 
 ```run:shell
 # type:alloy keeps only alloy checks; block:shell keeps only code blocks
-mkdir -p .tmp-test
-printf '%s\n' '# Typed' '' '## Code' '' '```run:shell' 'echo hello' '```' '' '## Model' '' '```alloy:model(tf)' 'module tf' 'sig A {}' 'assert noEmpty { some A }' 'check noEmpty for 3' '```' > .tmp-test/typed-filter.spec.md
-printf '# T\n\n- [Typed](typed-filter.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > .tmp-test/typed-filter-cfg.json
-alloy_dry=$(specdown run -config .tmp-test/typed-filter-cfg.json -dry-run -filter "type:alloy" 2>&1)
+printf '%s\n' '# Typed' '' '## Code' '' '```run:shell' 'echo hello' '```' '' '## Model' '' '```alloy:model(tf)' 'module tf' 'sig A {}' 'assert noEmpty { some A }' 'check noEmpty for 3' '```' > typed-filter.spec.md
+printf '# T\n\n- [Typed](typed-filter.spec.md)\n' > index.spec.md
+printf '{"entry":"index.spec.md","adapters":[]}' > typed-filter-cfg.json
+alloy_dry=$(specdown run -config typed-filter-cfg.json -dry-run -filter "type:alloy" 2>&1)
 echo "$alloy_dry" | grep -q 'alloy:'
 ! echo "$alloy_dry" | grep -q '\[run:shell\]'
-block_dry=$(specdown run -config .tmp-test/typed-filter-cfg.json -dry-run -filter "block:shell" 2>&1)
+block_dry=$(specdown run -config typed-filter-cfg.json -dry-run -filter "block:shell" 2>&1)
 echo "$block_dry" | grep -q '\[run:shell\]'
 ! echo "$block_dry" | grep -q 'alloy:'
 ```
@@ -153,7 +153,7 @@ at a time — if `-filter` is passed multiple times, the last value wins.
 
 ```run:shell
 # A filter that matches nothing produces zero cases
-specdown run -dry-run -filter "NoSuchHeading" 2>&1 | grep -q '0 case'
+specdown run -config typed-filter-cfg.json -dry-run -filter "NoSuchHeading" 2>&1 | grep -q '0 case'
 ```
 
 ## Install Skills
@@ -165,14 +165,14 @@ pointing to `.agents/skills` is created for Claude Code compatibility.
 
 ```run:shell
 # Install skills into a fresh directory and list created files
-rm -rf .tmp-test/skill-install && mkdir -p .tmp-test/skill-install
-cd .tmp-test/skill-install && specdown install skills 2>/dev/null
+rm -rf skill-install && mkdir -p skill-install
+cd skill-install && specdown install skills 2>/dev/null
 ```
 
 The installed files are the skill definition plus one reference per spec:
 
 ```run:shell
-$ ls .tmp-test/skill-install/.agents/skills/specdown/ | LC_ALL=C sort
+$ ls skill-install/.agents/skills/specdown/ | LC_ALL=C sort
 SKILL.md
 adapter-protocol.md
 alloy.md
@@ -193,14 +193,14 @@ workflow-new-project.md
 The `.claude/skills` path is a symlink to `.agents/skills`:
 
 ```run:shell
-$ readlink .tmp-test/skill-install/.claude/skills
+$ readlink skill-install/.claude/skills
 ../.agents/skills
 ```
 
 Running the command again without `--overwrite` is rejected:
 
 ```run:shell
-$ cd .tmp-test/skill-install && specdown install skills 2>&1 | grep -q 'already exists' && echo "blocked"
+$ cd skill-install && specdown install skills 2>&1 | grep -q 'already exists' && echo "blocked"
 blocked
 ```
 
@@ -208,22 +208,22 @@ With `--overwrite`, existing files are replaced:
 
 ```run:shell
 # Overwrite succeeds
-cd .tmp-test/skill-install && specdown install skills --overwrite 2>/dev/null
+cd skill-install && specdown install skills --overwrite 2>/dev/null
 ```
 
 Existing `.claude/skills` directories are migrated automatically:
 
 ```run:shell
 # Create a legacy .claude/skills directory
-rm -rf .tmp-test/skill-migrate && mkdir -p .tmp-test/skill-migrate/.claude/skills/specdown
-echo "old" > .tmp-test/skill-migrate/.claude/skills/specdown/SKILL.md
-cd .tmp-test/skill-migrate && specdown install skills --overwrite 2>/dev/null
+rm -rf skill-migrate && mkdir -p skill-migrate/.claude/skills/specdown
+echo "old" > skill-migrate/.claude/skills/specdown/SKILL.md
+cd skill-migrate && specdown install skills --overwrite 2>/dev/null
 # Verify migration: .agents/skills exists and .claude/skills is a symlink
 test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
 ```
 
 ```run:shell
-$ cd .tmp-test/skill-migrate && test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
+$ cd skill-migrate && test -d .agents/skills/specdown && readlink .claude/skills && echo "migrated"
 ../.agents/skills
 migrated
 ```
@@ -246,6 +246,6 @@ Malformed JSON in the config file is reported as a parse error.
 
 ```run:shell
 # Reject syntactically invalid JSON
-printf 'NOT JSON' > .tmp-test/invalid.json
-! specdown run -config .tmp-test/invalid.json 2>/dev/null
+printf 'NOT JSON' > invalid.json
+! specdown run -config invalid.json 2>/dev/null
 ```

@@ -79,7 +79,7 @@ func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		builtinShellLoop(stdinReader, stdoutWriter)
+		builtinShellLoop(stdinReader, stdoutWriter, h.BaseDir)
 		_ = stdoutWriter.Close()
 	}()
 
@@ -138,19 +138,19 @@ func builtinJQLoop(reader io.Reader, writer io.Writer) {
 	}
 }
 
-func builtinShellLoop(reader io.Reader, writer io.Writer) {
+func builtinShellLoop(reader io.Reader, writer io.Writer, workdir string) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 	encoder := json.NewEncoder(writer)
 
 	for scanner.Scan() {
-		if err := handleBuiltinMessage(scanner.Bytes(), encoder); err != nil {
+		if err := handleBuiltinMessage(scanner.Bytes(), encoder, workdir); err != nil {
 			return
 		}
 	}
 }
 
-func handleBuiltinMessage(raw []byte, encoder *json.Encoder) error {
+func handleBuiltinMessage(raw []byte, encoder *json.Encoder, workdir string) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
@@ -171,7 +171,7 @@ func handleBuiltinMessage(raw []byte, encoder *json.Encoder) error {
 		if err := json.Unmarshal(raw, &req); err != nil {
 			return err
 		}
-		return encoder.Encode(shelladapter.Exec(req.ID, req.Source))
+		return encoder.Encode(shelladapter.Exec(req.ID, req.Source, workdir))
 	default:
 		return fmt.Errorf("unknown type %q", msgType)
 	}

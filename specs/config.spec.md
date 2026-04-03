@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # Configuration
@@ -43,23 +44,22 @@ Markdown links to `.md` and `.spec.md` files are followed recursively to discove
 
 ```run:shell
 # Generate report from entry file and verify title
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/entry-test.spec.md
+cat <<'SPEC' > entry-test.spec.md
 # My Feature
 
 Some prose.
 SPEC
-printf '# My Project Title\n\n- [Feature](entry-test.spec.md)\n' > .tmp-test/entry-index.spec.md
-cat <<'CFG' > .tmp-test/entry-test-cfg.json
+printf '# My Project Title\n\n- [Feature](entry-test.spec.md)\n' > entry-index.spec.md
+cat <<'CFG' > entry-test-cfg.json
 {"entry":"entry-index.spec.md","adapters":[],"reporters":[{"builtin":"html","outFile":"entry-report"}]}
 CFG
-specdown run -config .tmp-test/entry-test-cfg.json 2>&1 || true
+specdown run -config entry-test-cfg.json 2>&1 || true
 ```
 
 The H1 heading from the entry file appears as that page's title.
 
 ```run:shell
-$ grep -o '<title>[^<]*</title>' .tmp-test/entry-report/entry-index.html
+$ grep -o '<title>[^<]*</title>' entry-report/entry-index.html
 <title>My Project Title</title>
 ```
 
@@ -70,16 +70,15 @@ work without any adapter configuration.
 
 ```run:shell
 # Run a spec using the built-in shell adapter with no adapter config
-mkdir -p .tmp-test
-printf '# T\n\n- [S](builtin-shell-test.spec.md)\n' > .tmp-test/builtin-shell-index.spec.md
+printf '# T\n\n- [S](builtin-shell-test.spec.md)\n' > builtin-shell-index.spec.md
 BT=$(printf '\140\140\140')
-printf '%s\n' '# Builtin Shell' '' "$BT"'run:shell' '$ echo works' 'works' "$BT" > .tmp-test/builtin-shell-test.spec.md
-printf '{"entry":"builtin-shell-index.spec.md","adapters":[]}' > .tmp-test/builtin-shell-cfg.json
-specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 || true
+printf '%s\n' '# Builtin Shell' '' "$BT"'run:shell' '$ echo works' 'works' "$BT" > builtin-shell-test.spec.md
+printf '{"entry":"builtin-shell-index.spec.md","adapters":[]}' > builtin-shell-cfg.json
+specdown run -config builtin-shell-cfg.json 2>&1 || true
 ```
 
 ```run:shell
-$ specdown run -config .tmp-test/builtin-shell-cfg.json 2>&1 | grep '^PASS' | sed 's/ in [0-9]*ms//'
+$ specdown run -config builtin-shell-cfg.json 2>&1 | grep '^PASS' | sed 's/ in [0-9]*ms//'
 PASS 2 spec(s), 1 case(s)
 ```
 
@@ -175,17 +174,17 @@ specdown exits immediately without running specs.
 
 ```run:shell
 # Verify setup runs before specs
-mkdir -p .tmp-test/setup-test
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/setup-test/index.spec.md
-printf '# S\n\nProse.\n' > .tmp-test/setup-test/s.spec.md
-cat <<'CFG' > .tmp-test/setup-test/specdown.json
+mkdir -p setup-test
+printf '# T\n\n- [S](s.spec.md)\n' > setup-test/index.spec.md
+printf '# S\n\nProse.\n' > setup-test/s.spec.md
+cat <<'CFG' > setup-test/specdown.json
 {"entry": "index.spec.md", "setup": "echo SETUP-RAN > setup-marker.txt"}
 CFG
-specdown run -config .tmp-test/setup-test/specdown.json 2>&1 || true
+specdown run -config setup-test/specdown.json 2>&1 || true
 ```
 
 ```run:shell
-$ cat .tmp-test/setup-test/setup-marker.txt
+$ cat setup-test/setup-marker.txt
 SETUP-RAN
 ```
 
@@ -193,18 +192,18 @@ The teardown command runs after specs complete, even if specs fail.
 
 ```run:shell
 # Verify teardown runs after specs (even on failure)
-mkdir -p .tmp-test/teardown-test
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/teardown-test/index.spec.md
+mkdir -p teardown-test
+printf '# T\n\n- [S](s.spec.md)\n' > teardown-test/index.spec.md
 BT=$(printf '\140\140\140')
-printf '%s\n' '# S' '' "$BT"'run:shell' '$ echo hello' 'wrong-output' "$BT" > .tmp-test/teardown-test/s.spec.md
-cat <<'CFG' > .tmp-test/teardown-test/specdown.json
+printf '%s\n' '# S' '' "$BT"'run:shell' '$ echo hello' 'wrong-output' "$BT" > teardown-test/s.spec.md
+cat <<'CFG' > teardown-test/specdown.json
 {"entry": "index.spec.md", "setup": "echo SETUP-OK > marker.txt", "teardown": "echo TEARDOWN-RAN >> marker.txt"}
 CFG
-specdown run -config .tmp-test/teardown-test/specdown.json 2>&1 || true
+specdown run -config teardown-test/specdown.json 2>&1 || true
 ```
 
 ```run:shell
-$ cat .tmp-test/teardown-test/marker.txt
+$ cat teardown-test/marker.txt
 SETUP-OK
 TEARDOWN-RAN
 ```
@@ -213,13 +212,13 @@ A failing setup command prevents spec execution and exits with an error.
 
 ```run:shell
 # Verify failing setup aborts the run
-mkdir -p .tmp-test/setup-fail-test
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/setup-fail-test/index.spec.md
-printf '# S\n\nProse.\n' > .tmp-test/setup-fail-test/s.spec.md
-cat <<'CFG' > .tmp-test/setup-fail-test/specdown.json
+mkdir -p setup-fail-test
+printf '# T\n\n- [S](s.spec.md)\n' > setup-fail-test/index.spec.md
+printf '# S\n\nProse.\n' > setup-fail-test/s.spec.md
+cat <<'CFG' > setup-fail-test/specdown.json
 {"entry": "index.spec.md", "setup": "exit 1"}
 CFG
-! specdown run -config .tmp-test/setup-fail-test/specdown.json 2>/dev/null
+! specdown run -config setup-fail-test/specdown.json 2>/dev/null
 ```
 
 ### Adapter Fields
@@ -268,23 +267,23 @@ An empty config `{}` is valid — all fields are defaulted.
 
 ```run:shell
 # Verify empty config applies defaults
-mkdir -p .tmp-test/defaults-test
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/defaults-test/specs/index.spec.md
-mkdir -p .tmp-test/defaults-test/specs
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/defaults-test/specs/index.spec.md
-printf '# S\n\nProse.\n' > .tmp-test/defaults-test/specs/s.spec.md
-echo '{}' > .tmp-test/defaults-test/specdown.json
-cd .tmp-test/defaults-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
+mkdir -p defaults-test
+printf '# T\n\n- [S](s.spec.md)\n' > defaults-test/specs/index.spec.md
+mkdir -p defaults-test/specs
+printf '# T\n\n- [S](s.spec.md)\n' > defaults-test/specs/index.spec.md
+printf '# S\n\nProse.\n' > defaults-test/specs/s.spec.md
+echo '{}' > defaults-test/specdown.json
+cd defaults-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ```
 
 specdown runs without a config file when `specs/index.spec.md` exists.
 
 ```run:shell
 # Verify specdown works with no config file
-rm -rf .tmp-test/no-config-test && mkdir -p .tmp-test/no-config-test/specs
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/no-config-test/specs/index.spec.md
-printf '# S\n\nProse.\n' > .tmp-test/no-config-test/specs/s.spec.md
-cd .tmp-test/no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
+rm -rf no-config-test && mkdir -p no-config-test/specs
+printf '# T\n\n- [S](s.spec.md)\n' > no-config-test/specs/index.spec.md
+printf '# S\n\nProse.\n' > no-config-test/specs/s.spec.md
+cd no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ```
 
 ## TOC Grouping
@@ -359,8 +358,7 @@ Two adapters with the same name must be rejected.
 
 ```run:shell
 # Reject duplicate adapter names
-mkdir -p .tmp-test
-cat <<'CFG' > .tmp-test/dup-adapter.json
+cat <<'CFG' > dup-adapter.json
 {
   "entry": "index.spec.md",
   "adapters": [
@@ -369,40 +367,39 @@ cat <<'CFG' > .tmp-test/dup-adapter.json
   ]
 }
 CFG
-! specdown run -config .tmp-test/dup-adapter.json 2>/dev/null
+! specdown run -config dup-adapter.json 2>/dev/null
 ```
 
 An adapter with an empty name must be rejected.
 
 ```run:shell
 # Reject adapter with empty name
-mkdir -p .tmp-test
-printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":["run:x"]}]}' > .tmp-test/empty-name.json
-! specdown run -config .tmp-test/empty-name.json 2>/dev/null
+printf '{"entry":"i.spec.md","adapters":[{"name":"","command":["true"],"blocks":["run:x"]}]}' > empty-name.json
+! specdown run -config empty-name.json 2>/dev/null
 ```
 
 An adapter without a command must be rejected.
 
 ```run:shell
 # Reject adapter with empty command
-printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run:x"]}]}' > .tmp-test/no-cmd.json
-! specdown run -config .tmp-test/no-cmd.json 2>/dev/null
+printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":[],"blocks":["run:x"]}]}' > no-cmd.json
+! specdown run -config no-cmd.json 2>/dev/null
 ```
 
 An adapter must declare at least one block or check.
 
 ```run:shell
 # Reject adapter with no blocks and no checks
-printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > .tmp-test/no-blocks.json
-! specdown run -config .tmp-test/no-blocks.json 2>/dev/null
+printf '{"entry":"i.spec.md","adapters":[{"name":"a","command":["true"]}]}' > no-blocks.json
+! specdown run -config no-blocks.json 2>/dev/null
 ```
 
 Only `"alloy"` is supported as a models builtin. Unknown values are rejected.
 
 ```run:shell
 # Reject unknown models builtin
-printf '{"entry":"i.spec.md","adapters":[],"models":{"builtin":"unknown"}}' > .tmp-test/bad-model.json
-! specdown run -config .tmp-test/bad-model.json 2>/dev/null
+printf '{"entry":"i.spec.md","adapters":[],"models":{"builtin":"unknown"}}' > bad-model.json
+! specdown run -config bad-model.json 2>/dev/null
 ```
 
 ### Relative Paths
@@ -412,9 +409,9 @@ This ensures the project works from any checkout location.
 
 ```run:shell
 # Verify relative entry path resolves from config directory
-mkdir -p .tmp-test/relpath/specs
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/relpath/specs/index.spec.md
-printf '# S\n\nProse.\n' > .tmp-test/relpath/specs/s.spec.md
-printf '{"entry":"specs/index.spec.md","adapters":[]}' > .tmp-test/relpath/specdown.json
-specdown run -config .tmp-test/relpath/specdown.json -dry-run 2>&1 | grep 'spec(s)'
+mkdir -p relpath/specs
+printf '# T\n\n- [S](s.spec.md)\n' > relpath/specs/index.spec.md
+printf '# S\n\nProse.\n' > relpath/specs/s.spec.md
+printf '{"entry":"specs/index.spec.md","adapters":[]}' > relpath/specdown.json
+specdown run -config relpath/specdown.json -dry-run 2>&1 | grep 'spec(s)'
 ```

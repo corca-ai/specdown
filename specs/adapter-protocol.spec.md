@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # Adapter Protocol
@@ -224,8 +225,7 @@ for `exec` requests and passes all `assert` requests.
 
 ```run:shell
 # Create a minimal echo adapter
-mkdir -p .tmp-test
-cat <<'ADAPTER' > .tmp-test/echo-adapter.sh
+cat <<'ADAPTER' > echo-adapter.sh
 #!/bin/sh
 while IFS= read -r line; do
   type=$(printf '%s' "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -236,7 +236,7 @@ while IFS= read -r line; do
   esac
 done
 ADAPTER
-chmod +x .tmp-test/echo-adapter.sh
+chmod +x echo-adapter.sh
 ```
 
 Wire the adapter to a spec and run it:
@@ -244,13 +244,13 @@ Wire the adapter to a spec and run it:
 ```run:shell
 # Run a spec through the echo adapter
 BT=$(printf '\140\140\140')
-printf '%s\n' '# E2E' '' "\${BT}run:echo" 'some source' "\${BT}" > .tmp-test/e2e.spec.md
-printf '# T\n\n- [E2E](e2e.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"echo","command":["sh","./echo-adapter.sh"],"blocks":["run:echo"]}]}' > .tmp-test/e2e-cfg.json
+printf '%s\n' '# E2E' '' "\${BT}run:echo" 'some source' "\${BT}" > e2e.spec.md
+printf '# T\n\n- [E2E](e2e.spec.md)\n' > index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"echo","command":["sh","./echo-adapter.sh"],"blocks":["run:echo"]}]}' > e2e-cfg.json
 ```
 
 ```run:shell
-$ specdown run -config .tmp-test/e2e-cfg.json 2>&1 | head -1
+$ specdown run -config e2e-cfg.json 2>&1 | head -1
 ...
 ```
 
@@ -305,24 +305,23 @@ from a test failure.
 
 ```run:shell
 # Create an adapter that crashes mid-session
-mkdir -p .tmp-test
-cat <<'ADAPTER' > .tmp-test/crash-adapter.sh
+cat <<'ADAPTER' > crash-adapter.sh
 #!/bin/sh
 read -r line
 id=$(printf '%s' "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 printf '{"id":%s,"output":"ok"}\n' "$id"
 exit 1
 ADAPTER
-chmod +x .tmp-test/crash-adapter.sh
+chmod +x crash-adapter.sh
 ```
 
 ```run:shell
 # Wire the crashing adapter to a two-case spec
 BT=$(printf '\140\140\140')
-printf '%s\n' '# Crash' '' "\${BT}run:boom" 'step1' "\${BT}" '' "\${BT}run:boom" 'step2' "\${BT}" > .tmp-test/crash.spec.md
-printf '# T\n\n- [Crash](crash.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"boom","command":["sh","./crash-adapter.sh"],"blocks":["run:boom"]}]}' > .tmp-test/crash-cfg.json
-! specdown run -config .tmp-test/crash-cfg.json 2>/dev/null
+printf '%s\n' '# Crash' '' "\${BT}run:boom" 'step1' "\${BT}" '' "\${BT}run:boom" 'step2' "\${BT}" > crash.spec.md
+printf '# T\n\n- [Crash](crash.spec.md)\n' > index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"boom","command":["sh","./crash-adapter.sh"],"blocks":["run:boom"]}]}' > crash-cfg.json
+! specdown run -config crash-cfg.json 2>/dev/null
 ```
 
 ### Malformed Adapter Response
@@ -331,16 +330,15 @@ If the adapter writes invalid JSON, specdown treats it as an error.
 
 ```run:shell
 # Create an adapter that writes garbage
-mkdir -p .tmp-test
-printf '#!/bin/sh\necho "NOT JSON"\n' > .tmp-test/bad-adapter.sh
-chmod +x .tmp-test/bad-adapter.sh
+printf '#!/bin/sh\necho "NOT JSON"\n' > bad-adapter.sh
+chmod +x bad-adapter.sh
 ```
 
 ```run:shell
 # Run a spec against the malformed adapter
 BT=$(printf '\140\140\140')
-printf '%s\n' '# Bad' '' "\${BT}run:bad" 'hello' "\${BT}" > .tmp-test/bad.spec.md
-printf '# T\n\n- [Bad](bad.spec.md)\n' > .tmp-test/index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"bad","command":["sh","./bad-adapter.sh"],"blocks":["run:bad"]}]}' > .tmp-test/bad-cfg.json
-! specdown run -config .tmp-test/bad-cfg.json 2>/dev/null
+printf '%s\n' '# Bad' '' "\${BT}run:bad" 'hello' "\${BT}" > bad.spec.md
+printf '# T\n\n- [Bad](bad.spec.md)\n' > index.spec.md
+printf '{"entry":"index.spec.md","adapters":[{"name":"bad","command":["sh","./bad-adapter.sh"],"blocks":["run:bad"]}]}' > bad-cfg.json
+! specdown run -config bad-cfg.json 2>/dev/null
 ```

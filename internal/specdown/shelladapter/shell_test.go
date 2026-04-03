@@ -88,26 +88,26 @@ func TestStepStatus(t *testing.T) {
 
 func TestExec(t *testing.T) {
 	t.Run("echo hello", func(t *testing.T) {
-		resp := Exec(1, "echo hello")
+		resp := Exec(1, "echo hello", "")
 		output, ok := resp["output"]
 		testutil.True(t, ok)
 		testutil.Equal(t, output, "hello")
 	})
 	t.Run("false command", func(t *testing.T) {
-		resp := Exec(1, "false")
+		resp := Exec(1, "false", "")
 		_, ok := resp["error"]
 		testutil.True(t, ok)
 	})
 	t.Run("preserves id", func(t *testing.T) {
-		resp := Exec(42, "echo ok")
+		resp := Exec(42, "echo ok", "")
 		testutil.Equal(t, resp["id"], 42)
 	})
 	t.Run("stderr on failure", func(t *testing.T) {
-		resp := Exec(1, "echo badness >&2; false")
+		resp := Exec(1, "echo badness >&2; false", "")
 		testutil.Equal(t, resp["error"], "badness")
 	})
 	t.Run("trailing newlines stripped", func(t *testing.T) {
-		resp := Exec(1, "printf 'hi\n\n'")
+		resp := Exec(1, "printf 'hi\n\n'", "")
 		testutil.Equal(t, resp["output"], "hi")
 	})
 }

@@ -13,8 +13,11 @@ import (
 type ExecRawResponse map[string]interface{}
 
 // Exec runs source via sh -c and returns a raw JSON response with "output" or "error" key.
-func Exec(id int, source string) ExecRawResponse {
+func Exec(id int, source, workdir string) ExecRawResponse {
 	cmd := exec.Command("sh", "-c", source)
+	if workdir != "" {
+		cmd.Dir = workdir
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # HTML Report
@@ -31,23 +32,22 @@ are written to the output root directory.
 
 ```run:shell
 # Generate a minimal report for structure verification
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/report-test.spec.md
+cat <<'SPEC' > report-test.spec.md
 # Report Test
 
 A minimal spec for testing report generation.
 SPEC
-printf '# Report Test\n\n- [Report](report-test.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/report-test.json
+printf '# Report Test\n\n- [Report](report-test.spec.md)\n' > index.spec.md
+cat <<'CFG' > report-test.json
 {"entry":"index.spec.md","adapters":[]}
 CFG
-specdown run -config .tmp-test/report-test.json -out report-out 2>&1 || true
+specdown run -config report-test.json -out report-out 2>&1 || true
 ```
 
 ```run:shell
-$ test -f .tmp-test/report-out/style.css && echo yes
+$ test -f report-out/style.css && echo yes
 yes
-$ test -f .tmp-test/report-out/report-test.html && echo yes
+$ test -f report-out/report-test.html && echo yes
 yes
 ```
 

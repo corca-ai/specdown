@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # Validation Rules
@@ -35,21 +36,19 @@ table is rejected at parse time:
 
 ```run:shell
 # Reject bare check directive with no table
-mkdir -p .tmp-test
-printf '# Bad\n\n> check:x\n\nJust prose.\n' > .tmp-test/fnt.spec.md
-printf '# T\n\n- [Fnt](fnt.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/fnt-cfg.json
+printf '# Bad\n\n> check:x\n\nJust prose.\n' > fnt.spec.md
+printf '# T\n\n- [Fnt](fnt.spec.md)\n' > index.spec.md
+cat <<'CFG' > fnt-cfg.json
 {"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"checks":["x"]}]}
 CFG
-! specdown run -config .tmp-test/fnt-cfg.json 2>/dev/null
+! specdown run -config fnt-cfg.json 2>/dev/null
 ```
 
 Adding parameters makes the directive valid as a parameterized check call:
 
 ```run:shell
 # Accept parameterized check call without table
-mkdir -p .tmp-test
-cat <<'SPEC' > .tmp-test/check-call.spec.md
+cat <<'SPEC' > check-call.spec.md
 # Check Call
 
 Some prose.
@@ -57,11 +56,11 @@ Some prose.
 
 More prose.
 SPEC
-printf '# T\n\n- [FC](check-call.spec.md)\n' > .tmp-test/index.spec.md
-cat <<'CFG' > .tmp-test/check-call-cfg.json
+printf '# T\n\n- [FC](check-call.spec.md)\n' > index.spec.md
+cat <<'CFG' > check-call-cfg.json
 {"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"checks":["verify"]}]}
 CFG
-specdown run -config .tmp-test/check-call-cfg.json -dry-run 2>&1
+specdown run -config check-call-cfg.json -dry-run 2>&1
 ```
 
 All other validation rules are verified by unit tests.

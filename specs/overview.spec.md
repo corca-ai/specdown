@@ -1,5 +1,6 @@
 ---
 type: guide
+workdir: .tmp-test
 ---
 
 # Overview
@@ -41,15 +42,15 @@ in the current directory. Run this from the project root so that
 
 ```run:shell
 # Scaffold a fresh project and verify files exist
-rm -rf .tmp-test/init-overview && mkdir -p .tmp-test/init-overview && cd .tmp-test/init-overview && specdown init >/dev/null 2>&1
+rm -rf init-overview && mkdir -p init-overview && cd init-overview && specdown init >/dev/null 2>&1
 ```
 
 ```run:shell
-$ test -f .tmp-test/init-overview/specdown.json && echo yes
+$ test -f init-overview/specdown.json && echo yes
 yes
-$ test -f .tmp-test/init-overview/specs/index.spec.md && echo yes
+$ test -f init-overview/specs/index.spec.md && echo yes
 yes
-$ test -f .tmp-test/init-overview/specs/example.spec.md && echo yes
+$ test -f init-overview/specs/example.spec.md && echo yes
 yes
 ```
 
@@ -63,7 +64,7 @@ Specs are parsed, executed via [explains::adapters](adapter-protocol.spec.md), a
 See the [explains::CLI reference](cli.spec.md) for all flags. Use `-dry-run` to validate syntax without executing.
 
 ```run:shell
-$ cd .tmp-test/init-overview && specdown run -dry-run 2>&1 | grep 'spec(s)'
+$ cd init-overview && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
 

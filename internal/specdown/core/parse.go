@@ -46,6 +46,8 @@ func parseFrontmatter(markdown string) (fm Frontmatter, rest string) {
 			}
 		case "type":
 			fm.Type = value
+		case "workdir":
+			fm.Workdir = value
 		}
 	}
 	return fm, rest

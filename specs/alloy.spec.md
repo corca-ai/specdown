@@ -4,8 +4,14 @@ type: spec
 
 # Alloy Models
 
+[Alloy](https://alloytools.org/) is a lightweight formal modeling language.
+Its solver exhaustively explores every combination of objects within a
+bounded scope, finding counterexamples that example-based testing misses.
+
+Specdown embeds Alloy models directly in spec files so that prose,
+implementation checks, and formal proofs live side by side.
 Executable blocks test selected examples; Alloy proves properties
-for all cases within scope. Both live in the same document.
+for all cases within scope.
 
 Alloy fragments are embedded using `alloy:model(name)`
 [depends::code blocks](syntax.spec.md) and verified through the

@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # Traceability
@@ -13,7 +14,12 @@ traces back to a theme? That no test is orphaned?
 Traceability answers these questions. Documents are nodes; named,
 typed links between them are edges. Configure edge types and
 cardinality constraints in [depends::specdown.json](config.spec.md),
-and specdown checks them automatically:
+and specdown checks them automatically.
+
+Edges follow UML dependency direction: `from` is the dependent,
+`to` is the dependency. The `from` document contains the trace link.
+In the example below, a theme depends on its epics, an epic depends
+on its stories, and a story depends on its acceptance tests:
 
 ```json
 {
@@ -27,11 +33,6 @@ and specdown checks them automatically:
   }
 }
 ```
-
-Edges follow UML dependency direction: `from` is the dependent, `to` is
-the dependency. A theme depends on its epics, an epic depends on its
-stories, a story depends on its acceptance tests. The `from` document
-contains the trace link.
 
 With this configuration, `specdown trace --strict` fails if any theme
 lacks epic links, any story lacks acceptance test links, or any document
@@ -167,19 +168,19 @@ the config file location. All `.md` files are included unless they match an
 
 ```run:shell
 # Discovery finds all .md files with types
-mkdir -p .tmp-test/trace/disc
-cat <<'CFG' > .tmp-test/trace/disc/specdown.json
+mkdir -p trace/disc
+cat <<'CFG' > trace/disc/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["goal","feature"],"edges":{"covers":{"from":"goal","to":"feature"}}}}
 CFG
-mkdir -p .tmp-test/trace/disc/specs .tmp-test/trace/disc/goals .tmp-test/trace/disc/features
-printf '# Index\n' > .tmp-test/trace/disc/specs/index.spec.md
-printf -- '---\ntype: goal\n---\n# G1\n\n[covers::F1](../features/f1.md)\n' > .tmp-test/trace/disc/goals/g1.md
-printf -- '---\ntype: feature\n---\n# F1\n' > .tmp-test/trace/disc/features/f1.md
-specdown trace -config .tmp-test/trace/disc/specdown.json 2>&1 | grep -c '"type"'
+mkdir -p trace/disc/specs trace/disc/goals trace/disc/features
+printf '# Index\n' > trace/disc/specs/index.spec.md
+printf -- '---\ntype: goal\n---\n# G1\n\n[covers::F1](../features/f1.md)\n' > trace/disc/goals/g1.md
+printf -- '---\ntype: feature\n---\n# F1\n' > trace/disc/features/f1.md
+specdown trace -config trace/disc/specdown.json 2>&1 | grep -c '"type"'
 ```
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/disc/specdown.json 2>&1 | grep -c '"type"'
+$ specdown trace -config trace/disc/specdown.json 2>&1 | grep -c '"type"'
 2
 ```
 
@@ -204,18 +205,18 @@ Here is an example — a feature document using an undeclared edge name:
 
 ```run:shell
 # Unknown edge name is reported
-mkdir -p .tmp-test/trace/unknown-edge
-cat <<'CFG' > .tmp-test/trace/unknown-edge/specdown.json
+mkdir -p trace/unknown-edge
+cat <<'CFG' > trace/unknown-edge/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"covers":{"from":"feature","to":"feature"}}}}
 CFG
-mkdir -p .tmp-test/trace/unknown-edge/specs
-printf '# Index\n' > .tmp-test/trace/unknown-edge/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# F1\n\n[bogus::something](f2.md)\n' > .tmp-test/trace/unknown-edge/f1.md
-printf -- '---\ntype: feature\n---\n# F2\n' > .tmp-test/trace/unknown-edge/f2.md
+mkdir -p trace/unknown-edge/specs
+printf '# Index\n' > trace/unknown-edge/specs/index.spec.md
+printf -- '---\ntype: feature\n---\n# F1\n\n[bogus::something](f2.md)\n' > trace/unknown-edge/f1.md
+printf -- '---\ntype: feature\n---\n# F2\n' > trace/unknown-edge/f2.md
 ```
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/unknown-edge/specdown.json 2>&1 | grep -c 'unknown edge'
+$ specdown trace -config trace/unknown-edge/specdown.json 2>&1 | grep -c 'unknown edge'
 1
 ```
 
@@ -228,17 +229,17 @@ must satisfy both source-side and target-side multiplicity.
 
 ```run:shell
 # Cardinality violation: feature with no outgoing test links
-mkdir -p .tmp-test/trace/card
-cat <<'CFG' > .tmp-test/trace/card/specdown.json
+mkdir -p trace/card
+cat <<'CFG' > trace/card/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
 CFG
-mkdir -p .tmp-test/trace/card/specs
-printf '# Index\n' > .tmp-test/trace/card/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# F\n' > .tmp-test/trace/card/f.md
+mkdir -p trace/card/specs
+printf '# Index\n' > trace/card/specs/index.spec.md
+printf -- '---\ntype: feature\n---\n# F\n' > trace/card/f.md
 ```
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/card/specdown.json 2>&1 | grep -c 'cardinality'
+$ specdown trace -config trace/card/specdown.json 2>&1 | grep -c 'cardinality'
 1
 ```
 
@@ -253,18 +254,18 @@ Edges with `acyclic: true` reject cycles.
 
 ```run:shell
 # Cycle detection with acyclic edge
-mkdir -p .tmp-test/trace/cycle
-cat <<'CFG' > .tmp-test/trace/cycle/specdown.json
+mkdir -p trace/cycle
+cat <<'CFG' > trace/cycle/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature","acyclic":true}}}}
 CFG
-mkdir -p .tmp-test/trace/cycle/specs
-printf '# Index\n' > .tmp-test/trace/cycle/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# A\n\n[requires::B](b.md)\n' > .tmp-test/trace/cycle/a.md
-printf -- '---\ntype: feature\n---\n# B\n\n[requires::A](a.md)\n' > .tmp-test/trace/cycle/b.md
+mkdir -p trace/cycle/specs
+printf '# Index\n' > trace/cycle/specs/index.spec.md
+printf -- '---\ntype: feature\n---\n# A\n\n[requires::B](b.md)\n' > trace/cycle/a.md
+printf -- '---\ntype: feature\n---\n# B\n\n[requires::A](a.md)\n' > trace/cycle/b.md
 ```
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/cycle/specdown.json 2>&1 | grep -c 'cycle detected'
+$ specdown trace -config trace/cycle/specdown.json 2>&1 | grep -c 'cycle detected'
 1
 ```
 
@@ -277,19 +278,19 @@ checks — only direct edges satisfy `count` constraints.
 
 ```run:shell
 # Transitive closure adds indirect edges
-mkdir -p .tmp-test/trace/trans
-cat <<'CFG' > .tmp-test/trace/trans/specdown.json
+mkdir -p trace/trans
+cat <<'CFG' > trace/trans/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature","transitive":true}}}}
 CFG
-mkdir -p .tmp-test/trace/trans/specs
-printf '# Index\n' > .tmp-test/trace/trans/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# A\n\n[requires::B](b.md)\n' > .tmp-test/trace/trans/a.md
-printf -- '---\ntype: feature\n---\n# B\n\n[requires::C](c.md)\n' > .tmp-test/trace/trans/b.md
-printf -- '---\ntype: feature\n---\n# C\n' > .tmp-test/trace/trans/c.md
+mkdir -p trace/trans/specs
+printf '# Index\n' > trace/trans/specs/index.spec.md
+printf -- '---\ntype: feature\n---\n# A\n\n[requires::B](b.md)\n' > trace/trans/a.md
+printf -- '---\ntype: feature\n---\n# B\n\n[requires::C](c.md)\n' > trace/trans/b.md
+printf -- '---\ntype: feature\n---\n# C\n' > trace/trans/c.md
 ```
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/trans/specdown.json 2>&1 | grep -c 'transitiveEdges'
+$ specdown trace -config trace/trans/specdown.json 2>&1 | grep -c 'transitiveEdges'
 1
 ```
 
@@ -302,12 +303,12 @@ $ specdown trace -config .tmp-test/trace/trans/specdown.json 2>&1 | grep -c 'tra
 | `-format=matrix` | Traceability matrix | Tabular summary of coverage |
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/disc/specdown.json -format=json 2>&1 | head -1
+$ specdown trace -config trace/disc/specdown.json -format=json 2>&1 | head -1
 {
 ```
 
 ```run:shell
-$ specdown trace -config .tmp-test/trace/disc/specdown.json -format=dot 2>&1 | head -1
+$ specdown trace -config trace/disc/specdown.json -format=dot 2>&1 | head -1
 digraph trace {
 ```
 
@@ -317,7 +318,7 @@ With `--strict`, validation errors cause a non-zero exit code.
 
 ```run:shell
 # Strict mode exits non-zero on errors
-! specdown trace -config .tmp-test/trace/card/specdown.json -strict 2>/dev/null
+! specdown trace -config trace/card/specdown.json -strict 2>/dev/null
 ```
 
 ## Opt-in
@@ -333,16 +334,16 @@ A trace error does not prevent spec execution.
 
 ```run:shell
 # specdown run reports trace errors
-mkdir -p .tmp-test/trace/run-int
-cat <<'CFG' > .tmp-test/trace/run-int/specdown.json
+mkdir -p trace/run-int
+cat <<'CFG' > trace/run-int/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
 CFG
-mkdir -p .tmp-test/trace/run-int/specs
-printf '# Index\n\n- [F](../f.md)\n' > .tmp-test/trace/run-int/specs/index.spec.md
-printf -- '---\ntype: feature\n---\n# F\n' > .tmp-test/trace/run-int/f.md
+mkdir -p trace/run-int/specs
+printf '# Index\n\n- [F](../f.md)\n' > trace/run-int/specs/index.spec.md
+printf -- '---\ntype: feature\n---\n# F\n' > trace/run-int/f.md
 ```
 
 ```run:shell
-$ specdown run -config .tmp-test/trace/run-int/specdown.json 2>&1 | grep -c 'trace:'
+$ specdown run -config trace/run-int/specdown.json 2>&1 | grep -c 'trace:'
 1
 ```

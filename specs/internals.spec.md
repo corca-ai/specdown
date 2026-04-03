@@ -1,5 +1,6 @@
 ---
 type: spec
+workdir: .tmp-test
 ---
 
 # Internals
@@ -111,17 +112,17 @@ The JSON report is machine-readable and can be verified:
 
 ```run:shell
 # Create a minimal project and run it with a JSON reporter
-mkdir -p .tmp-test/reporter-json/specs
-printf '# T\n\n- [S](s.spec.md)\n' > .tmp-test/reporter-json/specs/index.spec.md
-printf '# S\n\nProse.\n' > .tmp-test/reporter-json/specs/s.spec.md
-cat <<'CFG' > .tmp-test/reporter-json/specdown.json
+mkdir -p reporter-json/specs
+printf '# T\n\n- [S](s.spec.md)\n' > reporter-json/specs/index.spec.md
+printf '# S\n\nProse.\n' > reporter-json/specs/s.spec.md
+cat <<'CFG' > reporter-json/specdown.json
 {"entry":"specs/index.spec.md","adapters":[],"reporters":[{"builtin":"json","outFile":"out.json"}]}
 CFG
-specdown run -config .tmp-test/reporter-json/specdown.json -quiet 2>&1 | tail -1
+specdown run -config reporter-json/specdown.json -quiet 2>&1 | tail -1
 ```
 
 ```run:shell
-$ cat .tmp-test/reporter-json/out.json | head -1
+$ cat reporter-json/out.json | head -1
 {
 ```
 

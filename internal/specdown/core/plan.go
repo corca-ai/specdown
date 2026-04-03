@@ -248,8 +248,8 @@ func parseMarkdownLinks(markdown string) []string {
 
 func CompileDocuments(docs []Document) (Plan, error) {
 	plans := make([]DocumentPlan, 0, len(docs))
-	for _, doc := range docs {
-		plan, err := CompileDocument(doc)
+	for i := range docs {
+		plan, err := CompileDocument(docs[i])
 		if err != nil {
 			return Plan{}, err
 		}
