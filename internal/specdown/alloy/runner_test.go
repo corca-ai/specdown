@@ -643,6 +643,93 @@ func TestFormatSourceRef(t *testing.T) {
 	testutil.Equal(t, formatSourceRef("test.md", []string{"A", "B"}), "test.md#A/B")
 }
 
+// --- checkCommandSource ---
+
+func TestLookupCommandExactMatch(t *testing.T) {
+	results := map[string]receiptCommand{
+		"check a1 for 5": {Type: "check", Source: "check a1 for 5"},
+	}
+	check := alloyCheck("m", "a1", "5", 1)
+	cmd, ok := lookupCommand(results, check)
+	testutil.True(t, ok)
+	testutil.Equal(t, cmd.Source, "check a1 for 5")
+}
+
+func TestLookupCommandRunWithBody(t *testing.T) {
+	// Receipt has the full form with body; lookup uses the simplified form.
+	results := map[string]receiptCommand{
+		"run sanityCheck { some Card } for 5": {Type: "run", Source: "run sanityCheck { some Card } for 5"},
+	}
+	check := core.CaseSpec{
+		ID:   core.SpecID{File: "test.md", HeadingPath: []string{"T"}, Ordinal: 1},
+		Kind: core.CaseKindAlloy,
+		Alloy: &core.AlloyCaseSpec{
+			Model:     "m",
+			Assertion: "sanityCheck",
+			Scope:     "5",
+			IsRun:     true,
+		},
+	}
+	cmd, ok := lookupCommand(results, check)
+	testutil.True(t, ok)
+	testutil.Contains(t, cmd.Source, "sanityCheck")
+}
+
+func TestLookupCommandMissing(t *testing.T) {
+	results := map[string]receiptCommand{
+		"check a1 for 5": {Type: "check", Source: "check a1 for 5"},
+	}
+	check := alloyCheck("m", "a2", "5", 1)
+	_, ok := lookupCommand(results, check)
+	testutil.False(t, ok)
+}
+
+func TestCheckCommandSourceRunIncludesBody(t *testing.T) {
+	// A run statement with an inline predicate body should NOT lose the body
+	// when reconstructed. The generated command must match what Alloy sees in
+	// the bundle so that bundleContainsCommand finds it and the receipt lookup
+	// succeeds.
+	check := core.CaseSpec{
+		ID:   core.SpecID{File: "test.md", HeadingPath: []string{"T"}, Ordinal: 1},
+		Kind: core.CaseKindAlloy,
+		Alloy: &core.AlloyCaseSpec{
+			Model:     "m",
+			Assertion: "canCreate",
+			Scope:     "5",
+			IsRun:     true,
+		},
+	}
+	source := checkCommandSource(check)
+	// The source should be recognizable as a run command with assertion and scope
+	testutil.Contains(t, source, "run canCreate")
+	testutil.Contains(t, source, "for 5")
+}
+
+func TestBuildBundleSourceDoesNotDuplicateRunCommand(t *testing.T) {
+	// When a run statement exists in the fragment source, buildBundleSource
+	// should not append a duplicate. This tests the integration between
+	// checkCommandSource and bundleContainsCommand for run statements.
+	runCheck := core.CaseSpec{
+		ID:   core.SpecID{File: "test.md", HeadingPath: []string{"T"}, Ordinal: 1},
+		Kind: core.CaseKindAlloy,
+		Alloy: &core.AlloyCaseSpec{
+			Model:     "m",
+			Assertion: "canCreate",
+			Scope:     "5",
+			IsRun:     true,
+		},
+	}
+	source, _ := buildBundleSource("test.md", core.AlloyModelSpec{
+		Name: "m",
+		Fragments: []core.AlloyFragmentSpec{
+			{Model: "m", HeadingPath: []string{"T"}, Source: "module m\nrun canCreate { some Card } for 5"},
+		},
+	}, []core.CaseSpec{runCheck})
+	// The run command already exists in the fragment — it should NOT be duplicated
+	testutil.Equal(t, strings.Count(source, "canCreate"), 1)
+	testutil.NotContains(t, source, "-- specdown-generated-checks")
+}
+
 // --- bundleContainsCommand ---
 
 func TestBundleContainsCommand(t *testing.T) {

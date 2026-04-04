@@ -292,6 +292,7 @@ func filterPlan(plan core.Plan, filter string) core.Plan {
 			filtered = append(filtered, core.DocumentPlan{
 				Document:    plan.Documents[i].Document,
 				Cases:       cases,
+				Hooks:       plan.Documents[i].Hooks,
 				AlloyModels: plan.Documents[i].AlloyModels,
 			})
 		}

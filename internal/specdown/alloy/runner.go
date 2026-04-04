@@ -293,11 +293,10 @@ func parseReceipt(receiptPath string) (map[string]receiptCommand, error) {
 func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandResults map[string]receiptCommand) (core.CaseResult, error) {
 	base := baseCheckResult(check, bundle)
 
-	commandSource := checkCommandSource(check)
-	command, ok := commandResults[commandSource]
+	command, ok := lookupCommand(commandResults, check)
 	if !ok {
 		base.Status = core.StatusFailed
-		base.Message = "missing Alloy result for " + strconvQuote(commandSource)
+		base.Message = "missing Alloy result for " + strconvQuote(checkCommandSource(check))
 		return base, nil
 	}
 
@@ -571,13 +570,53 @@ func formatSourceRef(documentPath string, headingPath []string) string {
 	return documentPath + "#" + strings.Join(headingPath, "/")
 }
 
+// bundleCommandPattern matches "check Name for ..." or "run Name { ... } for ..."
+// and captures the keyword ("check"/"run") and assertion name.
+var bundleCommandPattern = regexp.MustCompile(`^\s*(check|run)\s+([A-Za-z_][A-Za-z0-9_]*)`)
+
 func bundleContainsCommand(lines []string, command string) bool {
+	// Extract keyword and assertion name from the target command.
+	m := bundleCommandPattern.FindStringSubmatch(command)
+	if m == nil {
+		return false
+	}
+	keyword, name := m[1], m[2]
+
 	for _, line := range lines {
-		if strings.TrimSpace(line) == command {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == command {
+			return true
+		}
+		// For run commands with inline bodies: "run Name { ... } for scope"
+		// matches the simplified "run Name for scope".
+		lm := bundleCommandPattern.FindStringSubmatch(trimmed)
+		if len(lm) == 3 && lm[1] == keyword && lm[2] == name {
 			return true
 		}
 	}
 	return false
+}
+
+// lookupCommand finds the receipt entry for a check. It first tries an exact
+// match on the simplified command source. If that fails (e.g. for run commands
+// with inline predicate bodies), it falls back to matching by keyword+name.
+func lookupCommand(results map[string]receiptCommand, check core.CaseSpec) (receiptCommand, bool) {
+	exact := checkCommandSource(check)
+	if cmd, ok := results[exact]; ok {
+		return cmd, true
+	}
+	m := bundleCommandPattern.FindStringSubmatch(exact)
+	if m == nil {
+		return receiptCommand{}, false
+	}
+	keyword, name := m[1], m[2]
+	for source, cmd := range results {
+		lm := bundleCommandPattern.FindStringSubmatch(source)
+		if len(lm) == 3 && lm[1] == keyword && lm[2] == name {
+			return cmd, true
+		}
+	}
+	return receiptCommand{}, false
 }
 
 func checkCommandSource(check core.CaseSpec) string {

@@ -285,6 +285,38 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	}
 }
 
+func TestFilterPlanPreservesHooks(t *testing.T) {
+	hooks := []core.HookSpec{
+		{Kind: core.HookSetup, HeadingPath: core.HeadingPath{"Board"}},
+		{Kind: core.HookTeardown, Each: true, HeadingPath: core.HeadingPath{"Board"}},
+	}
+	plan := core.Plan{
+		Documents: []core.DocumentPlan{
+			{
+				Document: core.Document{RelativeTo: "a.spec.md"},
+				Cases: []core.CaseSpec{
+					{ID: core.SpecID{HeadingPath: []string{"Board", "Create"}}},
+					{ID: core.SpecID{HeadingPath: []string{"Board", "Delete"}}},
+				},
+				Hooks: hooks,
+			},
+		},
+	}
+	filtered := filterPlan(plan, "Create")
+	if len(filtered.Documents) != 1 {
+		t.Fatalf("expected 1 document, got %d", len(filtered.Documents))
+	}
+	if len(filtered.Documents[0].Hooks) != 2 {
+		t.Fatalf("expected 2 hooks preserved, got %d", len(filtered.Documents[0].Hooks))
+	}
+	if filtered.Documents[0].Hooks[0].Kind != core.HookSetup {
+		t.Fatalf("expected setup hook, got %v", filtered.Documents[0].Hooks[0].Kind)
+	}
+	if filtered.Documents[0].Hooks[1].Kind != core.HookTeardown {
+		t.Fatalf("expected teardown hook, got %v", filtered.Documents[0].Hooks[1].Kind)
+	}
+}
+
 func TestFilterPlanKeepsMatchingCases(t *testing.T) {
 	plan := core.Plan{
 		Documents: []core.DocumentPlan{
