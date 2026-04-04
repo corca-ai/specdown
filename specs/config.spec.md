@@ -357,6 +357,22 @@ pred sanityCheck {}
 run sanityCheck {} for 6
 ```
 
+Two adapters claiming the same block prefix must be rejected.
+
+```run:shell
+# Reject two adapters handling the same block prefix
+cat <<'CFG' > dup-prefix.json
+{
+  "entry": "index.spec.md",
+  "adapters": [
+    {"name": "a", "command": ["true"], "blocks": ["run:x"]},
+    {"name": "b", "command": ["true"], "blocks": ["run:x"]}
+  ]
+}
+CFG
+! specdown run -config dup-prefix.json 2>/dev/null
+```
+
 Two adapters with the same name must be rejected.
 
 ```run:shell

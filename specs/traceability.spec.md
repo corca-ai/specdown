@@ -182,6 +182,9 @@ printf -- '---\ntype: feature\n---\n# F1\n' > trace/disc/features/f1.md
 specdown trace -config trace/disc/specdown.json 2>&1 | grep -c '"type"'
 ```
 
+The fixture contains two typed documents (g1.md as `goal`, f1.md as `feature`),
+so the JSON output should contain exactly two `"type"` entries.
+
 ```run:shell
 $ specdown trace -config trace/disc/specdown.json 2>&1 | grep -c '"type"'
 2
@@ -313,6 +316,11 @@ $ specdown trace -config trace/disc/specdown.json -format=json 2>&1 | head -1
 ```run:shell
 $ specdown trace -config trace/disc/specdown.json -format=dot 2>&1 | head -1
 digraph trace {
+```
+
+```run:shell
+# Matrix format outputs a tabular header row with document paths
+specdown trace -config trace/disc/specdown.json -format=matrix 2>&1 | head -1 | grep -q '\.md'
 ```
 
 ### Strict Mode

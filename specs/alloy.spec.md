@@ -25,9 +25,13 @@ in the repository root.
 
 `alloy:model(name)` is a fragment belonging to the logical model `name`.
 Fragments with the same model name are combined in document order
-into a single logical model.
+into a single logical model. This lets a model grow incrementally
+alongside the prose that motivates each piece, rather than appearing
+as one monolithic block detached from context.
 
-Only the first fragment may contain a `module` declaration.
+Only the first fragment may contain a `module` declaration — Alloy
+requires exactly one `module` per compilation unit, and the first
+fragment anchors it.
 
 When a model block contains a `check` statement for an assertion, the
 reference is implicit — no separate directive is needed. The check result

@@ -137,9 +137,9 @@ $ seq 3 | tr '\n' '+' | sed 's/+$//'
 Commands that produce no output show only the prompt line.
 
 ```run:shell
-$ mkdir -p /tmp/specdown-test
-$ touch /tmp/specdown-test/file.txt
-$ test -f /tmp/specdown-test/file.txt
+$ mkdir -p doctest-nooutput
+$ touch doctest-nooutput/file.txt
+$ test -f doctest-nooutput/file.txt
 ```
 
 ### Wildcard Matching
