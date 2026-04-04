@@ -47,6 +47,63 @@ This works the same way regardless of starting point:
 - **Existing specdown specs**: add Alloy models to existing specs.
   Explore to find assumptions that existing tests missed.
 
+## Agent behavior
+
+**This section is critical.** When assisting a user with this process,
+the agent must follow these rules:
+
+### Show, don't decide
+
+The purpose of `explore` is to let the **user** see what the model
+says and make judgment calls. The agent must not silently interpret
+explore results and act on them.
+
+After running `specdown alloy explore`:
+
+1. **Show the full output** to the user.
+2. **Ask** what is surprising or unintended. Do not assume.
+3. **Wait** for the user to decide what to change before editing
+   the model.
+
+Wrong:
+
+> I ran explore and found that the model allows X. I've added a
+> constraint to prevent it and also fixed Y.
+
+Right:
+
+> Here are the instances explore found:
+> ```
+> (explore output)
+> ```
+> Instance 2 shows that a cancelled subscription can still have an
+> active coupon. Is this intended, or should we add a constraint?
+
+### Every model change must produce an implementation test
+
+Do not change the model without also writing a corresponding check
+table row or executable block. If the model gains a new fact, there
+should be a new test verifying the real system enforces the same rule.
+If a counterexample is found, there should be a test confirming the
+implementation prevents it.
+
+Wrong: making three model changes in a row, then moving on.
+
+Right: one model change, one implementation test, then the next
+model change.
+
+If no adapter or check table exists yet for the relevant behavior,
+say so and ask the user how to test it — do not skip the test.
+
+### Keep the loop small
+
+Each iteration should touch one thing:
+
+- Add one sig/field/fact → explore → one test
+- Add one assertion → explore → one test
+
+Do not batch multiple model changes before exploring.
+
 ## Reading explore output
 
 ```
