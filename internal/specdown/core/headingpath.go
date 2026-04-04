@@ -27,9 +27,19 @@ func (hp HeadingPath) IsSiblingOf(other HeadingPath) bool {
 }
 
 // Reachable returns true if hp is reachable from other.
-// A path is reachable if it is an ancestor (prefix) or a sibling.
+// A path is reachable if it is an ancestor (prefix), a sibling at the
+// same depth, or a sibling of an ancestor of 'from' (i.e. the binding's
+// parent path is a prefix of the consumer's path at the same depth).
 func (hp HeadingPath) Reachable(from HeadingPath) bool {
-	return hp.IsPrefix(from) || hp.IsSiblingOf(from)
+	if hp.IsPrefix(from) {
+		return true
+	}
+	if len(hp) == 0 || len(hp) > len(from) {
+		return false
+	}
+	// hp's parent is a prefix of from truncated to hp's parent depth:
+	// this covers same-depth siblings AND descendants of those siblings.
+	return hp[:len(hp)-1].IsPrefix(from[:len(hp)-1])
 }
 
 // Key returns a null-byte-joined string suitable as a map key.

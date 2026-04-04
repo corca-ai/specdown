@@ -37,6 +37,10 @@ func TestHeadingPathReachable(t *testing.T) {
 		{"nested sibling", HeadingPath{"A", "B"}, HeadingPath{"A", "C"}, true},
 		{"child not reachable from parent", HeadingPath{"A", "B"}, HeadingPath{"A"}, false},
 		{"unrelated deep path", HeadingPath{"A", "B"}, HeadingPath{"C", "D"}, false},
+		{"sibling child", HeadingPath{"A", "B"}, HeadingPath{"A", "C", "D"}, true},
+		{"top-level sibling child", HeadingPath{"A"}, HeadingPath{"B", "C"}, true},
+		{"deep sibling child", HeadingPath{"R", "A", "B"}, HeadingPath{"R", "A", "C", "D"}, true},
+		{"deeper child not reachable from shallower sibling", HeadingPath{"A", "B", "C"}, HeadingPath{"A", "D"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

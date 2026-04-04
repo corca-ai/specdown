@@ -758,7 +758,7 @@ func bindingValueToString(v any) string {
 func replaceVarRefs(text string, bindings map[string]string) string {
 	return proseVarPattern.ReplaceAllStringFunc(text, func(match string) string {
 		name := proseVarPattern.FindStringSubmatch(match)[1]
-		value, ok := bindings[name]
+		value, ok := resolveProseVar(name, bindings)
 		if !ok {
 			return match
 		}
@@ -766,6 +766,48 @@ func replaceVarRefs(text string, bindings map[string]string) string {
 			template.HTMLEscapeString(name) + `">` +
 			template.HTMLEscapeString(value) + `</span>`
 	})
+}
+
+// resolveProseVar looks up a variable name (possibly dotted like "foo.bar")
+// in the binding map. For dot-path access, the root name is looked up and
+// the value is parsed as JSON to traverse the path.
+func resolveProseVar(name string, bindings map[string]string) (string, bool) {
+	if value, ok := bindings[name]; ok {
+		return value, true
+	}
+	parts := strings.SplitN(name, ".", 2)
+	if len(parts) != 2 {
+		return "", false
+	}
+	rootValue, ok := bindings[parts[0]]
+	if !ok {
+		return "", false
+	}
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(rootValue), &parsed); err != nil {
+		return "", false
+	}
+	resolved, err := resolveDotPath(parsed, strings.Split(parts[1], "."))
+	if err != nil {
+		return "", false
+	}
+	return bindingValueToString(resolved), true
+}
+
+func resolveDotPath(value interface{}, path []string) (interface{}, error) {
+	current := value
+	for _, key := range path {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("cannot access %q on non-object", key)
+		}
+		next, exists := m[key]
+		if !exists {
+			return nil, fmt.Errorf("key %q not found", key)
+		}
+		current = next
+	}
+	return current, nil
 }
 
 func renderDoctestSteps(out *htmlBuilder, steps []core.DoctestStep) {
@@ -911,7 +953,11 @@ func doMatch(actual, expected []string, ai, ei int, mapping []bool) bool {
 		if expected[ei] == "..." {
 			return doMatchWildcard(actual, expected, ai, ei, mapping)
 		}
-		if ai >= len(actual) || actual[ai] != expected[ei] {
+		exp := expected[ei]
+		if exp == `\...` {
+			exp = "..."
+		}
+		if ai >= len(actual) || actual[ai] != exp {
 			return false
 		}
 		ai++

@@ -1020,6 +1020,33 @@ func TestWriteDocTypeBadgeInTOC(t *testing.T) {
 	assertContains(t, html, `>spec</span>`, "type value in badge")
 }
 
+func TestReplaceProseVariablesDotPath(t *testing.T) {
+	// A structured binding like {"name": "alice"} stored under root "user"
+	// should allow ${user.name} in prose to resolve to "alice".
+	bindings := map[string]string{
+		"user": `{"name":"alice"}`,
+	}
+	input := `<p>Hello ${user.name}, welcome.</p>`
+	result := replaceProseVariables(input, bindings)
+	if strings.Contains(result, "${user.name}") {
+		t.Fatalf("dot-path variable was not resolved: %s", result)
+	}
+	if !strings.Contains(result, "alice") {
+		t.Fatalf("expected resolved value 'alice', got: %s", result)
+	}
+}
+
+func TestAnnotateWildcardWithEscapedDots(t *testing.T) {
+	// When expected contains both "..." (wildcard) and "\..." (literal),
+	// annotateWildcard should still produce segments.
+	expected := "header\n...\n\\...\nfooter"
+	actual := "header\nline1\nline2\n...\nfooter"
+	segments := annotateWildcard(expected, actual)
+	if segments == nil {
+		t.Fatal("annotateWildcard returned nil; expected non-nil segments for mixed wildcard + escaped wildcard")
+	}
+}
+
 func TestWriteRendersMermaidBlock(t *testing.T) {
 	mermaidSource := "graph LR\n    A[Core] --> B[Adapter]"
 	report := core.Report{
