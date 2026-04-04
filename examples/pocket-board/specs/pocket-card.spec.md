@@ -1,6 +1,9 @@
 # Pocket Card
 
 A card is the unit for tracking work within a board.
+Each card has an identifier, a title, and a current column.
+A card always belongs to exactly one board — it cannot exist
+without a board and cannot be shared between boards.
 
 First, create a board.
 
@@ -135,7 +138,9 @@ Attempting to delete a card that was never created must return an error.
 
 ## Formal Rules
 
-The state model of `Pocket Board` assumes that a card always belongs to exactly one column.
+The state model uses two simple constraints — every card appears on
+some board, and no card appears on more than one board. Together they
+guarantee single ownership: every card belongs to exactly one board.
 
 ```alloy:model(board)
 module board
@@ -143,32 +148,40 @@ module board
 abstract sig Column {}
 one sig Todo, Doing, Done extends Column {}
 
-sig Board {}
+sig Board {
+  cards: set Card
+}
 
 sig Card {
-  board: one Board,
   column: one Column
 }
-```
 
-In this model, each card must have exactly one column.
+-- every card appears on some board
+fact noOrphans { Card in Board.cards }
 
-```alloy:model(board)
-assert cardHasExactlyOneColumn {
-  all c: Card | one c.column
+-- a board's cards are exclusively its own
+fact exclusive { all c: Card | lone cards.c }
+
+-- combined: every card belongs to exactly one board
+assert singleOwnership {
+  all c: Card | one cards.c
 }
 
-check cardHasExactlyOneColumn for 5
+check singleOwnership for 5
+
+pred sanityCheck {}
+run sanityCheck {} for 5
 ```
 
-### A card must belong to exactly one board
+### Single ownership in practice
 
-It must be impossible for a card to belong to multiple boards simultaneously.
+A card created on one board must not be visible on another board.
 
-```alloy:model(board)
-assert cardBelongsToOneBoard {
-  all c: Card | one c.board
-}
+```run:shell -> $otherBoard
+python3 tools/board.py create-board
+```
 
-check cardBelongsToOneBoard for 5
+```run:shell
+$ python3 tools/board.py card-exists "${otherBoard}" "${cardId}"
+no
 ```
