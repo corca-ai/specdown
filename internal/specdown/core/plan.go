@@ -259,6 +259,7 @@ func CompileDocuments(docs []Document) (Plan, error) {
 	return Plan{Documents: plans}, nil
 }
 
+//nolint:gocognit // compilation has inherently branching validation logic
 func CompileDocument(doc Document) (DocumentPlan, error) {
 	cases, err := executableCases(doc)
 	if err != nil {
@@ -272,6 +273,17 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 	bindings := make([]bindingDefinition, 0)
 
 	for i := range cases {
+		// !raw blocks opt out of variable interpolation entirely.
+		if cases[i].Code != nil && cases[i].Code.Block.Literal {
+			for _, captureName := range cases[i].Code.Block.CaptureNames {
+				bindings = append(bindings, bindingDefinition{
+					Name:        captureName,
+					HeadingPath: copyPath(cases[i].ID.HeadingPath),
+				})
+			}
+			continue
+		}
+
 		references := caseReferences(cases[i])
 		cases[i].References = references
 

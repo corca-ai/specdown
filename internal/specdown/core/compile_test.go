@@ -253,6 +253,26 @@ func TestCompileDocumentParsesAlloyRunWithNestedBraces(t *testing.T) {
 	}
 }
 
+func TestCompileDocumentAllowsUnresolvedVariablesInRawBlock(t *testing.T) {
+	// !raw blocks skip interpolation, so ${shell_var} should not cause
+	// an "unresolved variable" compile error.
+	doc, err := ParseDocument("raw.spec.md", strings.Join([]string{
+		"# Raw",
+		"",
+		"```run:shell !raw",
+		`for f in *.md; do echo "${f}"; done`,
+		"```",
+		"",
+	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, err = CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile should succeed for !raw block with shell variables, got: %v", err)
+	}
+}
+
 func TestCompileDocumentRejectsUnresolvedVariableInBlock(t *testing.T) {
 	doc, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",

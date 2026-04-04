@@ -82,6 +82,45 @@ func TestParseBlockSpecSupportsExpectFail(t *testing.T) {
 	}
 }
 
+func TestParseBlockSpecSupportsRawModifier(t *testing.T) {
+	block, err := parseBlockSpec("run:shell !raw")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !block.Literal {
+		t.Fatal("expected Literal=true for !raw block")
+	}
+	if block.Kind != BlockKindRun || block.Target != "shell" {
+		t.Fatalf("unexpected kind=%q target=%q", block.Kind, block.Target)
+	}
+	if block.Descriptor() != "run:shell" {
+		t.Fatalf("descriptor should not include !raw, got %q", block.Descriptor())
+	}
+}
+
+func TestParseBlockSpecSupportsRawWithCaptures(t *testing.T) {
+	block, err := parseBlockSpec("run:shell !raw -> $out")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !block.Literal {
+		t.Fatal("expected Literal=true")
+	}
+	if len(block.CaptureNames) != 1 || block.CaptureNames[0] != "out" {
+		t.Fatalf("expected capture $out, got %v", block.CaptureNames)
+	}
+}
+
+func TestParseBlockSpecSupportsRawWithFail(t *testing.T) {
+	block, err := parseBlockSpec("run:shell !raw !fail")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !block.Literal || !block.ExpectFail {
+		t.Fatalf("expected Literal=true and ExpectFail=true, got %+v", block)
+	}
+}
+
 func TestParseBlockSpecRejectsExpectFailWithCaptures(t *testing.T) {
 	if _, err := parseBlockSpec("run:shell !fail -> $x"); err == nil {
 		t.Fatal("expected error for !fail with captures")

@@ -566,6 +566,30 @@ func TestRunWithFrontmatterTimeout(t *testing.T) {
 	}
 }
 
+func TestRunRawBlockSkipsInterpolation(t *testing.T) {
+	// A !raw block should pass ${var} through to the adapter literally,
+	// not attempt variable interpolation.
+	source := strings.Join([]string{
+		"# Raw Test",
+		"",
+		"## Shell",
+		"",
+		"```run:shell !raw",
+		`X=hello; echo "${X}"`,
+		"```",
+		"",
+	}, "\n")
+	root := writeSpecFile(t, "raw.spec.md", source)
+	cfg := config.Config{Entry: "specs/index.spec.md"}
+	report, err := Run(root, cfg, noopModelRunner{}, RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesPassed != 1 {
+		t.Fatalf("expected 1 passed case, got %+v", report.Summary)
+	}
+}
+
 func TestRunDryRunSkipsExecution(t *testing.T) {
 	source := "# Dry\n\n## Test\n\n```run:board -> $b\ncreate-board\n```\n"
 	root := writeSpecFile(t, "dry.spec.md", source)

@@ -19,6 +19,7 @@ type BlockSpec struct {
 	Target       string    `json:"target"`
 	CaptureNames []string  `json:"captureNames,omitempty"`
 	ExpectFail   bool      `json:"expectFail,omitempty"`
+	Literal      bool      `json:"literal,omitempty"` // !raw: skip variable interpolation
 }
 
 func (b BlockSpec) String() string {
@@ -46,7 +47,8 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		return BlockSpec{}, fmt.Errorf("unsupported spec block %q: alloy blocks use the \"<!-- alloy:model#assertion -->\" directive syntax instead", trimmed)
 	}
 
-	expectFail, working := extractExpectFail(trimmed)
+	literal, working := extractModifier(trimmed, " !raw")
+	expectFail, working := extractModifier(working, " !fail")
 	infoPart, captureNames, err := extractCaptures(working)
 	if err != nil {
 		return BlockSpec{}, err
@@ -66,18 +68,18 @@ func parseBlockSpec(info string) (BlockSpec, error) {
 		if expectFail && len(captureNames) > 0 {
 			return BlockSpec{}, fmt.Errorf("!fail blocks do not support captures")
 		}
-		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames, ExpectFail: expectFail}, nil
+		return BlockSpec{Raw: trimmed, Kind: kind, Target: target, CaptureNames: captureNames, ExpectFail: expectFail, Literal: literal}, nil
 	}
 
 	return BlockSpec{Raw: trimmed}, nil
 }
 
-func extractExpectFail(s string) (found bool, rest string) {
-	idx := strings.Index(s, " !fail")
+func extractModifier(s, modifier string) (found bool, rest string) {
+	idx := strings.Index(s, modifier)
 	if idx < 0 {
 		return false, s
 	}
-	rest = s[idx+len(" !fail"):]
+	rest = s[idx+len(modifier):]
 	if rest != "" && rest[0] != ' ' {
 		return false, s
 	}

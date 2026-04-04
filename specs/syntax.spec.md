@@ -284,6 +284,25 @@ printf 'ok'
 test "${escapeTest}" = "ok"
 ```
 
+### Raw blocks
+
+When a code block contains many `${...}` patterns that are shell variables
+(not specdown bindings), escaping each one is tedious. The `!raw` modifier
+skips variable interpolation for the entire block:
+
+````markdown
+```run:shell !raw
+for f in *.md; do
+  count=$(wc -l < "${f}")
+  echo "${f}: ${count} lines"
+done
+```
+````
+
+Without `!raw`, every `${f}` and `${count}` would need to be escaped as
+`\${f}` and `\${count}`. The `!raw` modifier can be combined with
+captures (`-> $var`) and `!fail`.
+
 ## Check Tables
 
 A Markdown table becomes executable when preceded by a check directive.

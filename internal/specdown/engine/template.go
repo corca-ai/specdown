@@ -42,6 +42,9 @@ func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec
 
 func prepareCodeCase(code *core.CodeCaseSpec, bindings []core.Binding) (*core.CodeCaseSpec, error) {
 	codeCopy := *code
+	if code.Block.Literal {
+		return &codeCopy, nil
+	}
 	rendered, err := renderTemplate(codeCopy.Template, bindings)
 	if err != nil {
 		return nil, err
