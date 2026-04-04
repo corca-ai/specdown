@@ -1,6 +1,7 @@
 package alloy
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -192,51 +193,29 @@ func evaluateExplore(modelName, source string, command receiptCommand) ExploreRe
 	}
 }
 
-// summarizeInstance formats the first instance from a receipt command as
-// human-readable text. Used for both run instances and check counterexamples.
+// summarizeInstance pretty-prints the values from the first instance
+// of a receipt command as indented JSON.
 func summarizeInstance(command receiptCommand) string {
 	if len(command.Solution) == 0 || len(command.Solution[0].Instances) == 0 {
-		return "(empty)"
+		return "(no instances)"
 	}
 
-	var instance struct {
-		Values map[string]map[string][][]string `json:"values"`
+	// Extract just the "values" field to avoid metadata noise.
+	var wrapper struct {
+		Values json.RawMessage `json:"values"`
 	}
-	if err := json.Unmarshal(command.Solution[0].Instances[0], &instance); err != nil {
+	if err := json.Unmarshal(command.Solution[0].Instances[0], &wrapper); err != nil {
 		return "(unable to parse instance: " + err.Error() + ")"
 	}
-
-	lines := formatInstanceValues(instance.Values)
-	if len(lines) == 0 {
-		return "(empty instance)"
+	if wrapper.Values == nil {
+		return "(no instance data)"
 	}
 
-	sort.Strings(lines)
-	return strings.Join(lines, "\n")
-}
-
-func formatInstanceValues(values map[string]map[string][][]string) []string {
-	var lines []string
-	for atom, relations := range values {
-		lines = append(lines, formatAtom(atom, relations)...)
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, wrapper.Values, "", "  "); err != nil {
+		return string(wrapper.Values)
 	}
-	return lines
-}
-
-func formatAtom(atom string, relations map[string][][]string) []string {
-	if len(relations) == 0 {
-		return []string{atom}
-	}
-	var lines []string
-	for rel, tuples := range relations {
-		for _, tuple := range tuples {
-			lines = append(lines, atom+"."+rel+" = "+strings.Join(tuple, ", "))
-		}
-	}
-	if len(lines) == 0 {
-		return []string{atom}
-	}
-	return lines
+	return buf.String()
 }
 
 

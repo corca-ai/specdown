@@ -711,7 +711,8 @@ func TestEvaluateExploreRunWithInstances(t *testing.T) {
 	testutil.Equal(t, result.Command, "run sanityCheck for 5")
 	testutil.True(t, result.IsRun)
 	testutil.True(t, result.Ok)
-	testutil.Contains(t, result.Summary, "User.name = Alice")
+	testutil.Contains(t, result.Summary, `"User"`)
+	testutil.Contains(t, result.Summary, `"Alice"`)
 }
 
 func TestEvaluateExploreRunNoInstances(t *testing.T) {
@@ -751,19 +752,19 @@ func TestEvaluateExploreCheckWithCounterexample(t *testing.T) {
 	testutil.False(t, result.IsRun)
 	testutil.False(t, result.Ok)
 	testutil.Contains(t, result.Summary, "counterexample found")
-	testutil.Contains(t, result.Summary, "User.name = Bob")
+	testutil.Contains(t, result.Summary, `"Bob"`)
 }
 
 // --- summarizeInstance ---
 
 func TestSummarizeInstance(t *testing.T) {
 	t.Run("no solution", func(t *testing.T) {
-		testutil.Equal(t, summarizeInstance(receiptCommand{}), "(empty)")
+		testutil.Equal(t, summarizeInstance(receiptCommand{}), "(no instances)")
 	})
 
 	t.Run("empty instances", func(t *testing.T) {
 		cmd := receiptCommand{Solution: []receiptSolution{{}}}
-		testutil.Equal(t, summarizeInstance(cmd), "(empty)")
+		testutil.Equal(t, summarizeInstance(cmd), "(no instances)")
 	})
 
 	t.Run("malformed JSON", func(t *testing.T) {
@@ -776,7 +777,7 @@ func TestSummarizeInstance(t *testing.T) {
 		testutil.Contains(t, result, "unable to parse instance")
 	})
 
-	t.Run("valid instance", func(t *testing.T) {
+	t.Run("outputs JSON with values", func(t *testing.T) {
 		instance := `{"values":{"Atom":{"rel":[["v1","v2"]]}}}`
 		cmd := receiptCommand{
 			Solution: []receiptSolution{
@@ -784,54 +785,27 @@ func TestSummarizeInstance(t *testing.T) {
 			},
 		}
 		result := summarizeInstance(cmd)
-		testutil.Contains(t, result, "Atom.rel = v1, v2")
+		testutil.Contains(t, result, `"Atom"`)
+		testutil.Contains(t, result, `"rel"`)
+		testutil.Contains(t, result, `"v1"`)
 	})
 
-	t.Run("empty values", func(t *testing.T) {
+	t.Run("empty values object", func(t *testing.T) {
 		cmd := receiptCommand{
 			Solution: []receiptSolution{
 				{Instances: []json.RawMessage{[]byte(`{"values":{}}`)}},
 			},
 		}
-		testutil.Equal(t, summarizeInstance(cmd), "(empty instance)")
+		testutil.Equal(t, summarizeInstance(cmd), "{}")
 	})
 
-	t.Run("atom without relations shown", func(t *testing.T) {
-		instance := `{"values":{"Green$0":{}}}`
+	t.Run("no values field", func(t *testing.T) {
 		cmd := receiptCommand{
 			Solution: []receiptSolution{
-				{Instances: []json.RawMessage{[]byte(instance)}},
+				{Instances: []json.RawMessage{[]byte(`{}`)}},
 			},
 		}
-		result := summarizeInstance(cmd)
-		testutil.Contains(t, result, "Green$0")
-	})
-
-	t.Run("atom with empty relation shown", func(t *testing.T) {
-		instance := `{"values":{"Light$0":{"color":[]}}}`
-		cmd := receiptCommand{
-			Solution: []receiptSolution{
-				{Instances: []json.RawMessage{[]byte(instance)}},
-			},
-		}
-		result := summarizeInstance(cmd)
-		testutil.Contains(t, result, "Light$0")
-		testutil.NotContains(t, result, "color")
-	})
-
-	t.Run("multiple relations sorted", func(t *testing.T) {
-		instance := `{"values":{"B":{"x":[["1"]]},"A":{"y":[["2"]]}}}`
-		cmd := receiptCommand{
-			Solution: []receiptSolution{
-				{Instances: []json.RawMessage{[]byte(instance)}},
-			},
-		}
-		result := summarizeInstance(cmd)
-		// Should be sorted: A.y before B.x
-		lines := strings.Split(result, "\n")
-		testutil.True(t, len(lines) == 2)
-		testutil.Contains(t, lines[0], "A.y")
-		testutil.Contains(t, lines[1], "B.x")
+		testutil.Equal(t, summarizeInstance(cmd), "(no instance data)")
 	})
 }
 
