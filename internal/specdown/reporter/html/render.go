@@ -213,8 +213,8 @@ func renderCodeSource(out *htmlBuilder, result core.CaseResult) {
 	}
 }
 
-// renderCodeSourceStripped renders the code block with the first comment line
-// (the summary line) stripped from the displayed source.
+// renderCodeSourceStripped renders the code block with leading comment lines
+// (the summary lines) stripped from the displayed source.
 func renderCodeSourceStripped(out *htmlBuilder, result core.CaseResult) {
 	source := ""
 	if result.Code != nil {
@@ -223,7 +223,7 @@ func renderCodeSourceStripped(out *htmlBuilder, result core.CaseResult) {
 			source = result.Code.RenderedSource
 		}
 	}
-	source = stripFirstCommentLine(source)
+	source = stripCommentLines(source)
 	if source != "" {
 		out.raw(`<code>`)
 		out.text(source)
@@ -234,13 +234,32 @@ func renderCodeSourceStripped(out *htmlBuilder, result core.CaseResult) {
 	}
 }
 
-// stripFirstCommentLine removes the first line if it is a comment.
-func stripFirstCommentLine(source string) string {
-	idx := strings.IndexByte(source, '\n')
-	if idx < 0 {
-		return ""
+// stripCommentLines removes all consecutive leading comment lines from source,
+// matching the lines that extractSummary consumed for the summary text.
+func stripCommentLines(source string) string {
+	rest := source
+	for {
+		line, after, found := strings.Cut(rest, "\n")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			break
+		}
+		isComment := false
+		for _, prefix := range []string{"# ", "// ", "-- "} {
+			if strings.HasPrefix(trimmed, prefix) {
+				isComment = true
+				break
+			}
+		}
+		if !isComment {
+			break
+		}
+		if !found {
+			return ""
+		}
+		rest = after
 	}
-	return source[idx+1:]
+	return rest
 }
 
 func renderVisibleBindings(out *htmlBuilder, bindings []core.Binding) {
@@ -474,7 +493,7 @@ func renderHookBlock(node core.HookNode) string {
 		out.raw(`</summary>`)
 		out.raw(`<div class="exec-source exec-source-body">`)
 		out.raw(`<code>`)
-		out.text(stripFirstCommentLine(node.Source))
+		out.text(stripCommentLines(node.Source))
 		out.raw(`</code>`)
 		out.raw(`</div>`)
 		out.raw(`</details>`)
@@ -575,43 +594,11 @@ func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult
 		return "", err
 	}
 
-	// Replace <code>expect: ... == ...</code> with inline expect result spans
-	expectIdx := 0
-	expects := filterInlinesByKind(node.Inlines, core.InlineExpect)
-	html = htmlCodeExpectPattern.ReplaceAllStringFunc(html, func(match string) string {
-		if expectIdx >= len(expects) {
-			return match
-		}
-		inline := expects[expectIdx]
-		expectIdx++
-		if inline.ID == nil {
-			return match
-		}
-		cr, ok := caseResults[inline.ID.Key()]
-		if !ok {
-			return match
-		}
-		return renderInlineExpectSpan(cr)
-	})
-
-	// Replace <code>check:name(params)</code> with inline check result spans
-	checkIdx := 0
-	checks := filterInlinesByKind(node.Inlines, core.InlineCheck)
-	html = htmlCodeCheckPattern.ReplaceAllStringFunc(html, func(match string) string {
-		if checkIdx >= len(checks) {
-			return match
-		}
-		inline := checks[checkIdx]
-		checkIdx++
-		if inline.ID == nil {
-			return match
-		}
-		cr, ok := caseResults[inline.ID.Key()]
-		if !ok {
-			return match
-		}
-		return renderInlineCheckSpan(inline, cr)
-	})
+	// Replace <code>expect: ... == ...</code> and <code>check:...()</code>
+	// with inline result spans. Matching uses content comparison to avoid
+	// index desync when escaped code spans produce extra <code> tags.
+	html = replaceInlineExpects(html, node.Inlines, caseResults)
+	html = replaceInlineChecks(html, node.Inlines, caseResults)
 
 	// Replace ${var} in non-<code> parts with variable display spans
 	bindingMap := make(map[string]string, len(accBindings))
@@ -621,6 +608,54 @@ func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult
 	html = replaceProseVariables(html, bindingMap)
 
 	return html, nil
+}
+
+func replaceInlineExpects(html string, inlines []core.InlineElement, caseResults map[string]core.CaseResult) string {
+	idx := 0
+	expects := filterInlinesByKind(inlines, core.InlineExpect)
+	return htmlCodeExpectPattern.ReplaceAllStringFunc(html, func(match string) string {
+		if idx >= len(expects) {
+			return match
+		}
+		inner := match[len("<code>") : len(match)-len("</code>")]
+		if expects[idx].Raw != "`"+inner+"`" {
+			return match
+		}
+		inline := expects[idx]
+		idx++
+		if inline.ID == nil {
+			return match
+		}
+		cr, ok := caseResults[inline.ID.Key()]
+		if !ok {
+			return match
+		}
+		return renderInlineExpectSpan(cr)
+	})
+}
+
+func replaceInlineChecks(html string, inlines []core.InlineElement, caseResults map[string]core.CaseResult) string {
+	idx := 0
+	checks := filterInlinesByKind(inlines, core.InlineCheck)
+	return htmlCodeCheckPattern.ReplaceAllStringFunc(html, func(match string) string {
+		if idx >= len(checks) {
+			return match
+		}
+		inner := match[len("<code>") : len(match)-len("</code>")]
+		if checks[idx].Raw != "`"+inner+"`" {
+			return match
+		}
+		inline := checks[idx]
+		idx++
+		if inline.ID == nil {
+			return match
+		}
+		cr, ok := caseResults[inline.ID.Key()]
+		if !ok {
+			return match
+		}
+		return renderInlineCheckSpan(inline, cr)
+	})
 }
 
 func filterInlinesByKind(inlines []core.InlineElement, kind core.InlineKind) []core.InlineElement {

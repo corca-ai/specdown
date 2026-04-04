@@ -76,6 +76,7 @@ echo "$help" | grep -q "alloy dump"
 | `-filter` | (none) | Case filter (heading substring or `type:`, `block:`, `check:` prefix) |
 | `-jobs` | `1` | Number of spec files to run in parallel |
 | `-dry-run` | `false` | Parse and validate only |
+| `-no-report` | `false` | Execute specs without writing report artifacts |
 | `-show-bindings` | `false` | Print resolved variable bindings for each case |
 | `-quiet` | `false` | Suppress progress output; show only final summary |
 | `-max-failures` | `0` | Stop after N unexpected failures (0 = unlimited) |

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
@@ -29,12 +30,14 @@ type Session struct {
 	scanner     *bufio.Scanner
 	encoder     *json.Encoder
 	stderr      *bytes.Buffer
-	waited      bool
 	closed      bool
 	stdinClosed bool
+	poisoned    bool
 	nextID      int
 	builtin     bool
 	done        chan struct{} // signals builtin goroutine completion
+	waitOnce    sync.Once
+	waitErr     error
 }
 
 func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
@@ -178,6 +181,10 @@ func handleBuiltinMessage(raw []byte, encoder *json.Encoder, workdir string) err
 }
 
 func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
+	if s.poisoned {
+		return adapterprotocol.ExecResponse{}, fmt.Errorf("adapter %q session is unusable after a previous timeout", s.adapter.Name)
+	}
+
 	s.nextID++
 	seqID := s.nextID
 
@@ -221,6 +228,7 @@ func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecRespon
 		case r := <-ch:
 			return r.resp, r.err
 		case <-ctx.Done():
+			s.poison()
 			return adapterprotocol.ExecResponse{ID: seqID, Error: fmt.Sprintf("timeout after %dms (exec: %q)", timeoutMs, truncate(source, 80))}, nil
 		}
 	}
@@ -230,6 +238,10 @@ func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecRespon
 }
 
 func (s *Session) Assert(check string, params map[string]string, columns, cells []string, timeoutMs int) (adapterprotocol.AssertResponse, error) {
+	if s.poisoned {
+		return adapterprotocol.AssertResponse{}, fmt.Errorf("adapter %q session is unusable after a previous timeout", s.adapter.Name)
+	}
+
 	s.nextID++
 	seqID := s.nextID
 
@@ -276,6 +288,7 @@ func (s *Session) Assert(check string, params map[string]string, columns, cells 
 		case r := <-ch:
 			return r.resp, r.err
 		case <-ctx.Done():
+			s.poison()
 			return adapterprotocol.AssertResponse{ID: seqID, Type: "failed", Message: fmt.Sprintf("timeout after %dms (assert: check %q)", timeoutMs, truncate(check, 80))}, nil
 		}
 	}
@@ -291,22 +304,34 @@ func truncate(s string, limit int) string {
 	return s[:limit] + "..."
 }
 
+// poison closes stdin to unblock any goroutine blocked on the scanner,
+// and marks the session as unusable for further requests.
+func (s *Session) poison() {
+	s.poisoned = true
+	if !s.stdinClosed {
+		s.stdinClosed = true
+		_ = s.stdin.Close()
+	}
+}
+
 func (s *Session) Close() error {
 	if s.closed {
 		return nil
 	}
 	s.closed = true
 
+	var stdinErr error
 	if !s.stdinClosed {
 		if err := s.stdin.Close(); err != nil {
-			return fmt.Errorf("close stdin for adapter %q: %w", s.adapter.Name, err)
+			stdinErr = fmt.Errorf("close stdin for adapter %q: %w", s.adapter.Name, err)
 		}
 		s.stdinClosed = true
 	}
-	if s.waited {
-		return nil
+	waitErr := s.wait()
+	if stdinErr != nil {
+		return stdinErr
 	}
-	return s.wait()
+	return waitErr
 }
 
 func (s *Session) readRawResponse() ([]byte, error) {
@@ -326,22 +351,20 @@ func (s *Session) readRawResponse() ([]byte, error) {
 }
 
 func (s *Session) wait() error {
-	if s.waited {
-		return nil
-	}
-	s.waited = true
-	if s.builtin {
-		<-s.done
-		return nil
-	}
-	if err := s.cmd.Wait(); err != nil {
-		message := strings.TrimSpace(s.stderr.String())
-		if message == "" {
-			message = err.Error()
+	s.waitOnce.Do(func() {
+		if s.builtin {
+			<-s.done
+			return
 		}
-		return fmt.Errorf("adapter %q infrastructure failure: %s", s.adapter.Name, message)
-	}
-	return nil
+		if err := s.cmd.Wait(); err != nil {
+			message := strings.TrimSpace(s.stderr.String())
+			if message == "" {
+				message = err.Error()
+			}
+			s.waitErr = fmt.Errorf("adapter %q infrastructure failure: %s", s.adapter.Name, message)
+		}
+	})
+	return s.waitErr
 }
 
 func resolveCommand(baseDir string, command []string) []string {

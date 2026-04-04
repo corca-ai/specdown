@@ -111,6 +111,7 @@ func run(args []string) error {
 	filter := fs.String("filter", "", "Filter cases: heading substring, type:{code,table,expect,alloy}, block:<target>, check:<name>")
 	jobs := fs.Int("jobs", 1, "Number of spec files to run in parallel")
 	dryRun := fs.Bool("dry-run", false, "Parse and validate without executing")
+	noReport := fs.Bool("no-report", false, "Execute specs without writing report artifacts")
 	showBindings := fs.Bool("show-bindings", false, "Print resolved variable bindings for each case")
 	quiet := fs.Bool("quiet", false, "Suppress progress output; show only final summary")
 	maxFailures := fs.Int("max-failures", 0, "Stop after N unexpected failures (0 = unlimited)")
@@ -160,9 +161,12 @@ func run(args []string) error {
 		printBindings(report)
 	}
 
-	reportPath := resolveReportPath(configDir, cfg, *outPath)
-	if err := writeArtifacts(report, reportPath, configDir, cfg); err != nil {
-		return err
+	reportPath := ""
+	if !*noReport {
+		reportPath = resolveReportPath(configDir, cfg, *outPath)
+		if err := writeArtifacts(report, reportPath, configDir, cfg); err != nil {
+			return err
+		}
 	}
 
 	if report.Summary.SpecsFailed > 0 || report.Summary.TraceErrorCount > 0 {
