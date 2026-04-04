@@ -134,12 +134,13 @@ func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.
 		return ExploreModelResult{}, fmt.Errorf("create alloy output dir: %w", err)
 	}
 
-	// 2025-04-05: We use "-t text" instead of the default JSON output because
+	// 2026-04-05: We use "-t text" instead of the default JSON output because
 	// Alloy 6's JSON serializer has a bug where relation field values are
 	// emitted as empty arrays in the "values" object, even when the solver
 	// found concrete bindings. The text output format does not have this bug
 	// and includes all relation tuples. We still parse receipt.json for
 	// command metadata (pass/fail, sigs) since that is unaffected.
+	// See: https://github.com/AlloyTools/org.alloytools.alloy/issues/342
 	args := []string{"-jar", jarPath, "exec", "-f", "-t", "text", "-o", outputDir}
 	if opts.Repeat > 1 {
 		args = append(args, "-r", strconv.Itoa(opts.Repeat))
