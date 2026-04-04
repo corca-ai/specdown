@@ -544,6 +544,15 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Run 'specdown <command> --help' for details on a specific command.")
 }
 
+// removeDanglingSymlink removes a symlink whose target no longer exists.
+func removeDanglingSymlink(path string) {
+	if _, err := os.Readlink(path); err == nil {
+		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+			_ = os.Remove(path)
+		}
+	}
+}
+
 // migrateSkillsDir moves a legacy .claude/skills directory to .agents/skills.
 func migrateSkillsDir() error {
 	claudeSkills := filepath.Join(".claude", "skills")
@@ -617,6 +626,8 @@ func installSkillsCmd(args []string) error {
 	if _, err := os.Stat(dest); err == nil && !overwrite {
 		return fmt.Errorf("%s already exists\nhint: use --overwrite to replace existing files", dest)
 	}
+
+	removeDanglingSymlink(filepath.Join(".agents", "skills"))
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
