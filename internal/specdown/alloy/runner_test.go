@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -697,62 +698,84 @@ func TestBundleContainsCommand(t *testing.T) {
 
 // --- evaluateExplore ---
 
-func TestEvaluateExploreRunWithInstances(t *testing.T) {
-	instance := `{"values":{"User":{"name":[["Alice"]]}}}`
+// writeSolutionFile creates a text solution file in dir for testing.
+func writeSolutionFile(t *testing.T, dir, commandName string, index int, content string) {
+	t.Helper()
+	path := filepath.Join(dir, commandName+"-solution-"+strconv.Itoa(index)+".txt")
+	testutil.NilErr(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func TestEvaluateExploreTextRunWithSolution(t *testing.T) {
+	dir := t.TempDir()
+	writeSolutionFile(t, dir, "sanityCheck", 0, "---Trace---\nthis/User={Alice}\n")
 	cmd := receiptCommand{
+		Name:   "sanityCheck",
 		Type:   "run",
 		Source: "run sanityCheck for 5",
 		Solution: []receiptSolution{
-			{Instances: []json.RawMessage{[]byte(instance)}},
+			{Instances: []json.RawMessage{[]byte(`{}`)}},
 		},
 	}
-	result := evaluateExplore("access", "run sanityCheck for 5", cmd)
+	result := evaluateExploreText("access", "run sanityCheck for 5", cmd, dir)
 	testutil.Equal(t, result.Model, "access")
-	testutil.Equal(t, result.Command, "run sanityCheck for 5")
 	testutil.True(t, result.IsRun)
 	testutil.True(t, result.Ok)
-	testutil.Contains(t, result.Summary, `"User"`)
-	testutil.Contains(t, result.Summary, `"Alice"`)
+	testutil.Contains(t, result.Summary, "this/User={Alice}")
 }
 
-func TestEvaluateExploreRunNoInstances(t *testing.T) {
+func TestEvaluateExploreTextRunNoInstances(t *testing.T) {
 	cmd := receiptCommand{
+		Name:     "sanityCheck",
 		Type:     "run",
 		Source:   "run sanityCheck for 5",
-		Solution: []receiptSolution{},
+		Solution: nil,
 	}
-	result := evaluateExplore("access", "run sanityCheck for 5", cmd)
+	result := evaluateExploreText("access", "run sanityCheck for 5", cmd, t.TempDir())
 	testutil.True(t, result.IsRun)
 	testutil.False(t, result.Ok)
 	testutil.Contains(t, result.Summary, "no instances found")
 }
 
-func TestEvaluateExploreCheckNoCounterexample(t *testing.T) {
+func TestEvaluateExploreTextCheckNoCounterexample(t *testing.T) {
 	cmd := receiptCommand{
+		Name:     "noOrphans",
 		Type:     "check",
 		Source:   "check noOrphans for 5",
-		Solution: []receiptSolution{},
+		Solution: nil,
 	}
-	result := evaluateExplore("access", "check noOrphans for 5", cmd)
+	result := evaluateExploreText("access", "check noOrphans for 5", cmd, t.TempDir())
 	testutil.False(t, result.IsRun)
 	testutil.True(t, result.Ok)
 	testutil.Contains(t, result.Summary, "assertion holds")
 }
 
-func TestEvaluateExploreCheckWithCounterexample(t *testing.T) {
-	instance := `{"values":{"User":{"name":[["Bob"]]}}}`
+func TestEvaluateExploreTextCheckWithCounterexample(t *testing.T) {
+	dir := t.TempDir()
+	writeSolutionFile(t, dir, "noOrphans", 0, "---Trace---\nthis/User={Bob}\n")
 	cmd := receiptCommand{
+		Name:   "noOrphans",
 		Type:   "check",
 		Source: "check noOrphans for 5",
 		Solution: []receiptSolution{
-			{Instances: []json.RawMessage{[]byte(instance)}},
+			{Instances: []json.RawMessage{[]byte(`{}`)}},
 		},
 	}
-	result := evaluateExplore("access", "check noOrphans for 5", cmd)
+	result := evaluateExploreText("access", "check noOrphans for 5", cmd, dir)
 	testutil.False(t, result.IsRun)
 	testutil.False(t, result.Ok)
 	testutil.Contains(t, result.Summary, "counterexample found")
-	testutil.Contains(t, result.Summary, `"Bob"`)
+	testutil.Contains(t, result.Summary, "this/User={Bob}")
+}
+
+func TestReadSolutionTextsMultiple(t *testing.T) {
+	dir := t.TempDir()
+	writeSolutionFile(t, dir, "sc", 0, "solution A")
+	writeSolutionFile(t, dir, "sc", 1, "solution B")
+	result := readSolutionTexts("sc", dir, 2)
+	testutil.Contains(t, result, "solution 1:")
+	testutil.Contains(t, result, "solution 2:")
+	testutil.Contains(t, result, "solution A")
+	testutil.Contains(t, result, "solution B")
 }
 
 // --- summarizeInstance ---

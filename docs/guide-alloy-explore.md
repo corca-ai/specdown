@@ -209,14 +209,19 @@ For each model, explore prints:
 
 1. **Sigs** — the model's signature definitions with field types,
    multiplicities, and whether fields are mutable (`var`). Builtin
-   sigs (univ, Int, String, none, seq/Int) are filtered out.
+   sigs (univ, Int, String, none, seq/Int) are filtered out. Shown
+   as JSON from the receipt.
 
 2. **Command results** — for each `run` and `check` command, the
-   full instance JSON including `values`, `skolems`, and `state`
-   (for temporal traces with multiple states).
+   Alloy solver's text output showing all atoms and relation bindings.
+   For temporal models, each trace state is shown separately. The
+   text format uses Alloy's native notation:
+   - `this/Sig={Atom$0, Atom$1}` — atoms in a signature
+   - `this/Sig<:field={Atom$0->Atom$1}` — relation tuples
+   - `skolem $var={Atom$0}` — skolemized variables
 
-Instance data is printed as raw JSON from the Alloy solver. Nothing
-is filtered or reformatted — you see exactly what the solver produced.
+Instance data is the unmodified text output from the Alloy solver.
+Nothing is filtered or reformatted.
 
 When using `--repeat N`, each solution is labeled (`solution 1:`,
 `solution 2:`, etc.). Multiple solutions show different valid

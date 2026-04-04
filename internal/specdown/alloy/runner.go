@@ -62,6 +62,7 @@ type receipt struct {
 }
 
 type receiptCommand struct {
+	Name     string            `json:"name"`
 	Type     string            `json:"type"`
 	Source   string            `json:"source"`
 	Scopes   json.RawMessage   `json:"scopes"`
@@ -133,7 +134,13 @@ func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.
 		return ExploreModelResult{}, fmt.Errorf("create alloy output dir: %w", err)
 	}
 
-	args := []string{"-jar", jarPath, "exec", "-f", "-o", outputDir}
+	// 2025-04-05: We use "-t text" instead of the default JSON output because
+	// Alloy 6's JSON serializer has a bug where relation field values are
+	// emitted as empty arrays in the "values" object, even when the solver
+	// found concrete bindings. The text output format does not have this bug
+	// and includes all relation tuples. We still parse receipt.json for
+	// command metadata (pass/fail, sigs) since that is unaffected.
+	args := []string{"-jar", jarPath, "exec", "-f", "-t", "text", "-o", outputDir}
 	if opts.Repeat > 1 {
 		args = append(args, "-r", strconv.Itoa(opts.Repeat))
 	}
@@ -158,7 +165,7 @@ func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.
 
 	var commands []ExploreResult
 	for source, rcmd := range rec.Commands {
-		commands = append(commands, evaluateExplore(model.Name, source, rcmd))
+		commands = append(commands, evaluateExploreText(model.Name, source, rcmd, outputDir))
 	}
 	sort.Slice(commands, func(i, j int) bool {
 		return commands[i].Command < commands[j].Command
@@ -171,21 +178,14 @@ func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.
 	}, nil
 }
 
-func evaluateExplore(modelName, source string, command receiptCommand) ExploreResult {
+// evaluateExploreText builds an ExploreResult by reading text solution files
+// from the output directory. The receipt command is used to determine
+// pass/fail and the command name for locating solution files.
+func evaluateExploreText(modelName, source string, command receiptCommand, outputDir string) ExploreResult {
 	isRun := command.Type == "run"
-	hasInstances := len(command.Solution) > 0 && len(command.Solution[0].Instances) > 0
+	hasSolutions := len(command.Solution) > 0
 
-	if isRun {
-		if hasInstances {
-			summary := summarizeInstance(command)
-			return ExploreResult{
-				Model:   modelName,
-				Command: source,
-				IsRun:   true,
-				Ok:      true,
-				Summary: summary,
-			}
-		}
+	if isRun && !hasSolutions {
 		return ExploreResult{
 			Model:   modelName,
 			Command: source,
@@ -195,8 +195,7 @@ func evaluateExplore(modelName, source string, command receiptCommand) ExploreRe
 		}
 	}
 
-	// check command
-	if !hasInstances {
+	if !isRun && !hasSolutions {
 		return ExploreResult{
 			Model:   modelName,
 			Command: source,
@@ -205,7 +204,20 @@ func evaluateExplore(modelName, source string, command receiptCommand) ExploreRe
 			Summary: "no counterexample — assertion holds within scope",
 		}
 	}
-	summary := summarizeInstance(command)
+
+	// Read text solution files.
+	summary := readSolutionTexts(command.Name, outputDir, len(command.Solution))
+
+	if isRun {
+		return ExploreResult{
+			Model:   modelName,
+			Command: source,
+			IsRun:   true,
+			Ok:      true,
+			Summary: summary,
+		}
+	}
+
 	return ExploreResult{
 		Model:   modelName,
 		Command: source,
@@ -213,6 +225,28 @@ func evaluateExplore(modelName, source string, command receiptCommand) ExploreRe
 		Ok:      false,
 		Summary: "counterexample found:\n" + summary,
 	}
+}
+
+// readSolutionTexts reads <command>-solution-<N>.txt files from the output
+// directory and concatenates them.
+func readSolutionTexts(commandName, outputDir string, count int) string {
+	var parts []string
+	for i := 0; i < count; i++ {
+		filename := filepath.Join(outputDir, commandName+"-solution-"+strconv.Itoa(i)+".txt")
+		body, err := os.ReadFile(filename)
+		if err != nil {
+			continue
+		}
+		text := strings.TrimSpace(string(body))
+		if count > 1 {
+			text = "solution " + strconv.Itoa(i+1) + ":\n" + text
+		}
+		parts = append(parts, text)
+	}
+	if len(parts) == 0 {
+		return "(no solution files found)"
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // summarizeInstance pretty-prints the instances from a receipt command
