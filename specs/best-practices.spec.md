@@ -10,11 +10,23 @@ to avoid. Read the [explains::Spec Syntax](syntax.spec.md) and
 
 ## Document Structure
 
-A spec file tells a story: what the system does, why, and how we know it works.
+A well-written spec serves two audiences at once: it is a **user manual**
+that humans read to understand the system, and an **executable specification**
+that a machine runs to verify the system works. Neither role is secondary —
+if it cannot be read as documentation, it is a poor spec; if it cannot be
+executed, it is just prose.
 
 Lead with prose and design rationale.
 Introduce Alloy models where structural properties matter.
 Follow with executable blocks and check tables that confirm implementation.
+
+### Right Level of Detail
+
+Executable blocks should verify **acceptance criteria**, not exhaustive
+edge cases. A spec that reads like a unit-test suite has gone too far —
+specdown is not a replacement for unit tests. Write enough cases to
+demonstrate the contract and catch regressions at the boundary level;
+leave fine-grained coverage to the project's test framework.
 
 ### Keep Documents Focused
 
@@ -206,6 +218,7 @@ The prime operator (`e'`) refers to the value of `e` in the next state. Without 
 - **Implementation checks without rationale** — future readers cannot tell which rows are essential. Add prose explaining why each case matters.
 - **Alloy in a separate file** — defeats the purpose. Model and implementation checks should share the same section and prose context.
 - **Over-modeling** — simple CRUD does not need Alloy. Use it when the state space is large enough that example-based testing cannot cover it.
+- **Over-testing** — a spec crammed with exhaustive cases becomes unreadable as documentation. Keep executable blocks at the acceptance-criteria level and leave fine-grained coverage to unit tests.
 - **Hardcoded paths in [explains::config](config.spec.md)** — use relative paths so the project works from any checkout location.
 - **Monolithic [explains::adapter](adapter-protocol.spec.md)** — keep adapters focused on one execution environment. Split when complexity grows.
 
@@ -235,6 +248,13 @@ Build an adapter when:
 
 A check table with an adapter reads as data; a shell block reads as a script.
 The tradeoff is the upfront cost of writing the adapter.
+
+An adapter also improves readability. Summary lines help collapse long
+shell blocks, but the best spec is one that reads clearly even without
+them. When shell blocks need heavy parsing or boilerplate to express
+an assertion, that complexity is a signal: build an adapter so the
+blocks (or check tables) speak the language of the domain, not the
+language of the shell.
 
 ## Choosing the Right Block Style
 
