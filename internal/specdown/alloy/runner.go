@@ -193,27 +193,44 @@ func evaluateExplore(modelName, source string, command receiptCommand) ExploreRe
 	}
 }
 
-// summarizeInstance pretty-prints the values from the first instance
-// of a receipt command as indented JSON.
+// summarizeInstance pretty-prints the instances from a receipt command
+// as indented JSON. For single-state models this is one object; for
+// temporal models the array contains one object per trace state.
 func summarizeInstance(command receiptCommand) string {
 	if len(command.Solution) == 0 || len(command.Solution[0].Instances) == 0 {
 		return "(no instances)"
 	}
 
-	// Extract just the "values" field to avoid metadata noise.
-	var wrapper struct {
-		Values json.RawMessage `json:"values"`
-	}
-	if err := json.Unmarshal(command.Solution[0].Instances[0], &wrapper); err != nil {
-		return "(unable to parse instance: " + err.Error() + ")"
-	}
-	if wrapper.Values == nil {
-		return "(no instance data)"
+	instances := command.Solution[0].Instances
+
+	// Single instance — print the object directly (most common case).
+	if len(instances) == 1 {
+		return prettyJSON(instances[0])
 	}
 
+	// Multiple instances (temporal trace) — print as array.
 	var buf bytes.Buffer
-	if err := json.Indent(&buf, wrapper.Values, "", "  "); err != nil {
-		return string(wrapper.Values)
+	buf.WriteByte('[')
+	for i, inst := range instances {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteByte('\n')
+		indented := prettyJSON(inst)
+		for _, line := range strings.Split(indented, "\n") {
+			buf.WriteString("  ")
+			buf.WriteString(line)
+			buf.WriteByte('\n')
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
+}
+
+func prettyJSON(raw json.RawMessage) string {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, raw, "", "  "); err != nil {
+		return string(raw)
 	}
 	return buf.String()
 }

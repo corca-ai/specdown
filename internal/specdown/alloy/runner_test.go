@@ -767,14 +767,14 @@ func TestSummarizeInstance(t *testing.T) {
 		testutil.Equal(t, summarizeInstance(cmd), "(no instances)")
 	})
 
-	t.Run("malformed JSON", func(t *testing.T) {
+	t.Run("malformed JSON passed through", func(t *testing.T) {
 		cmd := receiptCommand{
 			Solution: []receiptSolution{
 				{Instances: []json.RawMessage{[]byte("{invalid")}},
 			},
 		}
 		result := summarizeInstance(cmd)
-		testutil.Contains(t, result, "unable to parse instance")
+		testutil.Equal(t, result, "{invalid")
 	})
 
 	t.Run("outputs JSON with values", func(t *testing.T) {
@@ -796,7 +796,8 @@ func TestSummarizeInstance(t *testing.T) {
 				{Instances: []json.RawMessage{[]byte(`{"values":{}}`)}},
 			},
 		}
-		testutil.Equal(t, summarizeInstance(cmd), "{}")
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, `"values"`)
 	})
 
 	t.Run("no values field", func(t *testing.T) {
@@ -805,7 +806,22 @@ func TestSummarizeInstance(t *testing.T) {
 				{Instances: []json.RawMessage{[]byte(`{}`)}},
 			},
 		}
-		testutil.Equal(t, summarizeInstance(cmd), "(no instance data)")
+		testutil.Equal(t, summarizeInstance(cmd), "{}")
+	})
+
+	t.Run("multiple instances (temporal trace)", func(t *testing.T) {
+		state0 := `{"values":{"Light$0":{"color":[["Red$0"]]}}}`
+		state1 := `{"state":1,"values":{"Light$0":{"color":[["Green$0"]]}}}`
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(state0), []byte(state1)}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, "[")
+		testutil.Contains(t, result, `"Red$0"`)
+		testutil.Contains(t, result, `"Green$0"`)
+		testutil.Contains(t, result, `"state"`)
 	})
 }
 
