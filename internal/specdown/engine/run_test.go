@@ -506,6 +506,34 @@ func TestRenderTemplateReturnsErrorForUnresolved(t *testing.T) {
 	}
 }
 
+func TestUndefinedVariableErrorListsBindingsDeterministically(t *testing.T) {
+	// When multiple bindings are available, the error message must list them
+	// in a stable (sorted) order so that error output is deterministic.
+	bindings := []core.Binding{
+		{Name: "charlie", Value: "3"},
+		{Name: "alpha", Value: "1"},
+		{Name: "bravo", Value: "2"},
+	}
+	// Run multiple times to catch non-deterministic map iteration.
+	var firstMsg string
+	for i := 0; i < 20; i++ {
+		_, err := renderTemplate("${missing}", bindings)
+		if err == nil {
+			t.Fatal("expected error for unresolved variable")
+		}
+		msg := err.Error()
+		if firstMsg == "" {
+			firstMsg = msg
+		} else if msg != firstMsg {
+			t.Fatalf("non-deterministic error message:\n  first: %s\n  later: %s", firstMsg, msg)
+		}
+	}
+	// Verify the order is sorted.
+	if !strings.Contains(firstMsg, "$alpha, $bravo, $charlie") {
+		t.Fatalf("expected sorted binding list '$alpha, $bravo, $charlie' in error, got: %s", firstMsg)
+	}
+}
+
 func TestBindingReachableAncestorAndSibling(t *testing.T) {
 	// Ancestor: binding at ["A"] visible from ["A", "B"]
 	if !bindingReachable([]string{"A"}, []string{"A", "B"}) {

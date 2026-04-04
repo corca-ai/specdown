@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
@@ -135,6 +136,7 @@ func undefinedVariableError(name string, values map[string]any) error {
 	for k := range values {
 		names = append(names, "$"+k)
 	}
+	sort.Strings(names)
 	if len(names) > 0 {
 		return fmt.Errorf("variable $%s is not defined; available bindings: %s", name, strings.Join(names, ", "))
 	}

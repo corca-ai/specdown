@@ -385,7 +385,7 @@ func renderTableRow(out *htmlBuilder, row core.TableRowNode, result core.CaseRes
 	for index, cell := range cells {
 		out.raw(`<td>`)
 		out.open("div", "cell-template")
-		out.text(core.UnescapeCell(cell))
+		out.text(cell)
 		out.close("div")
 		if result.Status == core.StatusFailed && index == lastIndex {
 			renderFailureDiff(out, result.Message, result.Expected, result.Actual)

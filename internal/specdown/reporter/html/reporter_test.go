@@ -424,7 +424,7 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 							Check:         "editor-op",
 							Columns:       []string{"initial", "expected"},
 							TemplateCells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},
-							RenderedCells: []string{`alpha\n\nbeta`, `alpha\n\nbeta`},
+							RenderedCells: []string{"alpha\n\nbeta", "alpha\n\nbeta"},
 							RowNumber:     1,
 						},
 					},
@@ -449,6 +449,44 @@ func TestWriteUnescapesNewlinesInTableCells(t *testing.T) {
 	}
 	if !strings.Contains(html, "<div class=\"cell-template\">alpha\n\nbeta</div>") {
 		t.Fatal("expected real newlines in table cell output")
+	}
+}
+
+func TestRenderTableRowDoesNotDoubleUnescape(t *testing.T) {
+	// When RenderedCells already contain unescaped values (as produced by the
+	// engine's prepareTableRowCase), the renderer must NOT unescape again.
+	// A literal backslash-n in RenderedCells means the user wrote \\n in their
+	// spec (which the engine correctly unescaped once to \n). The renderer
+	// should preserve it, not turn it into an actual newline.
+	result := core.CaseResult{
+		ID:     core.SpecID{File: "test.spec.md", HeadingPath: []string{"Root"}, Ordinal: 1},
+		Kind:   core.CaseKindTableRow,
+		Status: core.StatusPassed,
+		Label:  "check:test @ Root row 1",
+		Table: &core.TableResultDetail{
+			Check:         "test",
+			Columns:       []string{"input"},
+			TemplateCells: []string{`\\n`},
+			RenderedCells: []string{`\n`}, // engine already unescaped \\n → \n
+			RowNumber:     1,
+		},
+	}
+	row := core.TableRowNode{
+		Cells: []string{`\\n`},
+		Raw:   `| \\n |` + "\n",
+		ID:    &result.ID,
+	}
+
+	var out htmlBuilder
+	renderTableRow(&out, row, result)
+	html := out.String()
+
+	// The renderer should preserve the literal \n, not convert it to a newline.
+	if strings.Contains(html, "<div class=\"cell-template\">\n</div>") {
+		t.Fatal("renderer double-unescaped: literal \\n was turned into a newline")
+	}
+	if !strings.Contains(html, `<div class="cell-template">\n</div>`) {
+		t.Fatalf("expected literal \\n in output, got: %s", html)
 	}
 }
 

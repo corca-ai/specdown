@@ -207,6 +207,52 @@ func TestCompileDocumentRejectsAlloyReferenceToUnknownModel(t *testing.T) {
 	}
 }
 
+func TestCompileDocumentParsesAlloyRunWithNestedBraces(t *testing.T) {
+	// Alloy run predicates can contain set comprehensions with nested braces.
+	// The parser must handle: run foo { some x: T | x in {y: T | ...} } for 5
+	doc, err := ParseDocument("specs/nested.spec.md", strings.Join([]string{
+		"# Nested",
+		"",
+		"## Model",
+		"",
+		"```alloy:model(m)",
+		"module m",
+		"sig T { f: lone T }",
+		"pred linked { some x: T | x.f in {y: T | some y.f} }",
+		"run linked { some x: T | x in {y: T | some y.f} } for 5",
+		"```",
+		"",
+	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("parse document: %v", err)
+	}
+
+	plan, err := CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile document: %v", err)
+	}
+
+	var alloyCases []CaseSpec
+	for _, c := range plan.Cases {
+		if c.Kind == CaseKindAlloy {
+			alloyCases = append(alloyCases, c)
+		}
+	}
+	if len(alloyCases) != 1 {
+		t.Fatalf("expected 1 alloy case from implicit run, got %d", len(alloyCases))
+	}
+	ac := alloyCases[0]
+	if ac.Alloy.Assertion != "linked" {
+		t.Fatalf("expected assertion 'linked', got %q", ac.Alloy.Assertion)
+	}
+	if ac.Alloy.Scope != "5" {
+		t.Fatalf("expected scope '5', got %q", ac.Alloy.Scope)
+	}
+	if !ac.Alloy.IsRun {
+		t.Fatal("expected IsRun=true for implicit run statement")
+	}
+}
+
 func TestCompileDocumentRejectsUnresolvedVariableInBlock(t *testing.T) {
 	doc, err := ParseDocument("bad.spec.md", strings.Join([]string{
 		"# Bad",
