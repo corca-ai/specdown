@@ -115,6 +115,8 @@ func run(args []string) error {
 	showBindings := fs.Bool("show-bindings", false, "Print resolved variable bindings for each case")
 	quiet := fs.Bool("quiet", false, "Suppress progress output; show only final summary")
 	maxFailures := fs.Int("max-failures", 0, "Stop after N unexpected failures (0 = unlimited)")
+	noSetup := fs.Bool("no-setup", false, "Skip the global setup command")
+	noTeardown := fs.Bool("no-teardown", false, "Skip the global teardown command")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -133,6 +135,8 @@ func run(args []string) error {
 		Jobs:        *jobs,
 		DryRun:      *dryRun,
 		MaxFailures: *maxFailures,
+		NoSetup:     *noSetup,
+		NoTeardown:  *noTeardown,
 	}
 	if !*quiet {
 		opts.Progress = stdoutProgress()

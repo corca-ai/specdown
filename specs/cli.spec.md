@@ -80,6 +80,8 @@ echo "$help" | grep -q "alloy dump"
 | `-show-bindings` | `false` | Print resolved variable bindings for each case |
 | `-quiet` | `false` | Suppress progress output; show only final summary |
 | `-max-failures` | `0` | Stop after N unexpected failures (0 = unlimited) |
+| `-no-setup` | `false` | Skip the global setup command |
+| `-no-teardown` | `false` | Skip the global teardown command |
 
 ### Trace Flags
 

@@ -713,6 +713,65 @@ func TestRunCheckCallWithParams(t *testing.T) {
 	}
 }
 
+func TestRunNoSetupSkipsSetupCommand(t *testing.T) {
+	source := "# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
+	root := writeSpecFile(t, "no-setup.spec.md", source)
+	marker := filepath.Join(root, "setup-ran")
+
+	cfg := helperAdapterConfig()
+	cfg.Setup = "touch " + marker
+
+	// Without NoSetup: marker should be created
+	report, err := Run(root, cfg, noopModelRunner{}, RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesPassed != 1 {
+		t.Fatalf("expected 1 passed, got %+v", report.Summary)
+	}
+	if _, err := os.Stat(marker); os.IsNotExist(err) {
+		t.Fatal("expected setup marker to exist without NoSetup")
+	}
+	_ = os.Remove(marker)
+
+	// With NoSetup: marker should NOT be created
+	_, err = Run(root, cfg, noopModelRunner{}, RunOptions{NoSetup: true})
+	if err != nil {
+		t.Fatalf("run with NoSetup: %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("setup should have been skipped with NoSetup")
+	}
+}
+
+func TestRunNoTeardownSkipsTeardownCommand(t *testing.T) {
+	source := "# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
+	root := writeSpecFile(t, "no-teardown.spec.md", source)
+	marker := filepath.Join(root, "teardown-ran")
+
+	cfg := helperAdapterConfig()
+	cfg.Teardown = "touch " + marker
+
+	// Without NoTeardown: marker should be created
+	_, err := Run(root, cfg, noopModelRunner{}, RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if _, err := os.Stat(marker); os.IsNotExist(err) {
+		t.Fatal("expected teardown marker to exist without NoTeardown")
+	}
+	_ = os.Remove(marker)
+
+	// With NoTeardown: marker should NOT be created
+	_, err = Run(root, cfg, noopModelRunner{}, RunOptions{NoTeardown: true})
+	if err != nil {
+		t.Fatalf("run with NoTeardown: %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("teardown should have been skipped with NoTeardown")
+	}
+}
+
 // writeSpecFile creates a temp dir, writes a spec file, and generates the entry file.
 func writeSpecFile(t *testing.T, name, source string) (root string) {
 	t.Helper()

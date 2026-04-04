@@ -49,6 +49,8 @@ type RunOptions struct {
 	DryRun      bool
 	Progress    ProgressFunc
 	MaxFailures int // 0 means unlimited
+	NoSetup     bool
+	NoTeardown  bool
 }
 
 type adapterRegistry struct {
@@ -81,13 +83,14 @@ func runShellCommand(baseDir, command string) error {
 	return cmd.Run()
 }
 
+//nolint:gocognit // top-level orchestration with setup/teardown/trace phases
 func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
-	if cfg.Setup != "" {
+	if cfg.Setup != "" && !opts.NoSetup {
 		if err := runShellCommand(baseDir, cfg.Setup); err != nil {
 			return core.Report{}, fmt.Errorf("setup command failed: %w", err)
 		}
 	}
-	if cfg.Teardown != "" {
+	if cfg.Teardown != "" && !opts.NoTeardown {
 		defer func() {
 			if terr := runShellCommand(baseDir, cfg.Teardown); terr != nil {
 				fmt.Fprintf(os.Stderr, "warning: teardown command failed: %v\n", terr)
