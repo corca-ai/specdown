@@ -809,6 +809,21 @@ func TestSummarizeInstance(t *testing.T) {
 		testutil.Equal(t, summarizeInstance(cmd), "{}")
 	})
 
+	t.Run("multiple solutions", func(t *testing.T) {
+		sol1 := `{"values":{"A$0":{"x":[["A$1"]]}}}`
+		sol2 := `{"values":{"A$0":{"x":[]}}}`
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(sol1)}},
+				{Instances: []json.RawMessage{[]byte(sol2)}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, "solution 1:")
+		testutil.Contains(t, result, "solution 2:")
+		testutil.Contains(t, result, `"A$1"`)
+	})
+
 	t.Run("multiple instances (temporal trace)", func(t *testing.T) {
 		state0 := `{"values":{"Light$0":{"color":[["Red$0"]]}}}`
 		state1 := `{"state":1,"values":{"Light$0":{"color":[["Green$0"]]}}}`
@@ -829,7 +844,7 @@ func TestSummarizeInstance(t *testing.T) {
 
 func TestExploreDocumentNoModels(t *testing.T) {
 	runner := Runner{BaseDir: t.TempDir()}
-	results, err := runner.ExploreDocument(core.DocumentPlan{})
+	results, err := runner.ExploreDocument(core.DocumentPlan{}, ExploreOptions{})
 	testutil.NilErr(t, err)
 	testutil.Len(t, results, 0)
 }
@@ -842,9 +857,33 @@ func TestExploreDocumentNoJava(t *testing.T) {
 		AlloyModels: []core.AlloyModelSpec{
 			{Name: "m", Fragments: []core.AlloyFragmentSpec{{Model: "m", HeadingPath: []string{"T"}, Source: "module m"}}},
 		},
-	})
+	}, ExploreOptions{})
 	testutil.WantErr(t, err)
 	testutil.Contains(t, err.Error(), "java not found")
+}
+
+// --- formatSigs ---
+
+func TestFormatSigsFiltersBuiltins(t *testing.T) {
+	raw := json.RawMessage(`{
+		"univ": {"builtin": true, "name": "univ"},
+		"Int": {"builtin": true, "name": "Int"},
+		"Light": {"name": "Light", "fields": {"color": {"var": true}}}
+	}`)
+	result := formatSigs(raw)
+	testutil.Contains(t, result, "Light")
+	testutil.NotContains(t, result, "univ")
+	testutil.NotContains(t, result, `"Int"`)
+}
+
+func TestFormatSigsEmpty(t *testing.T) {
+	testutil.Equal(t, formatSigs(nil), "")
+	testutil.Equal(t, formatSigs(json.RawMessage(`{}`)), "")
+}
+
+func TestFormatSigsAllBuiltin(t *testing.T) {
+	raw := json.RawMessage(`{"univ": {"builtin": true}, "Int": {"builtin": true}}`)
+	testutil.Equal(t, formatSigs(raw), "")
 }
 
 // --- bundleFileName ---

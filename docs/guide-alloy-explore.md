@@ -203,6 +203,25 @@ The check passes. Continue with the next aspect of the model.
 At each step the model and the implementation tests grew together.
 Each discovery became a concrete test.
 
+## What explore shows
+
+For each model, explore prints:
+
+1. **Sigs** — the model's signature definitions with field types,
+   multiplicities, and whether fields are mutable (`var`). Builtin
+   sigs (univ, Int, String, none, seq/Int) are filtered out.
+
+2. **Command results** — for each `run` and `check` command, the
+   full instance JSON including `values`, `skolems`, and `state`
+   (for temporal traces with multiple states).
+
+Instance data is printed as raw JSON from the Alloy solver. Nothing
+is filtered or reformatted — you see exactly what the solver produced.
+
+When using `--repeat N`, each solution is labeled (`solution 1:`,
+`solution 2:`, etc.). Multiple solutions show different valid
+instances, giving a broader picture of what the model allows.
+
 ## CLI reference
 
 ### `specdown alloy explore [flags]`
@@ -215,6 +234,7 @@ skipped.
 |------|-------------|
 | `-filter <path>` | Only explore specs whose path contains the substring |
 | `-model <name>` | Only explore the named model |
+| `-repeat <N>` | Find N solutions per command (default: 1). More solutions show more of what the model allows |
 | `-config <path>` | Path to specdown.json (default: `specdown.json`) |
 
 ### Relationship to `specdown run`
@@ -225,5 +245,5 @@ synthesis, JAR invocation, receipt parsing. The differences:
 | | `specdown run` | `specdown alloy explore` |
 |---|---|---|
 | **What executes** | Everything (Alloy, shell blocks, check tables) | Alloy commands only |
-| **Output** | Pass/fail per case | Instances per command |
+| **Output** | Pass/fail per case | Sigs + instances per command |
 | **Purpose** | CI verification | Interactive model exploration |

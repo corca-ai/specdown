@@ -426,6 +426,7 @@ func alloyExplore(args []string) error {
 	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
 	filter := fs.String("filter", "", "Filter by spec file path substring")
 	modelFilter := fs.String("model", "", "Filter by model name")
+	repeat := fs.Int("repeat", 1, "Number of solutions to find per command")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -438,7 +439,8 @@ func alloyExplore(args []string) error {
 		return err
 	}
 
-	resultsByDoc, err := engine.ExploreModels(configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, *filter)
+	opts := alloy.ExploreOptions{Repeat: *repeat}
+	resultsByDoc, err := engine.ExploreModels(configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, *filter, opts)
 	if err != nil {
 		return err
 	}
@@ -452,7 +454,7 @@ func alloyExplore(args []string) error {
 	return nil
 }
 
-func printExploreResults(resultsByDoc map[string][]alloy.ExploreResult, modelFilter string) {
+func printExploreResults(resultsByDoc map[string][]alloy.ExploreModelResult, modelFilter string) {
 	var docPaths []string
 	for p := range resultsByDoc {
 		docPaths = append(docPaths, p)
@@ -461,35 +463,32 @@ func printExploreResults(resultsByDoc map[string][]alloy.ExploreResult, modelFil
 
 	for _, docPath := range docPaths {
 		fmt.Printf("spec: %s\n", docPath)
-		printDocExploreResults(resultsByDoc[docPath], modelFilter)
+		for _, mr := range resultsByDoc[docPath] {
+			if modelFilter != "" && mr.Model != modelFilter {
+				continue
+			}
+			printModelExploreResult(mr)
+		}
 		fmt.Println()
 	}
 }
 
-func printDocExploreResults(results []alloy.ExploreResult, modelFilter string) {
-	modelOrder := make([]string, 0)
-	byModel := make(map[string][]alloy.ExploreResult)
-	for _, r := range results {
-		if modelFilter != "" && r.Model != modelFilter {
-			continue
+func printModelExploreResult(mr alloy.ExploreModelResult) {
+	fmt.Printf("\n  model: %s\n", mr.Model)
+	if mr.Sigs != "" {
+		fmt.Printf("\n    sigs:\n")
+		for _, line := range strings.Split(mr.Sigs, "\n") {
+			fmt.Printf("      %s\n", line)
 		}
-		if _, seen := byModel[r.Model]; !seen {
-			modelOrder = append(modelOrder, r.Model)
-		}
-		byModel[r.Model] = append(byModel[r.Model], r)
 	}
-
-	for _, model := range modelOrder {
-		fmt.Printf("\n  model: %s\n", model)
-		for _, r := range byModel[model] {
-			tag := "✓"
-			if !r.Ok {
-				tag = "✗"
-			}
-			fmt.Printf("\n    %s %s\n", tag, r.Command)
-			for _, line := range strings.Split(r.Summary, "\n") {
-				fmt.Printf("      %s\n", line)
-			}
+	for _, r := range mr.Commands {
+		tag := "✓"
+		if !r.Ok {
+			tag = "✗"
+		}
+		fmt.Printf("\n    %s %s\n", tag, r.Command)
+		for _, line := range strings.Split(r.Summary, "\n") {
+			fmt.Printf("      %s\n", line)
 		}
 	}
 }

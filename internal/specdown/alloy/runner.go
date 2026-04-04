@@ -58,6 +58,7 @@ type failureLocation struct {
 
 type receipt struct {
 	Commands map[string]receiptCommand `json:"commands"`
+	Sigs     json.RawMessage           `json:"sigs"`
 }
 
 type receiptCommand struct {
@@ -71,6 +72,13 @@ type receiptSolution struct {
 	Instances []json.RawMessage `json:"instances"`
 }
 
+// ExploreModelResult groups the sigs metadata and command results for one model.
+type ExploreModelResult struct {
+	Model    string
+	Sigs     string          // pretty-printed sigs JSON (non-builtin only)
+	Commands []ExploreResult // per-command results
+}
+
 // ExploreResult holds the instance-level output of a single Alloy command
 // within a model, as opposed to the pass/fail CaseResult used by RunDocument.
 type ExploreResult struct {
@@ -81,11 +89,14 @@ type ExploreResult struct {
 	Summary string // human-readable instance or counterexample text
 }
 
+// ExploreOptions controls explore behavior.
+type ExploreOptions struct {
+	Repeat int // number of solutions to find per command (0 = default 1)
+}
+
 // ExploreDocument runs all Alloy models in a document plan and returns
-// instance-level results. Unlike RunDocument, it does not produce CaseResults
-// and does not require alloy cases in the plan — it discovers run/check
-// commands directly from the model fragments.
-func (r Runner) ExploreDocument(plan core.DocumentPlan) ([]ExploreResult, error) {
+// per-model results with sigs and instance data.
+func (r Runner) ExploreDocument(plan core.DocumentPlan, opts ExploreOptions) ([]ExploreModelResult, error) {
 	if len(plan.AlloyModels) == 0 {
 		return nil, nil
 	}
@@ -100,29 +111,35 @@ func (r Runner) ExploreDocument(plan core.DocumentPlan) ([]ExploreResult, error)
 		return nil, err
 	}
 
-	var results []ExploreResult
+	var results []ExploreModelResult
 	for _, model := range plan.AlloyModels {
-		modelResults, err := r.exploreModel(javaPath, jarPath, plan.Document.RelativeTo, model)
+		mr, err := r.exploreModel(javaPath, jarPath, plan.Document.RelativeTo, model, opts)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, modelResults...)
+		results = append(results, mr)
 	}
 	return results, nil
 }
 
-func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.AlloyModelSpec) ([]ExploreResult, error) {
+func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.AlloyModelSpec, opts ExploreOptions) (ExploreModelResult, error) {
 	bundle, err := r.writeBundle(documentPath, model, nil)
 	if err != nil {
-		return nil, err
+		return ExploreModelResult{}, err
 	}
 
 	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), core.Slug(bundle.Model)+"-output")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create alloy output dir: %w", err)
+		return ExploreModelResult{}, fmt.Errorf("create alloy output dir: %w", err)
 	}
 
-	cmd := exec.Command(javaPath, "-jar", jarPath, "exec", "-f", "-o", outputDir, bundle.AbsolutePath)
+	args := []string{"-jar", jarPath, "exec", "-f", "-o", outputDir}
+	if opts.Repeat > 1 {
+		args = append(args, "-r", strconv.Itoa(opts.Repeat))
+	}
+	args = append(args, bundle.AbsolutePath)
+
+	cmd := exec.Command(javaPath, args...)
 	cmd.Dir = r.BaseDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -131,22 +148,27 @@ func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.
 			message = err.Error()
 		}
 		location, ok := locateAlloyFailure(bundle.LineRefs, message)
-		return nil, fmt.Errorf("alloy error in model %q: %s", model.Name, annotateAlloyFailure(message, location, ok))
+		return ExploreModelResult{}, fmt.Errorf("alloy error in model %q: %s", model.Name, annotateAlloyFailure(message, location, ok))
 	}
 
-	commandResults, err := parseReceipt(filepath.Join(outputDir, "receipt.json"))
+	rec, err := parseReceiptFull(filepath.Join(outputDir, "receipt.json"))
 	if err != nil {
-		return nil, err
+		return ExploreModelResult{}, err
 	}
 
-	var results []ExploreResult
-	for source, rcmd := range commandResults {
-		results = append(results, evaluateExplore(model.Name, source, rcmd))
+	var commands []ExploreResult
+	for source, rcmd := range rec.Commands {
+		commands = append(commands, evaluateExplore(model.Name, source, rcmd))
 	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Command < results[j].Command
+	sort.Slice(commands, func(i, j int) bool {
+		return commands[i].Command < commands[j].Command
 	})
-	return results, nil
+
+	return ExploreModelResult{
+		Model:    model.Name,
+		Sigs:     formatSigs(rec.Sigs),
+		Commands: commands,
+	}, nil
 }
 
 func evaluateExplore(modelName, source string, command receiptCommand) ExploreResult {
@@ -194,37 +216,44 @@ func evaluateExplore(modelName, source string, command receiptCommand) ExploreRe
 }
 
 // summarizeInstance pretty-prints the instances from a receipt command
-// as indented JSON. For single-state models this is one object; for
-// temporal models the array contains one object per trace state.
+// as indented JSON. Handles multiple solutions (from -r) and multiple
+// instances per solution (temporal trace states).
 func summarizeInstance(command receiptCommand) string {
-	if len(command.Solution) == 0 || len(command.Solution[0].Instances) == 0 {
+	if len(command.Solution) == 0 {
 		return "(no instances)"
 	}
 
-	instances := command.Solution[0].Instances
-
-	// Single instance — print the object directly (most common case).
-	if len(instances) == 1 {
-		return prettyJSON(instances[0])
-	}
-
-	// Multiple instances (temporal trace) — print as array.
-	var buf bytes.Buffer
-	buf.WriteByte('[')
-	for i, inst := range instances {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteByte('\n')
-		indented := prettyJSON(inst)
-		for _, line := range strings.Split(indented, "\n") {
-			buf.WriteString("  ")
-			buf.WriteString(line)
-			buf.WriteByte('\n')
+	// Collect all instance lists across solutions.
+	var allInstances [][]json.RawMessage
+	for _, sol := range command.Solution {
+		if len(sol.Instances) > 0 {
+			allInstances = append(allInstances, sol.Instances)
 		}
 	}
-	buf.WriteByte(']')
-	return buf.String()
+	if len(allInstances) == 0 {
+		return "(no instances)"
+	}
+
+	// Single solution, single instance — most common case.
+	if len(allInstances) == 1 && len(allInstances[0]) == 1 {
+		return prettyJSON(allInstances[0][0])
+	}
+
+	// Multiple solutions or temporal traces — print each solution.
+	var parts []string
+	for i, instances := range allInstances {
+		header := fmt.Sprintf("solution %d:", i+1)
+		if len(instances) == 1 {
+			parts = append(parts, header+"\n"+prettyJSON(instances[0]))
+		} else {
+			lines := []string{header}
+			for _, inst := range instances {
+				lines = append(lines, prettyJSON(inst))
+			}
+			parts = append(parts, strings.Join(lines, "\n"))
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func prettyJSON(raw json.RawMessage) string {
@@ -438,22 +467,68 @@ func (r Runner) runModel(javaPath, jarPath string, bundle modelBundle, checks []
 	return results, nil
 }
 
-func parseReceipt(receiptPath string) (map[string]receiptCommand, error) {
+func parseReceiptFull(receiptPath string) (receipt, error) {
 	receiptBody, err := os.ReadFile(receiptPath)
 	if err != nil {
-		return nil, fmt.Errorf("read alloy receipt: %w", err)
+		return receipt{}, fmt.Errorf("read alloy receipt: %w", err)
 	}
 
-	var runReceipt receipt
-	if err := json.Unmarshal(receiptBody, &runReceipt); err != nil {
-		return nil, fmt.Errorf("decode alloy receipt: %w", err)
+	var rec receipt
+	if err := json.Unmarshal(receiptBody, &rec); err != nil {
+		return receipt{}, fmt.Errorf("decode alloy receipt: %w", err)
 	}
 
-	commandResults := make(map[string]receiptCommand)
-	for _, command := range runReceipt.Commands {
-		commandResults[strings.TrimSpace(command.Source)] = command
+	// Re-key commands by trimmed source for lookup.
+	commands := make(map[string]receiptCommand, len(rec.Commands))
+	for _, command := range rec.Commands {
+		commands[strings.TrimSpace(command.Source)] = command
 	}
-	return commandResults, nil
+	rec.Commands = commands
+	return rec, nil
+}
+
+func parseReceipt(receiptPath string) (map[string]receiptCommand, error) {
+	rec, err := parseReceiptFull(receiptPath)
+	if err != nil {
+		return nil, err
+	}
+	return rec.Commands, nil
+}
+
+// formatSigs filters out builtin sigs and pretty-prints the rest.
+func formatSigs(raw json.RawMessage) string {
+	if raw == nil {
+		return ""
+	}
+
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &all); err != nil {
+		return ""
+	}
+
+	filtered := make(map[string]json.RawMessage)
+	for name, sig := range all {
+		var meta struct {
+			Builtin bool `json:"builtin"`
+		}
+		if json.Unmarshal(sig, &meta) == nil && meta.Builtin {
+			continue
+		}
+		filtered[name] = sig
+	}
+
+	if len(filtered) == 0 {
+		return ""
+	}
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(filtered); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(buf.String())
 }
 
 func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandResults map[string]receiptCommand) (core.CaseResult, error) {

@@ -1334,10 +1334,10 @@ func parseHelperExists(value string) bool {
 // --- ExploreModels ---
 
 type fakeModelExplorer struct {
-	results map[string][]alloy.ExploreResult
+	results map[string][]alloy.ExploreModelResult
 }
 
-func (f fakeModelExplorer) ExploreDocument(plan core.DocumentPlan) ([]alloy.ExploreResult, error) {
+func (f fakeModelExplorer) ExploreDocument(plan core.DocumentPlan, _ alloy.ExploreOptions) ([]alloy.ExploreModelResult, error) {
 	return f.results[plan.Document.RelativeTo], nil
 }
 
@@ -1358,14 +1358,16 @@ func TestExploreModelsReturnsResultsByDoc(t *testing.T) {
 	root := writeSpecFile(t, "explore.spec.md", source)
 
 	explorer := fakeModelExplorer{
-		results: map[string][]alloy.ExploreResult{
+		results: map[string][]alloy.ExploreModelResult{
 			"specs/explore.spec.md": {
-				{Model: "m", Command: "run sanityCheck for 5", IsRun: true, Ok: true, Summary: "A = {A0}"},
+				{Model: "m", Commands: []alloy.ExploreResult{
+					{Model: "m", Command: "run sanityCheck for 5", IsRun: true, Ok: true, Summary: "{}"},
+				}},
 			},
 		},
 	}
 
-	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "")
+	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "", alloy.ExploreOptions{})
 	if err != nil {
 		t.Fatalf("explore: %v", err)
 	}
@@ -1398,15 +1400,17 @@ func TestExploreModelsFilterByDoc(t *testing.T) {
 	root := writeSpecFile(t, "explore-filter.spec.md", source)
 
 	explorer := fakeModelExplorer{
-		results: map[string][]alloy.ExploreResult{
+		results: map[string][]alloy.ExploreModelResult{
 			"specs/explore-filter.spec.md": {
-				{Model: "m", Command: "run sanityCheck for 5", IsRun: true, Ok: true, Summary: "A = {A0}"},
+				{Model: "m", Commands: []alloy.ExploreResult{
+					{Model: "m", Command: "run sanityCheck for 5", IsRun: true, Ok: true, Summary: "{}"},
+				}},
 			},
 		},
 	}
 
 	// Filter that doesn't match
-	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "nonexistent")
+	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "nonexistent", alloy.ExploreOptions{})
 	if err != nil {
 		t.Fatalf("explore: %v", err)
 	}
@@ -1415,7 +1419,7 @@ func TestExploreModelsFilterByDoc(t *testing.T) {
 	}
 
 	// Filter that matches
-	resultsByDoc, err = ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "explore-filter")
+	resultsByDoc, err = ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "explore-filter", alloy.ExploreOptions{})
 	if err != nil {
 		t.Fatalf("explore: %v", err)
 	}
@@ -1428,9 +1432,9 @@ func TestExploreModelsNoModels(t *testing.T) {
 	source := "# Empty\n\n## No models\n\nJust prose.\n"
 	root := writeSpecFile(t, "no-models.spec.md", source)
 
-	explorer := fakeModelExplorer{results: map[string][]alloy.ExploreResult{}}
+	explorer := fakeModelExplorer{results: map[string][]alloy.ExploreModelResult{}}
 
-	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "")
+	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "", alloy.ExploreOptions{})
 	if err != nil {
 		t.Fatalf("explore: %v", err)
 	}

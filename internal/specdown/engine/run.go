@@ -139,7 +139,7 @@ func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts R
 
 // ModelExplorer runs Alloy models and returns instance-level results.
 type ModelExplorer interface {
-	ExploreDocument(plan core.DocumentPlan) ([]alloy.ExploreResult, error)
+	ExploreDocument(plan core.DocumentPlan, opts alloy.ExploreOptions) ([]alloy.ExploreModelResult, error)
 }
 
 // ModelDumper can write model artifacts without running verification.
@@ -148,8 +148,8 @@ type ModelDumper interface {
 }
 
 // ExploreModels runs Alloy models from all discovered documents and returns
-// instance-level results grouped by document path.
-func ExploreModels(baseDir string, cfg config.Config, explorer ModelExplorer, filter string) (map[string][]alloy.ExploreResult, error) {
+// per-model results grouped by document path.
+func ExploreModels(baseDir string, cfg config.Config, explorer ModelExplorer, filter string, opts alloy.ExploreOptions) (map[string][]alloy.ExploreModelResult, error) {
 	_, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return nil, err
@@ -164,10 +164,10 @@ func ExploreModels(baseDir string, cfg config.Config, explorer ModelExplorer, fi
 		plan = filterPlanByDoc(plan, filter)
 	}
 
-	results := make(map[string][]alloy.ExploreResult)
+	results := make(map[string][]alloy.ExploreModelResult)
 	for i := range plan.Documents {
 		docPath := plan.Documents[i].Document.RelativeTo
-		explored, err := explorer.ExploreDocument(plan.Documents[i])
+		explored, err := explorer.ExploreDocument(plan.Documents[i], opts)
 		if err != nil {
 			return nil, err
 		}
