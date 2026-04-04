@@ -49,8 +49,10 @@ type RunOptions struct {
 	DryRun      bool
 	Progress    ProgressFunc
 	MaxFailures int // 0 means unlimited
-	NoSetup     bool
-	NoTeardown  bool
+	NoSetup      bool
+	NoTeardown   bool
+	OnlySetup    bool
+	OnlyTeardown bool
 }
 
 type adapterRegistry struct {
@@ -85,6 +87,10 @@ func runShellCommand(baseDir, command string) error {
 
 //nolint:gocognit // top-level orchestration with setup/teardown/trace phases
 func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
+	if opts.OnlySetup || opts.OnlyTeardown {
+		return runOnlyLifecycle(baseDir, cfg, opts)
+	}
+
 	if cfg.Setup != "" && !opts.NoSetup {
 		if err := runShellCommand(baseDir, cfg.Setup); err != nil {
 			return core.Report{}, fmt.Errorf("setup command failed: %w", err)
@@ -637,6 +643,27 @@ func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 		Edges:           edges,
 		TransitiveEdges: transitive,
 	}
+}
+
+// runOnlyLifecycle runs only setup and/or teardown commands without executing specs.
+func runOnlyLifecycle(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
+	if opts.OnlySetup {
+		if cfg.Setup == "" {
+			return core.Report{}, fmt.Errorf("no setup command configured in specdown.json")
+		}
+		if err := runShellCommand(baseDir, cfg.Setup); err != nil {
+			return core.Report{}, fmt.Errorf("setup command failed: %w", err)
+		}
+	}
+	if opts.OnlyTeardown {
+		if cfg.Teardown == "" {
+			return core.Report{}, fmt.Errorf("no teardown command configured in specdown.json")
+		}
+		if err := runShellCommand(baseDir, cfg.Teardown); err != nil {
+			return core.Report{}, fmt.Errorf("teardown command failed: %w", err)
+		}
+	}
+	return core.Report{GeneratedAt: time.Now()}, nil
 }
 
 func accumulateSummary(summary *core.Summary, result core.DocumentResult) {

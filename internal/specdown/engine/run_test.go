@@ -796,6 +796,64 @@ func TestRunNoTeardownSkipsTeardownCommand(t *testing.T) {
 	}
 }
 
+func TestRunOnlySetupRunsSetupAndSkipsSpecs(t *testing.T) {
+	source := "# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
+	root := writeSpecFile(t, "only-setup.spec.md", source)
+	marker := filepath.Join(root, "setup-ran")
+
+	cfg := helperAdapterConfig()
+	cfg.Setup = "touch " + marker
+
+	report, err := Run(root, cfg, noopModelRunner{}, RunOptions{OnlySetup: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// Setup should have run
+	if _, err := os.Stat(marker); os.IsNotExist(err) {
+		t.Fatal("expected setup marker to exist")
+	}
+	// No specs should have been executed
+	if report.Summary.CasesTotal != 0 {
+		t.Fatalf("expected 0 cases (specs skipped), got %d", report.Summary.CasesTotal)
+	}
+}
+
+func TestRunOnlyTeardownRunsTeardownAndSkipsSpecs(t *testing.T) {
+	source := "# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
+	root := writeSpecFile(t, "only-teardown.spec.md", source)
+	marker := filepath.Join(root, "teardown-ran")
+
+	cfg := helperAdapterConfig()
+	cfg.Teardown = "touch " + marker
+
+	report, err := Run(root, cfg, noopModelRunner{}, RunOptions{OnlyTeardown: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if _, err := os.Stat(marker); os.IsNotExist(err) {
+		t.Fatal("expected teardown marker to exist")
+	}
+	if report.Summary.CasesTotal != 0 {
+		t.Fatalf("expected 0 cases (specs skipped), got %d", report.Summary.CasesTotal)
+	}
+}
+
+func TestRunOnlySetupErrorsWhenNoSetupConfigured(t *testing.T) {
+	source := "# T\n\n## Run\n\n```run:board -> $b\ncreate-board\n```\n"
+	root := writeSpecFile(t, "no-setup-cfg.spec.md", source)
+
+	cfg := helperAdapterConfig()
+	// cfg.Setup is empty
+
+	_, err := Run(root, cfg, noopModelRunner{}, RunOptions{OnlySetup: true})
+	if err == nil {
+		t.Fatal("expected error when no setup command configured")
+	}
+	if !strings.Contains(err.Error(), "no setup command") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // writeSpecFile creates a temp dir, writes a spec file, and generates the entry file.
 func writeSpecFile(t *testing.T, name, source string) (root string) {
 	t.Helper()

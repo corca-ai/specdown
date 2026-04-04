@@ -82,6 +82,8 @@ echo "$help" | grep -q "alloy dump"
 | `-max-failures` | `0` | Stop after N unexpected failures (0 = unlimited) |
 | `-no-setup` | `false` | Skip the global setup command |
 | `-no-teardown` | `false` | Skip the global teardown command |
+| `-setup` | `false` | Run only the global setup command, then exit |
+| `-teardown` | `false` | Run only the global teardown command, then exit |
 
 ### Trace Flags
 

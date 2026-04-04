@@ -117,6 +117,8 @@ func run(args []string) error {
 	maxFailures := fs.Int("max-failures", 0, "Stop after N unexpected failures (0 = unlimited)")
 	noSetup := fs.Bool("no-setup", false, "Skip the global setup command")
 	noTeardown := fs.Bool("no-teardown", false, "Skip the global teardown command")
+	onlySetup := fs.Bool("setup", false, "Run only the global setup command, then exit")
+	onlyTeardown := fs.Bool("teardown", false, "Run only the global teardown command, then exit")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -135,8 +137,10 @@ func run(args []string) error {
 		Jobs:        *jobs,
 		DryRun:      *dryRun,
 		MaxFailures: *maxFailures,
-		NoSetup:     *noSetup,
-		NoTeardown:  *noTeardown,
+		NoSetup:      *noSetup,
+		NoTeardown:   *noTeardown,
+		OnlySetup:    *onlySetup,
+		OnlyTeardown: *onlyTeardown,
 	}
 	if !*quiet {
 		opts.Progress = stdoutProgress()
