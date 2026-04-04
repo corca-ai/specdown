@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -395,15 +396,101 @@ func alloyCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "Usage: specdown alloy <subcommand>")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
-		fmt.Fprintln(os.Stderr, "  dump  Export embedded Alloy models as .als files")
+		fmt.Fprintln(os.Stderr, "  explore  Run Alloy models and show instances")
+		fmt.Fprintln(os.Stderr, "  dump     Export embedded Alloy models as .als files")
 		return nil
 	}
 
 	switch args[0] {
 	case "dump":
 		return alloyDump(args[1:])
+	case "explore":
+		return alloyExplore(args[1:])
 	default:
 		return fmt.Errorf("unknown alloy subcommand %q\nhint: run 'specdown alloy --help' for available subcommands", args[0])
+	}
+}
+
+func alloyExplore(args []string) error {
+	fs := flag.NewFlagSet("alloy explore", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: specdown alloy explore [flags]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Run embedded Alloy models and display instance-level results.")
+		fmt.Fprintln(os.Stderr, "Only Alloy commands are executed — shell blocks and check tables are skipped.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+	}
+	configPath := fs.String("config", "specdown.json", "Path to specdown.json")
+	filter := fs.String("filter", "", "Filter by spec file path substring")
+	modelFilter := fs.String("model", "", "Filter by model name")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+
+	cfg, configDir, err := loadConfig(fs, *configPath)
+	if err != nil {
+		return err
+	}
+
+	resultsByDoc, err := engine.ExploreModels(configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, *filter)
+	if err != nil {
+		return err
+	}
+
+	if len(resultsByDoc) == 0 {
+		fmt.Println("no Alloy models found")
+		return nil
+	}
+
+	printExploreResults(resultsByDoc, *modelFilter)
+	return nil
+}
+
+func printExploreResults(resultsByDoc map[string][]alloy.ExploreResult, modelFilter string) {
+	var docPaths []string
+	for p := range resultsByDoc {
+		docPaths = append(docPaths, p)
+	}
+	sort.Strings(docPaths)
+
+	for _, docPath := range docPaths {
+		fmt.Printf("spec: %s\n", docPath)
+		printDocExploreResults(resultsByDoc[docPath], modelFilter)
+		fmt.Println()
+	}
+}
+
+func printDocExploreResults(results []alloy.ExploreResult, modelFilter string) {
+	modelOrder := make([]string, 0)
+	byModel := make(map[string][]alloy.ExploreResult)
+	for _, r := range results {
+		if modelFilter != "" && r.Model != modelFilter {
+			continue
+		}
+		if _, seen := byModel[r.Model]; !seen {
+			modelOrder = append(modelOrder, r.Model)
+		}
+		byModel[r.Model] = append(byModel[r.Model], r)
+	}
+
+	for _, model := range modelOrder {
+		fmt.Printf("\n  model: %s\n", model)
+		for _, r := range byModel[model] {
+			tag := "✓"
+			if !r.Ok {
+				tag = "✗"
+			}
+			fmt.Printf("\n    %s %s\n", tag, r.Command)
+			for _, line := range strings.Split(r.Summary, "\n") {
+				fmt.Printf("      %s\n", line)
+			}
+		}
 	}
 }
 
@@ -450,6 +537,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  run             Execute specs and generate HTML/JSON reports")
 	fmt.Fprintln(os.Stderr, "  trace           Validate trace graph and output results")
 	fmt.Fprintln(os.Stderr, "  install skills  Install Claude Code skills for this project")
+	fmt.Fprintln(os.Stderr, "  alloy explore   Run Alloy models and show instances")
 	fmt.Fprintln(os.Stderr, "  alloy dump      Export embedded Alloy models as .als files")
 	fmt.Fprintln(os.Stderr, "  version         Print the specdown version")
 	fmt.Fprintln(os.Stderr, "")
@@ -550,6 +638,7 @@ func installSkillsCmd(args []string) error {
 		{"best-practices.md", specdown.SkillBestPractices},
 		{"validation.md", specdown.SkillValidation},
 		{"traceability.md", specdown.SkillTraceability},
+		{"guide-alloy-explore.md", specdown.SkillGuideAlloyExplore},
 		{"workflow-new-project.md", specdown.SkillWorkflowNewProject},
 		{"workflow-adopt.md", specdown.SkillWorkflowAdopt},
 		{"workflow-evolve.md", specdown.SkillWorkflowEvolve},

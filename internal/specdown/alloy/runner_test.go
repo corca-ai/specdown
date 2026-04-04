@@ -474,49 +474,6 @@ func TestEvaluateCheckCounterexample(t *testing.T) {
 	testutil.True(t, !filepath.IsAbs(result.Alloy.CounterexamplePath))
 }
 
-// --- summarizeCounterexample ---
-
-func TestSummarizeCounterexample(t *testing.T) {
-	t.Run("no solution", func(t *testing.T) {
-		testutil.Equal(t, summarizeCounterexample(receiptCommand{}), "counterexample found")
-	})
-
-	t.Run("empty instances", func(t *testing.T) {
-		cmd := receiptCommand{Solution: []receiptSolution{{}}}
-		testutil.Equal(t, summarizeCounterexample(cmd), "counterexample found")
-	})
-
-	t.Run("malformed JSON", func(t *testing.T) {
-		cmd := receiptCommand{
-			Solution: []receiptSolution{
-				{Instances: []json.RawMessage{[]byte("{invalid")}},
-			},
-		}
-		result := summarizeCounterexample(cmd)
-		testutil.Contains(t, result, "unable to parse instance")
-	})
-
-	t.Run("valid instance", func(t *testing.T) {
-		instance := `{"values":{"Atom":{"rel":[["v1","v2"]]}}}`
-		cmd := receiptCommand{
-			Solution: []receiptSolution{
-				{Instances: []json.RawMessage{[]byte(instance)}},
-			},
-		}
-		result := summarizeCounterexample(cmd)
-		testutil.Contains(t, result, "Atom.rel")
-		testutil.Contains(t, result, "v1, v2")
-	})
-
-	t.Run("empty values", func(t *testing.T) {
-		cmd := receiptCommand{
-			Solution: []receiptSolution{
-				{Instances: []json.RawMessage{[]byte(`{"values":{}}`)}},
-			},
-		}
-		testutil.Equal(t, summarizeCounterexample(cmd), "counterexample found")
-	})
-}
 
 // --- writeCounterexample ---
 
@@ -736,6 +693,168 @@ func TestBundleContainsCommand(t *testing.T) {
 	lines := []string{"module m", "  check a1 for 5  ", "sig A {}"}
 	testutil.True(t, bundleContainsCommand(lines, "check a1 for 5"))
 	testutil.False(t, bundleContainsCommand(lines, "check a2 for 5"))
+}
+
+// --- evaluateExplore ---
+
+func TestEvaluateExploreRunWithInstances(t *testing.T) {
+	instance := `{"values":{"User":{"name":[["Alice"]]}}}`
+	cmd := receiptCommand{
+		Type:   "run",
+		Source: "run sanityCheck for 5",
+		Solution: []receiptSolution{
+			{Instances: []json.RawMessage{[]byte(instance)}},
+		},
+	}
+	result := evaluateExplore("access", "run sanityCheck for 5", cmd)
+	testutil.Equal(t, result.Model, "access")
+	testutil.Equal(t, result.Command, "run sanityCheck for 5")
+	testutil.True(t, result.IsRun)
+	testutil.True(t, result.Ok)
+	testutil.Contains(t, result.Summary, "User.name = Alice")
+}
+
+func TestEvaluateExploreRunNoInstances(t *testing.T) {
+	cmd := receiptCommand{
+		Type:     "run",
+		Source:   "run sanityCheck for 5",
+		Solution: []receiptSolution{},
+	}
+	result := evaluateExplore("access", "run sanityCheck for 5", cmd)
+	testutil.True(t, result.IsRun)
+	testutil.False(t, result.Ok)
+	testutil.Contains(t, result.Summary, "no instances found")
+}
+
+func TestEvaluateExploreCheckNoCounterexample(t *testing.T) {
+	cmd := receiptCommand{
+		Type:     "check",
+		Source:   "check noOrphans for 5",
+		Solution: []receiptSolution{},
+	}
+	result := evaluateExplore("access", "check noOrphans for 5", cmd)
+	testutil.False(t, result.IsRun)
+	testutil.True(t, result.Ok)
+	testutil.Contains(t, result.Summary, "assertion holds")
+}
+
+func TestEvaluateExploreCheckWithCounterexample(t *testing.T) {
+	instance := `{"values":{"User":{"name":[["Bob"]]}}}`
+	cmd := receiptCommand{
+		Type:   "check",
+		Source: "check noOrphans for 5",
+		Solution: []receiptSolution{
+			{Instances: []json.RawMessage{[]byte(instance)}},
+		},
+	}
+	result := evaluateExplore("access", "check noOrphans for 5", cmd)
+	testutil.False(t, result.IsRun)
+	testutil.False(t, result.Ok)
+	testutil.Contains(t, result.Summary, "counterexample found")
+	testutil.Contains(t, result.Summary, "User.name = Bob")
+}
+
+// --- summarizeInstance ---
+
+func TestSummarizeInstance(t *testing.T) {
+	t.Run("no solution", func(t *testing.T) {
+		testutil.Equal(t, summarizeInstance(receiptCommand{}), "(empty)")
+	})
+
+	t.Run("empty instances", func(t *testing.T) {
+		cmd := receiptCommand{Solution: []receiptSolution{{}}}
+		testutil.Equal(t, summarizeInstance(cmd), "(empty)")
+	})
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte("{invalid")}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, "unable to parse instance")
+	})
+
+	t.Run("valid instance", func(t *testing.T) {
+		instance := `{"values":{"Atom":{"rel":[["v1","v2"]]}}}`
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(instance)}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, "Atom.rel = v1, v2")
+	})
+
+	t.Run("empty values", func(t *testing.T) {
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(`{"values":{}}`)}},
+			},
+		}
+		testutil.Equal(t, summarizeInstance(cmd), "(empty instance)")
+	})
+
+	t.Run("atom without relations shown", func(t *testing.T) {
+		instance := `{"values":{"Green$0":{}}}`
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(instance)}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, "Green$0")
+	})
+
+	t.Run("atom with empty relation shown", func(t *testing.T) {
+		instance := `{"values":{"Light$0":{"color":[]}}}`
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(instance)}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		testutil.Contains(t, result, "Light$0")
+		testutil.NotContains(t, result, "color")
+	})
+
+	t.Run("multiple relations sorted", func(t *testing.T) {
+		instance := `{"values":{"B":{"x":[["1"]]},"A":{"y":[["2"]]}}}`
+		cmd := receiptCommand{
+			Solution: []receiptSolution{
+				{Instances: []json.RawMessage{[]byte(instance)}},
+			},
+		}
+		result := summarizeInstance(cmd)
+		// Should be sorted: A.y before B.x
+		lines := strings.Split(result, "\n")
+		testutil.True(t, len(lines) == 2)
+		testutil.Contains(t, lines[0], "A.y")
+		testutil.Contains(t, lines[1], "B.x")
+	})
+}
+
+// --- ExploreDocument ---
+
+func TestExploreDocumentNoModels(t *testing.T) {
+	runner := Runner{BaseDir: t.TempDir()}
+	results, err := runner.ExploreDocument(core.DocumentPlan{})
+	testutil.NilErr(t, err)
+	testutil.Len(t, results, 0)
+}
+
+func TestExploreDocumentNoJava(t *testing.T) {
+	t.Setenv("PATH", "")
+	runner := Runner{BaseDir: t.TempDir()}
+	_, err := runner.ExploreDocument(core.DocumentPlan{
+		Document: core.Document{RelativeTo: "test.md"},
+		AlloyModels: []core.AlloyModelSpec{
+			{Name: "m", Fragments: []core.AlloyFragmentSpec{{Model: "m", HeadingPath: []string{"T"}, Source: "module m"}}},
+		},
+	})
+	testutil.WantErr(t, err)
+	testutil.Contains(t, err.Error(), "java not found")
 }
 
 // --- bundleFileName ---

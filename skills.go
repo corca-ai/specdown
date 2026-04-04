@@ -35,6 +35,9 @@ var SkillValidation string
 //go:embed specs/traceability.spec.md
 var SkillTraceability string
 
+//go:embed docs/guide-alloy-explore.md
+var SkillGuideAlloyExplore string
+
 //go:embed docs/workflow-new-project.md
 var SkillWorkflowNewProject string
 

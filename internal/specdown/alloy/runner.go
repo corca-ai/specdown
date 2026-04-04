@@ -70,6 +70,176 @@ type receiptSolution struct {
 	Instances []json.RawMessage `json:"instances"`
 }
 
+// ExploreResult holds the instance-level output of a single Alloy command
+// within a model, as opposed to the pass/fail CaseResult used by RunDocument.
+type ExploreResult struct {
+	Model   string
+	Command string // e.g. "run sanityCheck for 5" or "check noOrphans for 5"
+	IsRun   bool
+	Ok      bool   // true if the command succeeded (run found instances, check found no counterexample)
+	Summary string // human-readable instance or counterexample text
+}
+
+// ExploreDocument runs all Alloy models in a document plan and returns
+// instance-level results. Unlike RunDocument, it does not produce CaseResults
+// and does not require alloy cases in the plan — it discovers run/check
+// commands directly from the model fragments.
+func (r Runner) ExploreDocument(plan core.DocumentPlan) ([]ExploreResult, error) {
+	if len(plan.AlloyModels) == 0 {
+		return nil, nil
+	}
+
+	javaPath, _ := exec.LookPath("java")
+	if javaPath == "" {
+		return nil, fmt.Errorf("java not found in PATH; install a JRE to run Alloy models")
+	}
+
+	jarPath, err := r.ensureAlloyJar()
+	if err != nil {
+		return nil, err
+	}
+
+	var results []ExploreResult
+	for _, model := range plan.AlloyModels {
+		modelResults, err := r.exploreModel(javaPath, jarPath, plan.Document.RelativeTo, model)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, modelResults...)
+	}
+	return results, nil
+}
+
+func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.AlloyModelSpec) ([]ExploreResult, error) {
+	bundle, err := r.writeBundle(documentPath, model, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), core.Slug(bundle.Model)+"-output")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create alloy output dir: %w", err)
+	}
+
+	cmd := exec.Command(javaPath, "-jar", jarPath, "exec", "-f", "-o", outputDir, bundle.AbsolutePath)
+	cmd.Dir = r.BaseDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		message := strings.TrimSpace(string(output))
+		if message == "" {
+			message = err.Error()
+		}
+		location, ok := locateAlloyFailure(bundle.LineRefs, message)
+		return nil, fmt.Errorf("alloy error in model %q: %s", model.Name, annotateAlloyFailure(message, location, ok))
+	}
+
+	commandResults, err := parseReceipt(filepath.Join(outputDir, "receipt.json"))
+	if err != nil {
+		return nil, err
+	}
+
+	var results []ExploreResult
+	for source, rcmd := range commandResults {
+		results = append(results, evaluateExplore(model.Name, source, rcmd))
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Command < results[j].Command
+	})
+	return results, nil
+}
+
+func evaluateExplore(modelName, source string, command receiptCommand) ExploreResult {
+	isRun := command.Type == "run"
+	hasInstances := len(command.Solution) > 0 && len(command.Solution[0].Instances) > 0
+
+	if isRun {
+		if hasInstances {
+			summary := summarizeInstance(command)
+			return ExploreResult{
+				Model:   modelName,
+				Command: source,
+				IsRun:   true,
+				Ok:      true,
+				Summary: summary,
+			}
+		}
+		return ExploreResult{
+			Model:   modelName,
+			Command: source,
+			IsRun:   true,
+			Ok:      false,
+			Summary: "no instances found — model may be inconsistent",
+		}
+	}
+
+	// check command
+	if !hasInstances {
+		return ExploreResult{
+			Model:   modelName,
+			Command: source,
+			IsRun:   false,
+			Ok:      true,
+			Summary: "no counterexample — assertion holds within scope",
+		}
+	}
+	summary := summarizeInstance(command)
+	return ExploreResult{
+		Model:   modelName,
+		Command: source,
+		IsRun:   false,
+		Ok:      false,
+		Summary: "counterexample found:\n" + summary,
+	}
+}
+
+// summarizeInstance formats the first instance from a receipt command as
+// human-readable text. Used for both run instances and check counterexamples.
+func summarizeInstance(command receiptCommand) string {
+	if len(command.Solution) == 0 || len(command.Solution[0].Instances) == 0 {
+		return "(empty)"
+	}
+
+	var instance struct {
+		Values map[string]map[string][][]string `json:"values"`
+	}
+	if err := json.Unmarshal(command.Solution[0].Instances[0], &instance); err != nil {
+		return "(unable to parse instance: " + err.Error() + ")"
+	}
+
+	lines := formatInstanceValues(instance.Values)
+	if len(lines) == 0 {
+		return "(empty instance)"
+	}
+
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
+}
+
+func formatInstanceValues(values map[string]map[string][][]string) []string {
+	var lines []string
+	for atom, relations := range values {
+		lines = append(lines, formatAtom(atom, relations)...)
+	}
+	return lines
+}
+
+func formatAtom(atom string, relations map[string][][]string) []string {
+	if len(relations) == 0 {
+		return []string{atom}
+	}
+	var lines []string
+	for rel, tuples := range relations {
+		for _, tuple := range tuples {
+			lines = append(lines, atom+"."+rel+" = "+strings.Join(tuple, ", "))
+		}
+	}
+	if len(lines) == 0 {
+		return []string{atom}
+	}
+	return lines
+}
+
+
 func (r Runner) DumpModels(plan core.DocumentPlan) ([]string, error) {
 	if len(plan.AlloyModels) == 0 {
 		return nil, nil
@@ -313,9 +483,9 @@ func (r Runner) evaluateCheck(check core.CaseSpec, bundle modelBundle, commandRe
 	if err != nil {
 		return core.CaseResult{}, err
 	}
-	summary := summarizeCounterexample(command)
+	summary := summarizeInstance(command)
 	message := "counterexample for " + strconvQuote(check.Alloy.Assertion)
-	if summary != "" && summary != "counterexample found" {
+	if summary != "" {
 		message += "\n" + summary
 	}
 	base.Status = core.StatusFailed
@@ -418,41 +588,7 @@ func writeCounterexample(baseDir string, check core.CaseSpec, command receiptCom
 	return relativePath, nil
 }
 
-func summarizeCounterexample(command receiptCommand) string {
-	if len(command.Solution) == 0 {
-		return "counterexample found"
-	}
-	solution := command.Solution[0]
-	if len(solution.Instances) == 0 {
-		return "counterexample found"
-	}
 
-	var instance struct {
-		Values map[string]map[string][][]string `json:"values"`
-	}
-	if err := json.Unmarshal(solution.Instances[0], &instance); err != nil {
-		return "counterexample found (unable to parse instance: " + err.Error() + ")"
-	}
-
-	var lines []string
-	for atom, relations := range instance.Values {
-		if len(relations) == 0 {
-			continue
-		}
-		for rel, tuples := range relations {
-			for _, tuple := range tuples {
-				lines = append(lines, atom+"."+rel+" = "+strings.Join(tuple, ", "))
-			}
-		}
-	}
-
-	if len(lines) == 0 {
-		return "counterexample found"
-	}
-
-	sort.Strings(lines)
-	return strings.Join(lines, "\n")
-}
 
 func alloyCacheDir() (string, error) {
 	cacheDir := os.Getenv("XDG_CACHE_HOME")

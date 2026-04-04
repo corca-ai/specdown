@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
+	"github.com/corca-ai/specdown/internal/specdown/alloy"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
@@ -1327,6 +1328,114 @@ func parseHelperExists(value string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// --- ExploreModels ---
+
+type fakeModelExplorer struct {
+	results map[string][]alloy.ExploreResult
+}
+
+func (f fakeModelExplorer) ExploreDocument(plan core.DocumentPlan) ([]alloy.ExploreResult, error) {
+	return f.results[plan.Document.RelativeTo], nil
+}
+
+func TestExploreModelsReturnsResultsByDoc(t *testing.T) {
+	source := strings.Join([]string{
+		"# Test",
+		"",
+		"## Model",
+		"",
+		"```alloy:model(m)",
+		"module m",
+		"sig A {}",
+		"pred sanityCheck {}",
+		"run sanityCheck {} for 5",
+		"```",
+		"",
+	}, "\n")
+	root := writeSpecFile(t, "explore.spec.md", source)
+
+	explorer := fakeModelExplorer{
+		results: map[string][]alloy.ExploreResult{
+			"specs/explore.spec.md": {
+				{Model: "m", Command: "run sanityCheck for 5", IsRun: true, Ok: true, Summary: "A = {A0}"},
+			},
+		},
+	}
+
+	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "")
+	if err != nil {
+		t.Fatalf("explore: %v", err)
+	}
+	if len(resultsByDoc) != 1 {
+		t.Fatalf("expected 1 doc, got %d", len(resultsByDoc))
+	}
+	results := resultsByDoc["specs/explore.spec.md"]
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Model != "m" {
+		t.Fatalf("expected model 'm', got %q", results[0].Model)
+	}
+}
+
+func TestExploreModelsFilterByDoc(t *testing.T) {
+	source := strings.Join([]string{
+		"# Test",
+		"",
+		"## Model",
+		"",
+		"```alloy:model(m)",
+		"module m",
+		"sig A {}",
+		"pred sanityCheck {}",
+		"run sanityCheck {} for 5",
+		"```",
+		"",
+	}, "\n")
+	root := writeSpecFile(t, "explore-filter.spec.md", source)
+
+	explorer := fakeModelExplorer{
+		results: map[string][]alloy.ExploreResult{
+			"specs/explore-filter.spec.md": {
+				{Model: "m", Command: "run sanityCheck for 5", IsRun: true, Ok: true, Summary: "A = {A0}"},
+			},
+		},
+	}
+
+	// Filter that doesn't match
+	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "nonexistent")
+	if err != nil {
+		t.Fatalf("explore: %v", err)
+	}
+	if len(resultsByDoc) != 0 {
+		t.Fatalf("expected 0 docs with non-matching filter, got %d", len(resultsByDoc))
+	}
+
+	// Filter that matches
+	resultsByDoc, err = ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "explore-filter")
+	if err != nil {
+		t.Fatalf("explore: %v", err)
+	}
+	if len(resultsByDoc) != 1 {
+		t.Fatalf("expected 1 doc with matching filter, got %d", len(resultsByDoc))
+	}
+}
+
+func TestExploreModelsNoModels(t *testing.T) {
+	source := "# Empty\n\n## No models\n\nJust prose.\n"
+	root := writeSpecFile(t, "no-models.spec.md", source)
+
+	explorer := fakeModelExplorer{results: map[string][]alloy.ExploreResult{}}
+
+	resultsByDoc, err := ExploreModels(root, config.Config{Entry: "specs/index.spec.md"}, explorer, "")
+	if err != nil {
+		t.Fatalf("explore: %v", err)
+	}
+	if len(resultsByDoc) != 0 {
+		t.Fatalf("expected 0 docs, got %d", len(resultsByDoc))
 	}
 }
 

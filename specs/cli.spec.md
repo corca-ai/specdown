@@ -192,6 +192,7 @@ alloy.md
 best-practices.md
 cli.md
 config.md
+guide-alloy-explore.md
 internals.md
 overview.md
 report.md
