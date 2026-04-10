@@ -48,7 +48,7 @@ jobs:
           cp -r specs/report _site
           cp specs/report.json _site/report.json
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         if: github.ref == 'refs/heads/main'
 
   deploy:
