@@ -102,3 +102,5 @@ git push origin v0.8.0
 ```
 
 Configuration is in `.goreleaser.yaml`.
+The Homebrew tap formula is published to `corca-ai/homebrew-tap` under
+`Formula/`.

@@ -69,6 +69,7 @@ brews:
       owner: corca-ai
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
     homepage: https://github.com/corca-ai/specdown
     description: Executable specifications in Markdown
     license: MIT
