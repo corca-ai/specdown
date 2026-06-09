@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -203,11 +204,53 @@ func DiscoverFromEntry(baseDir, entryPath string, ignorePrefixes []string) (stri
 		}
 	}
 
+	cs.warnings = append(cs.warnings, detectExtensionCollisions(cs.docs)...)
 	if len(cs.warnings) > 0 {
 		cs.docs[0].Warnings = append(cs.docs[0].Warnings, cs.warnings...)
 	}
 
 	return entryDoc.Title, cs.docs, nil
+}
+
+// htmlBase strips the .spec.md or .md suffix — the key the HTML reporter
+// collapses documents onto. Two documents sharing an htmlBase render to the
+// same report page.
+func htmlBase(relPath string) string {
+	if strings.HasSuffix(relPath, ".spec.md") {
+		return strings.TrimSuffix(relPath, ".spec.md")
+	}
+	return strings.TrimSuffix(relPath, ".md")
+}
+
+// detectExtensionCollisions warns (non-fatally) when a .md and a .spec.md
+// document share a directory and basename: the HTML report collapses them onto
+// one page, so one silently overwrites the other. Use one extension per page;
+// .spec.md is legacy, prefer .md.
+func detectExtensionCollisions(docs []Document) []string {
+	byBase := make(map[string][]string, len(docs))
+	for i := range docs {
+		base := htmlBase(docs[i].RelativeTo)
+		byBase[base] = append(byBase[base], docs[i].RelativeTo)
+	}
+
+	bases := make([]string, 0, len(byBase))
+	for base := range byBase {
+		bases = append(bases, base)
+	}
+	sort.Strings(bases)
+
+	var warnings []string
+	for _, base := range bases {
+		paths := byBase[base]
+		if len(paths) < 2 {
+			continue
+		}
+		sort.Strings(paths)
+		warnings = append(warnings, fmt.Sprintf(
+			"extension collision: %s render to the same report page %s.html; use one extension per page (.spec.md is legacy, prefer .md)",
+			strings.Join(paths, " and "), base))
+	}
+	return warnings
 }
 
 // isInsideDir checks if a cleaned path is inside the given directory.

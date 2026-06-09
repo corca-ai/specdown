@@ -37,8 +37,8 @@ a new reporter or a new adapter can be added without changing the core.
 
 ## Core and Adapter Boundary
 
-Core parses [depends::spec documents](syntax.spec.md) and produces an execution plan.
-Adapters execute it via the [depends::adapter protocol](adapter-protocol.spec.md).
+Core parses [depends::spec documents](syntax.md) and produces an execution plan.
+Adapters execute it via the [depends::adapter protocol](adapter-protocol.md).
 
 Core is responsible for:
 
@@ -106,17 +106,17 @@ Two built-in reporters are supported:
 - **html** — writes a multi-page HTML site with a global table of contents, per-document pages, shared CSS/JS assets, and optional trace graph visualization.
 - **json** — writes the full `Report` struct as indented JSON. The report includes a `schemaVersion` field (currently `2`).
 
-Reporter selection is configured in [depends::specdown.json](config.spec.md) via the `reporters` array. Each entry specifies a `builtin` name and an `outFile` path.
+Reporter selection is configured in [depends::specdown.json](config.md) via the `reporters` array. Each entry specifies a `builtin` name and an `outFile` path.
 
 The JSON report is machine-readable and can be verified:
 
 ```run:shell
 # Create a minimal project and run it with a JSON reporter
 mkdir -p reporter-json/specs
-printf '# T\n\n- [S](s.spec.md)\n' > reporter-json/specs/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > reporter-json/specs/index.md
 printf '# S\n\nProse.\n' > reporter-json/specs/s.spec.md
 cat <<'CFG' > reporter-json/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"reporters":[{"builtin":"json","outFile":"out.json"}]}
+{"entry":"specs/index.md","adapters":[],"reporters":[{"builtin":"json","outFile":"out.json"}]}
 CFG
 specdown run -config reporter-json/specdown.json -quiet 2>&1 | tail -1
 ```

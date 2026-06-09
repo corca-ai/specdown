@@ -13,7 +13,7 @@ traces back to a theme? That no test is orphaned?
 
 Traceability answers these questions. Documents are nodes; named,
 typed links between them are edges. Configure edge types and
-cardinality constraints in [depends::specdown.json](config.spec.md),
+cardinality constraints in [depends::specdown.json](config.md),
 and specdown checks them automatically.
 
 Edges follow UML dependency direction: `from` is the dependent,
@@ -173,10 +173,10 @@ the config file location. All `.md` files are included unless they match an
 # Discovery finds all .md files with types
 mkdir -p trace/disc
 cat <<'CFG' > trace/disc/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["goal","feature"],"edges":{"covers":{"from":"goal","to":"feature"}}}}
+{"entry":"specs/index.md","adapters":[],"trace":{"types":["goal","feature"],"edges":{"covers":{"from":"goal","to":"feature"}}}}
 CFG
 mkdir -p trace/disc/specs trace/disc/goals trace/disc/features
-printf '# Index\n' > trace/disc/specs/index.spec.md
+printf '# Index\n' > trace/disc/specs/index.md
 printf -- '---\ntype: goal\n---\n# G1\n\n[covers::F1](../features/f1.md)\n' > trace/disc/goals/g1.md
 printf -- '---\ntype: feature\n---\n# F1\n' > trace/disc/features/f1.md
 specdown trace -config trace/disc/specdown.json 2>&1 | grep -c '"type"'
@@ -213,10 +213,10 @@ Here is an example — a feature document using an undeclared edge name:
 # Unknown edge name is reported
 mkdir -p trace/unknown-edge
 cat <<'CFG' > trace/unknown-edge/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"covers":{"from":"feature","to":"feature"}}}}
+{"entry":"specs/index.md","adapters":[],"trace":{"types":["feature"],"edges":{"covers":{"from":"feature","to":"feature"}}}}
 CFG
 mkdir -p trace/unknown-edge/specs
-printf '# Index\n' > trace/unknown-edge/specs/index.spec.md
+printf '# Index\n' > trace/unknown-edge/specs/index.md
 printf -- '---\ntype: feature\n---\n# F1\n\n[bogus::something](f2.md)\n' > trace/unknown-edge/f1.md
 printf -- '---\ntype: feature\n---\n# F2\n' > trace/unknown-edge/f2.md
 ```
@@ -237,10 +237,10 @@ must satisfy both source-side and target-side multiplicity.
 # Cardinality violation: feature with no outgoing test links
 mkdir -p trace/card
 cat <<'CFG' > trace/card/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
+{"entry":"specs/index.md","adapters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
 CFG
 mkdir -p trace/card/specs
-printf '# Index\n' > trace/card/specs/index.spec.md
+printf '# Index\n' > trace/card/specs/index.md
 printf -- '---\ntype: feature\n---\n# F\n' > trace/card/f.md
 ```
 
@@ -262,10 +262,10 @@ Edges with `acyclic: true` reject cycles.
 # Cycle detection with acyclic edge
 mkdir -p trace/cycle
 cat <<'CFG' > trace/cycle/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature","acyclic":true}}}}
+{"entry":"specs/index.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature","acyclic":true}}}}
 CFG
 mkdir -p trace/cycle/specs
-printf '# Index\n' > trace/cycle/specs/index.spec.md
+printf '# Index\n' > trace/cycle/specs/index.md
 printf -- '---\ntype: feature\n---\n# A\n\n[requires::B](b.md)\n' > trace/cycle/a.md
 printf -- '---\ntype: feature\n---\n# B\n\n[requires::A](a.md)\n' > trace/cycle/b.md
 ```
@@ -286,10 +286,10 @@ checks — only direct edges satisfy `count` constraints.
 # Transitive closure adds indirect edges
 mkdir -p trace/trans
 cat <<'CFG' > trace/trans/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature","transitive":true}}}}
+{"entry":"specs/index.md","adapters":[],"trace":{"types":["feature"],"edges":{"requires":{"from":"feature","to":"feature","transitive":true}}}}
 CFG
 mkdir -p trace/trans/specs
-printf '# Index\n' > trace/trans/specs/index.spec.md
+printf '# Index\n' > trace/trans/specs/index.md
 printf -- '---\ntype: feature\n---\n# A\n\n[requires::B](b.md)\n' > trace/trans/a.md
 printf -- '---\ntype: feature\n---\n# B\n\n[requires::C](c.md)\n' > trace/trans/b.md
 printf -- '---\ntype: feature\n---\n# C\n' > trace/trans/c.md
@@ -347,10 +347,10 @@ A trace error does not prevent spec execution.
 # specdown run reports trace errors
 mkdir -p trace/run-int
 cat <<'CFG' > trace/run-int/specdown.json
-{"entry":"specs/index.spec.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
+{"entry":"specs/index.md","adapters":[],"reporters":[],"trace":{"types":["feature","test"],"edges":{"tests":{"from":"feature","to":"test","count":"1 → 1..*"}}}}
 CFG
 mkdir -p trace/run-int/specs
-printf '# Index\n\n- [F](../f.md)\n' > trace/run-int/specs/index.spec.md
+printf '# Index\n\n- [F](../f.md)\n' > trace/run-int/specs/index.md
 printf -- '---\ntype: feature\n---\n# F\n' > trace/run-int/f.md
 ```
 

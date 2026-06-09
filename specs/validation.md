@@ -6,7 +6,7 @@ workdir: .tmp-test
 # Validation Rules
 
 Malformed specs fail fast. specdown validates documents against the
-[depends::spec syntax](syntax.spec.md) at parse time and rejects errors
+[depends::spec syntax](syntax.md) at parse time and rejects errors
 before any adapter is invoked.
 
 ## Rules
@@ -37,9 +37,9 @@ table is rejected at parse time:
 ```run:shell
 # Reject bare check directive with no table
 printf '# Bad\n\n> check:x\n\nJust prose.\n' > fnt.spec.md
-printf '# T\n\n- [Fnt](fnt.spec.md)\n' > index.spec.md
+printf '# T\n\n- [Fnt](fnt.spec.md)\n' > index.md
 cat <<'CFG' > fnt-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"checks":["x"]}]}
+{"entry":"index.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"],"checks":["x"]}]}
 CFG
 ! specdown run -config fnt-cfg.json 2>/dev/null
 ```
@@ -56,9 +56,9 @@ Some prose.
 
 More prose.
 SPEC
-printf '# T\n\n- [FC](check-call.spec.md)\n' > index.spec.md
+printf '# T\n\n- [FC](check-call.spec.md)\n' > index.md
 cat <<'CFG' > check-call-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":[],"checks":["verify"]}]}
+{"entry":"index.md","adapters":[{"name":"s","command":["true"],"blocks":[],"checks":["verify"]}]}
 CFG
 specdown run -config check-call-cfg.json -dry-run 2>&1
 ```

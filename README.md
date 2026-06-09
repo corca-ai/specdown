@@ -48,10 +48,10 @@ specdown version
 
 ## Documentation
 
-- [Overview](specs/overview.spec.md) — install, first spec, and why specdown exists
-- [Self-Spec](specs/index.spec.md) — the executable reference
+- [Overview](specs/overview.md) — install, first spec, and why specdown exists
+- [Self-Spec](specs/index.md) — the executable reference
 - [Live Report](https://corca-ai.github.io/specdown/) — self-spec execution results
-- [Best Practices](specs/best-practices.spec.md) — patterns, pitfalls, and anti-patterns
+- [Best Practices](specs/best-practices.md) — patterns, pitfalls, and anti-patterns
 - [Build & Run](docs/build.md) — building from source
 - [Agent Guide](AGENTS.md) — project layout, working rules, and conventions
 

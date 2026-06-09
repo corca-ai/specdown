@@ -12,12 +12,12 @@ If the default directory layout doesn't fit (e.g., docs live in `docs/specs/` in
 
 ```json
 {
-  "entry": "docs/specs/index.spec.md",
+  "entry": "docs/specs/index.md",
   "adapters": []
 }
 ```
 
-All paths are relative to the config file location. See [Configuration](../specs/config.spec.md).
+All paths are relative to the config file location. See [Configuration](../specs/config.md).
 
 ## 2. Choose what to spec first
 
@@ -49,7 +49,7 @@ $ curl -s -o /dev/null -w '%{http_code}' -X POST \
 ```
 ````
 
-If the project needs setup before specs run (database, containers), use the [global setup/teardown](../specs/config.spec.md#global-setup-and-teardown) config:
+If the project needs setup before specs run (database, containers), use the [global setup/teardown](../specs/config.md#global-setup-and-teardown) config:
 
 ```json
 {
@@ -60,9 +60,9 @@ If the project needs setup before specs run (database, containers), use the [glo
 
 ## 4. Bridge existing test infrastructure
 
-If you have a test harness, API client, or CLI wrapper, turn it into an [adapter](../specs/adapter-protocol.spec.md). The adapter receives JSON commands on stdin and returns results on stdout — any language works.
+If you have a test harness, API client, or CLI wrapper, turn it into an [adapter](../specs/adapter-protocol.md). The adapter receives JSON commands on stdin and returns results on stdout — any language works.
 
-This lets you write specs with [check tables](../specs/syntax.spec.md#check-tables) instead of shell scripts:
+This lets you write specs with [check tables](../specs/syntax.md#check-tables) instead of shell scripts:
 
 ```markdown
 > check:user-api(method=POST, endpoint=/api/users)
@@ -82,7 +82,7 @@ This lets you write specs with [check tables](../specs/syntax.spec.md#check-tabl
 
 ## 6. Optional: add traceability
 
-If the project has layered documentation (goals, features, stories), add [traceability](../specs/traceability.spec.md) to enforce coverage:
+If the project has layered documentation (goals, features, stories), add [traceability](../specs/traceability.md) to enforce coverage:
 
 ```json
 {

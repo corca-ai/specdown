@@ -11,8 +11,8 @@ running specs, generating reports, and dumping Alloy models.
 ## Getting Started
 
 A specdown workflow has three parts:
-a [depends::spec document](syntax.spec.md) that describes behavior,
-a [depends::configuration file](config.spec.md) that registers adapters,
+a [depends::spec document](syntax.md) that describes behavior,
+a [depends::configuration file](config.md) that registers adapters,
 and the `specdown run` command.
 
 ```run:shell
@@ -95,7 +95,7 @@ echo "$help" | grep -q "alloy dump"
 
 ## Trace
 
-The `specdown trace` command validates the [depends::traceability](traceability.spec.md)
+The `specdown trace` command validates the [depends::traceability](traceability.md)
 graph configured in `specdown.json` and outputs the result.
 
 Without `-strict`, validation errors are printed to stderr but the graph
@@ -144,8 +144,8 @@ A `type:` prefix selects cases by kind.
 ```run:shell
 # type:alloy keeps only alloy checks; block:shell keeps only code blocks
 printf '%s\n' '# Typed' '' '## Code' '' '```run:shell' 'echo hello' '```' '' '## Model' '' '```alloy:model(tf)' 'module tf' 'sig A {}' 'assert noEmpty { some A }' 'check noEmpty for 3' '```' > typed-filter.spec.md
-printf '# T\n\n- [Typed](typed-filter.spec.md)\n' > index.spec.md
-printf '{"entry":"index.spec.md","adapters":[]}' > typed-filter-cfg.json
+printf '# T\n\n- [Typed](typed-filter.spec.md)\n' > index.md
+printf '{"entry":"index.md","adapters":[]}' > typed-filter-cfg.json
 alloy_dry=$(specdown run -config typed-filter-cfg.json -dry-run -filter "type:alloy" 2>&1)
 echo "$alloy_dry" | grep -q 'alloy:'
 ! echo "$alloy_dry" | grep -q '\[run:shell\]'

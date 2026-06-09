@@ -33,9 +33,9 @@ Keep docs easy to scan and easy to trust for both humans and agents.
 Cross-references between spec documents use semantic link prefixes to express the relationship type. The prefix appears between `[` and the link text, separated by `::`.
 
 - **`depends::`** — The current document functionally depends on the linked document. The linked concept is a prerequisite that must hold for the current spec to make sense. Use in spec-type documents that define behavior.
-  - Example: `[depends::adapter protocol](adapter-protocol.spec.md)` — the CLI spec depends on the adapter protocol definition.
+  - Example: `[depends::adapter protocol](adapter-protocol.md)` — the CLI spec depends on the adapter protocol definition.
 - **`explains::`** — The current document introduces or contextualizes the linked document. The link is for onboarding or orientation, not a strict dependency. Use in guide-type documents (`type: guide`) that introduce concepts.
-  - Example: `[explains::configuration file](config.spec.md)` — the overview explains what the config file is.
+  - Example: `[explains::configuration file](config.md)` — the overview explains what the config file is.
 
 Do not mix prefixes within a single document. A `type: spec` document should use `depends::`. A `type: guide` document should use `explains::`.
 

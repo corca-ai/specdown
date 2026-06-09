@@ -79,7 +79,7 @@ func initCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "Usage: specdown init")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Scaffold a new specdown project in the current directory.")
-		fmt.Fprintln(os.Stderr, "Creates specdown.json, specs/index.spec.md, and specs/example.spec.md.")
+		fmt.Fprintln(os.Stderr, "Creates specdown.json, specs/index.md, and specs/example.md.")
 		return nil
 	}
 	return initProject()
@@ -674,15 +674,15 @@ func initProject() error {
 	}
 
 	configJSON := `{
-  "entry": "specs/index.spec.md"
+  "entry": "specs/index.md"
 }
 `
 	if err := os.WriteFile("specdown.json", []byte(configJSON), 0o644); err != nil {
 		return err
 	}
 
-	indexMD := "# My Project\n\n- [Example](example.spec.md)\n"
-	if err := os.WriteFile("specs/index.spec.md", []byte(indexMD), 0o644); err != nil {
+	indexMD := "# My Project\n\n- [Example](example.md)\n"
+	if err := os.WriteFile("specs/index.md", []byte(indexMD), 0o644); err != nil {
 		return err
 	}
 
@@ -695,11 +695,11 @@ This is a sample spec. Add executable blocks and check tables to make it live.
 Prose paragraphs are preserved in the HTML report.
 Only executable blocks and check tables are run.
 `
-	if err := os.WriteFile("specs/example.spec.md", []byte(exampleMD), 0o644); err != nil {
+	if err := os.WriteFile("specs/example.md", []byte(exampleMD), 0o644); err != nil {
 		return err
 	}
 
-	fmt.Println("Created specdown.json, specs/index.spec.md, specs/example.spec.md")
+	fmt.Println("Created specdown.json, specs/index.md, specs/example.md")
 	fmt.Println("Run: specdown run")
 	return nil
 }

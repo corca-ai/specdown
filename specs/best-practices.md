@@ -5,8 +5,8 @@ type: guide
 # Best Practices
 
 This guide collects patterns that work well in practice and mistakes
-to avoid. Read the [explains::Spec Syntax](syntax.spec.md) and
-[explains::Alloy Models](alloy.spec.md) chapters first.
+to avoid. Read the [explains::Spec Syntax](syntax.md) and
+[explains::Alloy Models](alloy.md) chapters first.
 
 ## Document Structure
 
@@ -178,7 +178,7 @@ Model state transitions in Alloy to prove which transitions are
 impossible. Executable blocks test the valid paths and a minimal set of
 invalid ones. No need to test every impossible pair; Alloy covers the rest.
 
-See the [State Machine Models](alloy.spec.md#state-machine-models)
+See the [State Machine Models](alloy.md#state-machine-models)
 section in the Alloy spec for a worked example.
 
 ### 6. Composition Safety
@@ -219,8 +219,8 @@ The prime operator (`e'`) refers to the value of `e` in the next state. Without 
 - **Alloy in a separate file** — defeats the purpose. Model and implementation checks should share the same section and prose context.
 - **Over-modeling** — simple CRUD does not need Alloy. Use it when the state space is large enough that example-based testing cannot cover it.
 - **Over-testing** — a spec crammed with exhaustive cases becomes unreadable as documentation. Keep executable blocks at the acceptance-criteria level and leave fine-grained coverage to unit tests.
-- **Hardcoded paths in [explains::config](config.spec.md)** — use relative paths so the project works from any checkout location.
-- **Monolithic [explains::adapter](adapter-protocol.spec.md)** — keep adapters focused on one execution environment. Split when complexity grows.
+- **Hardcoded paths in [explains::config](config.md)** — use relative paths so the project works from any checkout location.
+- **Monolithic [explains::adapter](adapter-protocol.md)** — keep adapters focused on one execution environment. Split when complexity grows.
 
 ## Hooks vs Inline Cleanup
 

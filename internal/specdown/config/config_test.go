@@ -71,7 +71,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 
 	cfg, _, err := Load(configPath)
 	testutil.NilErr(t, err)
-	testutil.Equal(t, cfg.Entry, "specs/index.spec.md")
+	testutil.Equal(t, cfg.Entry, "specs/index.md")
 	testutil.Equal(t, cfg.Models.Builtin, "alloy")
 	testutil.Len(t, cfg.Reporters, 2)
 }
@@ -107,7 +107,7 @@ func TestLoadOrDefaultWhenMissing(t *testing.T) {
 	configPath := filepath.Join(root, "nonexistent.json")
 	cfg, dir, err := LoadOrDefault(configPath)
 	testutil.NilErr(t, err)
-	testutil.Equal(t, cfg.Entry, "specs/index.spec.md")
+	testutil.Equal(t, cfg.Entry, "specs/index.md")
 	testutil.Equal(t, cfg.Models.Builtin, "alloy")
 	testutil.True(t, dir != "")
 }
@@ -131,11 +131,36 @@ func TestLoadOrDefaultReturnsErrorOnBadJSON(t *testing.T) {
 	testutil.WantErr(t, err)
 }
 
+// --- defaultEntry ---
+
+func TestDefaultEntryPrefersMdButFallsBackToLegacy(t *testing.T) {
+	write := func(dir, rel string) {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		testutil.NilErr(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		testutil.NilErr(t, os.WriteFile(p, []byte("# x\n"), 0o644))
+	}
+
+	legacy := t.TempDir()
+	write(legacy, "specs/index.spec.md")
+	testutil.Equal(t, defaultEntry(legacy), "specs/index.spec.md")
+
+	modern := t.TempDir()
+	write(modern, "specs/index.md")
+	testutil.Equal(t, defaultEntry(modern), "specs/index.md")
+
+	both := t.TempDir()
+	write(both, "specs/index.md")
+	write(both, "specs/index.spec.md")
+	testutil.Equal(t, defaultEntry(both), "specs/index.md")
+
+	testutil.Equal(t, defaultEntry(t.TempDir()), "specs/index.md")
+}
+
 // --- Default ---
 
 func TestDefault(t *testing.T) {
 	cfg := Default()
-	testutil.Equal(t, cfg.Entry, "specs/index.spec.md")
+	testutil.Equal(t, cfg.Entry, "specs/index.md")
 	testutil.Equal(t, cfg.Models.Builtin, "alloy")
 	testutil.Len(t, cfg.Reporters, 2)
 	testutil.Equal(t, cfg.HTMLReportOutFile(), "specs/report")

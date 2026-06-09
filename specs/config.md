@@ -6,13 +6,13 @@ workdir: .tmp-test
 # Configuration
 
 Every project needs a `specdown.json`. It tells specdown where specs live,
-which [depends::adapters](adapter-protocol.spec.md) to launch, and what
-[reporters](report.spec.md) to generate.
+which [depends::adapters](adapter-protocol.md) to launch, and what
+[reporters](report.md) to generate.
 
 Place `specdown.json` at the project root, next to `.git/`. All paths
 inside the config are resolved relative to the config file's directory,
 so a root-level config can reference specs in any subdirectory (e.g.
-`"entry": "docs/specs/index.spec.md"`). This also makes the config easy
+`"entry": "docs/specs/index.md"`). This also makes the config easy
 to find for both humans and tools — `specdown run` looks for
 `specdown.json` in the current directory by default.
 
@@ -21,7 +21,7 @@ For v1, a single file is sufficient.
 
 ```json
 {
-  "entry": "specs/index.spec.md",
+  "entry": "specs/index.md",
   "adapters": [
     {
       "name": "myapp",
@@ -41,6 +41,12 @@ See [Defaults](#defaults).
 The `entry` field points to a Markdown file that serves as the starting point for recursive crawling.
 If it has an H1 heading, that becomes the entry page title.
 Markdown links to `.md` and `.spec.md` files are followed recursively to discover all pages.
+The `.md` extension is recommended; `.spec.md` is a legacy convention that still
+works everywhere. A file is a spec because it is reachable and contains
+executable blocks — not because of its extension. See [Spec Syntax](syntax.md).
+
+When `entry` is omitted, it defaults to `specs/index.md`, falling back to the
+legacy `specs/index.spec.md` when only that file exists.
 
 ```run:shell
 # Generate report from entry file and verify title
@@ -148,7 +154,7 @@ precedence over the built-in.
 | `reporters` | Output generators. `html` and `json` builtins provided |
 | `models` | Alloy model verification (default: `alloy`). Accepted for explicit configuration; omit to use the default. Set `models.jarPath` to use a local Alloy JAR instead of auto-downloading |
 | `ignorePrefixes` | List of code block prefixes to suppress unknown-prefix warnings for |
-| `trace` | Traceability configuration. See [Traceability](traceability.spec.md) |
+| `trace` | Traceability configuration. See [Traceability](traceability.md) |
 | `toc` | Sidebar table-of-contents grouping. See [TOC Grouping](#toc-grouping) below |
 | `setup` | Shell command to run once before any specs execute |
 | `teardown` | Shell command to run once after all specs finish (runs even on failure) |
@@ -164,7 +170,7 @@ databases, launching containers, seeding data, or cleaning up afterwards.
 {
   "setup": "docker compose up -d && sleep 2",
   "teardown": "docker compose down",
-  "entry": "specs/index.spec.md",
+  "entry": "specs/index.md",
   "adapters": []
 }
 ```
@@ -175,10 +181,10 @@ specdown exits immediately without running specs.
 ```run:shell
 # Verify setup runs before specs
 mkdir -p setup-test
-printf '# T\n\n- [S](s.spec.md)\n' > setup-test/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > setup-test/index.md
 printf '# S\n\nProse.\n' > setup-test/s.spec.md
 cat <<'CFG' > setup-test/specdown.json
-{"entry": "index.spec.md", "setup": "echo SETUP-RAN > setup-marker.txt"}
+{"entry": "index.md", "setup": "echo SETUP-RAN > setup-marker.txt"}
 CFG
 specdown run -config setup-test/specdown.json 2>&1 || true
 ```
@@ -193,11 +199,11 @@ The teardown command runs after specs complete, even if specs fail.
 ```run:shell
 # Verify teardown runs after specs (even on failure)
 mkdir -p teardown-test
-printf '# T\n\n- [S](s.spec.md)\n' > teardown-test/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > teardown-test/index.md
 BT=$(printf '\140\140\140')
 printf '%s\n' '# S' '' "$BT"'run:shell' '$ echo hello' 'wrong-output' "$BT" > teardown-test/s.spec.md
 cat <<'CFG' > teardown-test/specdown.json
-{"entry": "index.spec.md", "setup": "echo SETUP-OK > marker.txt", "teardown": "echo TEARDOWN-RAN >> marker.txt"}
+{"entry": "index.md", "setup": "echo SETUP-OK > marker.txt", "teardown": "echo TEARDOWN-RAN >> marker.txt"}
 CFG
 specdown run -config teardown-test/specdown.json 2>&1 || true
 ```
@@ -213,10 +219,10 @@ A failing setup command prevents spec execution and exits with an error.
 ```run:shell
 # Verify failing setup aborts the run
 mkdir -p setup-fail-test
-printf '# T\n\n- [S](s.spec.md)\n' > setup-fail-test/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > setup-fail-test/index.md
 printf '# S\n\nProse.\n' > setup-fail-test/s.spec.md
 cat <<'CFG' > setup-fail-test/specdown.json
-{"entry": "index.spec.md", "setup": "exit 1"}
+{"entry": "index.md", "setup": "exit 1"}
 CFG
 ! specdown run -config setup-fail-test/specdown.json 2>/dev/null
 ```
@@ -252,7 +258,7 @@ When fields are omitted from a config file, sensible defaults are applied:
 
 | Field | Default |
 |-------|---------|
-| `entry` | `specs/index.spec.md` |
+| `entry` | `specs/index.md` |
 | `adapters` | `[]` (empty — built-in shell adapter handles `run:shell`) |
 | `models.builtin` | `"alloy"` |
 | `reporters` | `[{"builtin":"html","outFile":"specs/report"}, {"builtin":"json","outFile":"specs/report.json"}]` |
@@ -268,20 +274,20 @@ An empty config `{}` is valid — all fields are defaulted.
 ```run:shell
 # Verify empty config applies defaults
 mkdir -p defaults-test
-printf '# T\n\n- [S](s.spec.md)\n' > defaults-test/specs/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > defaults-test/specs/index.md
 mkdir -p defaults-test/specs
-printf '# T\n\n- [S](s.spec.md)\n' > defaults-test/specs/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > defaults-test/specs/index.md
 printf '# S\n\nProse.\n' > defaults-test/specs/s.spec.md
 echo '{}' > defaults-test/specdown.json
 cd defaults-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ```
 
-specdown runs without a config file when `specs/index.spec.md` exists.
+specdown runs without a config file when `specs/index.md` exists.
 
 ```run:shell
 # Verify specdown works with no config file
 rm -rf no-config-test && mkdir -p no-config-test/specs
-printf '# T\n\n- [S](s.spec.md)\n' > no-config-test/specs/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > no-config-test/specs/index.md
 printf '# S\n\nProse.\n' > no-config-test/specs/s.spec.md
 cd no-config-test && specdown run -dry-run 2>&1 | grep 'spec(s)'
 ```
@@ -295,9 +301,9 @@ and a list of document paths.
 ```json
 {
   "toc": [
-    { "group": "Core", "docs": ["specs/syntax.spec.md", "specs/cli.spec.md"] },
-    { "group": "Advanced", "docs": ["specs/alloy.spec.md", "specs/traceability.spec.md"] },
-    "specs/overview.spec.md"
+    { "group": "Core", "docs": ["specs/syntax.md", "specs/cli.md"] },
+    { "group": "Advanced", "docs": ["specs/alloy.md", "specs/traceability.md"] },
+    "specs/overview.md"
   ]
 }
 ```
@@ -363,7 +369,7 @@ Two adapters claiming the same block prefix must be rejected.
 # Reject two adapters handling the same block prefix
 cat <<'CFG' > dup-prefix.json
 {
-  "entry": "index.spec.md",
+  "entry": "index.md",
   "adapters": [
     {"name": "a", "command": ["true"], "blocks": ["run:x"]},
     {"name": "b", "command": ["true"], "blocks": ["run:x"]}
@@ -379,7 +385,7 @@ Two adapters with the same name must be rejected.
 # Reject duplicate adapter names
 cat <<'CFG' > dup-adapter.json
 {
-  "entry": "index.spec.md",
+  "entry": "index.md",
   "adapters": [
     {"name": "a", "command": ["true"], "blocks": ["run:x"]},
     {"name": "a", "command": ["true"], "blocks": ["run:y"]}
@@ -429,8 +435,8 @@ This ensures the project works from any checkout location.
 ```run:shell
 # Verify relative entry path resolves from config directory
 mkdir -p relpath/specs
-printf '# T\n\n- [S](s.spec.md)\n' > relpath/specs/index.spec.md
+printf '# T\n\n- [S](s.spec.md)\n' > relpath/specs/index.md
 printf '# S\n\nProse.\n' > relpath/specs/s.spec.md
-printf '{"entry":"specs/index.spec.md","adapters":[]}' > relpath/specdown.json
+printf '{"entry":"specs/index.md","adapters":[]}' > relpath/specdown.json
 specdown run -config relpath/specdown.json -dry-run 2>&1 | grep 'spec(s)'
 ```

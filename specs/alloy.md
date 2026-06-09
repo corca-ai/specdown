@@ -14,9 +14,9 @@ Executable blocks test selected examples; Alloy proves properties
 for all cases within scope.
 
 Alloy fragments are embedded using `alloy:model(name)`
-[depends::code blocks](syntax.spec.md) and verified through the
-[depends::Alloy runner](adapter-protocol.spec.md).
-See [Best Practices](best-practices.spec.md) for patterns
+[depends::code blocks](syntax.md) and verified through the
+[depends::Alloy runner](adapter-protocol.md).
+See [Best Practices](best-practices.md) for patterns
 on combining Alloy models with implementation checks.
 For full Alloy language syntax and semantics, see `docs/alloy-reference.md`
 in the repository root.

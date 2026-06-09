@@ -1,5 +1,5 @@
 {
-  "entry": "specs/index.spec.md",
+  "entry": "specs/index.md",
   "adapters": [],
   "reporters": [
     { "builtin": "html", "outFile": "specs/report" },

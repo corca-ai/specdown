@@ -94,10 +94,17 @@ type Reporter struct {
 	OutFile string `json:"outFile"`
 }
 
-// Default returns sensible defaults that allow specdown to run without a config file.
+const (
+	defaultEntryPrimary = "specs/index.md"
+	defaultEntryLegacy  = "specs/index.spec.md"
+)
+
+// Default returns sensible defaults that allow specdown to run without a config
+// file. The entry uses the recommended `.md` extension; callers with a project
+// directory should prefer defaultEntry to honor the legacy fallback.
 func Default() Config {
 	return Config{
-		Entry:    "specs/index.spec.md",
+		Entry:    defaultEntryPrimary,
 		Adapters: nil,
 		Models:   ModelConfig{Builtin: "alloy"},
 		Reporters: []Reporter{
@@ -107,9 +114,25 @@ func Default() Config {
 	}
 }
 
-func applyDefaults(cfg *Config) {
+// defaultEntry picks the default entry file relative to baseDir, preferring the
+// recommended specs/index.md but falling back to the legacy specs/index.spec.md
+// when only the legacy file exists, so existing projects keep working.
+func defaultEntry(baseDir string) string {
+	if !fileExists(filepath.Join(baseDir, filepath.FromSlash(defaultEntryPrimary))) &&
+		fileExists(filepath.Join(baseDir, filepath.FromSlash(defaultEntryLegacy))) {
+		return defaultEntryLegacy
+	}
+	return defaultEntryPrimary
+}
+
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
+}
+
+func applyDefaults(cfg *Config, baseDir string) {
 	if cfg.Entry == "" {
-		cfg.Entry = "specs/index.spec.md"
+		cfg.Entry = defaultEntry(baseDir)
 	}
 	if cfg.Models.Builtin == "" {
 		cfg.Models.Builtin = "alloy"
@@ -138,7 +161,8 @@ func Load(path string) (Config, string, error) {
 		return Config{}, "", fmt.Errorf("parse config: %w", err)
 	}
 
-	applyDefaults(&cfg)
+	dir := filepath.Dir(absPath)
+	applyDefaults(&cfg, dir)
 	if err := validateAdapters(cfg.Adapters); err != nil {
 		return Config{}, "", err
 	}
@@ -151,7 +175,7 @@ func Load(path string) (Config, string, error) {
 		}
 	}
 
-	return cfg, filepath.Dir(absPath), nil
+	return cfg, dir, nil
 }
 
 // LoadOrDefault loads config from path, or returns Default() if the file does not exist.
@@ -164,7 +188,9 @@ func LoadOrDefault(path string) (Config, string, error) {
 			if wdErr != nil {
 				return Config{}, "", fmt.Errorf("get working directory: %w", wdErr)
 			}
-			return Default(), cwd, nil
+			cfg := Default()
+			cfg.Entry = defaultEntry(cwd)
+			return cfg, cwd, nil
 		}
 		return Config{}, "", err
 	}

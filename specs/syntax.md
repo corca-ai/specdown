@@ -9,6 +9,36 @@ A spec file is plain Markdown. This document builds up the authoring surface
 from simple to complex: headings, shell blocks, doctest blocks, variables,
 check tables, hooks, and frontmatter.
 
+## What Makes a File a Spec
+
+A file is a spec because of two things, not its extension:
+
+1. **It is reachable.** `specdown run` starts at the configured `entry` and
+   follows Markdown links to `.md` files; `specdown trace` scans every `.md`
+   file under the project. Only `.md` targets are followed — `.markdown` and
+   extension-less links are skipped.
+2. **It contains executable blocks** — `run:<target>` blocks, check tables, or
+   inline `expect:`/`check:` — which become its test cases. A reachable file
+   with none simply contributes zero cases.
+
+The recommended extension is `.md`. `.spec.md` is a legacy convention that
+behaves identically; the extension itself carries no meaning. A plain `.md`
+spec with an executable block runs just like a `.spec.md` one:
+
+```run:shell
+# Scaffold a plain-.md project with one executable block.
+rm -rf what-is-a-spec && mkdir -p what-is-a-spec/specs
+printf '# Index\n\n- [Feature](feature.md)\n' > what-is-a-spec/specs/index.md
+BT=$(printf '\140\140\140')
+printf '%s\n' '# Feature' '' "$BT"'run:shell' '$ echo hi' 'hi' "$BT" > what-is-a-spec/specs/feature.md
+printf '{"entry":"specs/index.md","adapters":[]}' > what-is-a-spec/specdown.json
+```
+
+```run:shell
+$ cd what-is-a-spec && specdown run 2>&1 | grep '^PASS' | sed 's/ in [0-9]*ms//'
+PASS 2 spec(s), 1 case(s)
+```
+
 ## Headings and Prose
 
 Heading hierarchy (`#`, `##`, `###`, ...) is converted into a test suite hierarchy.
@@ -434,16 +464,16 @@ Multiple inline elements can appear in the same paragraph.
 
 ## Other Block Prefixes
 
-The target in `run:<target>` names an [adapter](adapter-protocol.spec.md).
+The target in `run:<target>` names an [adapter](adapter-protocol.md).
 The built-in shell adapter works with no configuration; custom adapters
-are registered in [`specdown.json`](config.spec.md).
+are registered in [`specdown.json`](config.md).
 
 | Prefix | Meaning |
 |--------|---------|
 | `run:<target>` | Executable block dispatched to an adapter |
-| `alloy:model(<name>)` | Alloy model definition (see [Alloy](alloy.spec.md)) |
-| `alloy:ref(<model>#<assertion>)` | Alloy model reference (see [Alloy](alloy.spec.md)) |
-| `mermaid` | Diagram block rendered by Mermaid (see [Report](report.spec.md#mermaid-diagrams)) |
+| `alloy:model(<name>)` | Alloy model definition (see [Alloy](alloy.md)) |
+| `alloy:ref(<model>#<assertion>)` | Alloy model reference (see [Alloy](alloy.md)) |
+| `mermaid` | Diagram block rendered by Mermaid (see [Report](report.md#mermaid-diagrams)) |
 
 ### Diagram Blocks
 
@@ -491,9 +521,9 @@ A setup or teardown directive followed by an executable code block must parse su
 ```run:shell
 # Verify spec with setup:each hook parses successfully
 printf '# Hook Test\n\n## Group\n\n> setup:each\n```run:shell\necho init\n```\n\n### Scenario A\n\nSome prose.\n' > hook-good.spec.md
-printf '# T\n\n- [Hook](hook-good.spec.md)\n' > index.spec.md
+printf '# T\n\n- [Hook](hook-good.spec.md)\n' > index.md
 cat <<'CFG' > hook-good-cfg.json
-{"entry":"index.spec.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
+{"entry":"index.md","adapters":[{"name":"s","command":["true"],"blocks":["run:shell"]}]}
 CFG
 specdown run -config hook-good-cfg.json -dry-run 2>&1
 ```
@@ -505,7 +535,7 @@ An optional YAML frontmatter can be placed at the top of a spec file.
 | Key | Description |
 |-----|-------------|
 | `timeout` | Per-case execution time limit in milliseconds. Overrides `defaultTimeoutMsec` from config. `0` disables the time limit |
-| `type` | Document type for [traceability](traceability.spec.md) (e.g. `spec`, `goal`, `feature`) |
+| `type` | Document type for [traceability](traceability.md) (e.g. `spec`, `goal`, `feature`) |
 | `workdir` | Working directory for all shell blocks, relative to the spec file's location. Created automatically if it does not exist |
 
 If frontmatter is absent, the global `defaultTimeoutMsec` from `specdown.json` applies (default: 30 seconds).
@@ -525,9 +555,9 @@ timeout: 5000
 
 A simple command that completes well within the timeout.
 SPEC
-printf '# T\n\n- [Timeout](timeout.spec.md)\n' > index.spec.md
+printf '# T\n\n- [Timeout](timeout.spec.md)\n' > index.md
 cat <<'CFG' > timeout-cfg.json
-{"entry":"index.spec.md","adapters":[]}
+{"entry":"index.md","adapters":[]}
 CFG
 specdown run -config timeout-cfg.json -dry-run 2>&1
 ```

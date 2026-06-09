@@ -9,7 +9,7 @@ Adapters are how specs talk to real code.
 The boundary is a process protocol, not an in-process language API —
 any executable that reads NDJSON from stdin and writes NDJSON to stdout is an adapter.
 
-Adapters execute the [depends::executable blocks and check tables](syntax.spec.md) defined in spec documents.
+Adapters execute the [depends::executable blocks and check tables](syntax.md) defined in spec documents.
 This allows each project to build adapters with minimal effort in any language.
 
 ## Protocol Flow
@@ -135,7 +135,7 @@ Capabilities are declared in config, not negotiated at runtime.
 ## Built-in Shell Adapter
 
 The shell adapter is one of two built-in adapters (the other is the
-[jq check](config.spec.md#built-in-jq-check)). It handles `run:shell`
+[jq check](config.md#built-in-jq-check)). It handles `run:shell`
 blocks without any adapter configuration.
 
 ### Execution Model
@@ -245,8 +245,8 @@ Wire the adapter to a spec and run it:
 # Run a spec through the echo adapter
 BT=$(printf '\140\140\140')
 printf '%s\n' '# E2E' '' "\${BT}run:echo" 'some source' "\${BT}" > e2e.spec.md
-printf '# T\n\n- [E2E](e2e.spec.md)\n' > index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"echo","command":["sh","./echo-adapter.sh"],"blocks":["run:echo"]}]}' > e2e-cfg.json
+printf '# T\n\n- [E2E](e2e.spec.md)\n' > index.md
+printf '{"entry":"index.md","adapters":[{"name":"echo","command":["sh","./echo-adapter.sh"],"blocks":["run:echo"]}]}' > e2e-cfg.json
 ```
 
 ```run:shell
@@ -319,8 +319,8 @@ chmod +x crash-adapter.sh
 # Wire the crashing adapter to a two-case spec
 BT=$(printf '\140\140\140')
 printf '%s\n' '# Crash' '' "\${BT}run:boom" 'step1' "\${BT}" '' "\${BT}run:boom" 'step2' "\${BT}" > crash.spec.md
-printf '# T\n\n- [Crash](crash.spec.md)\n' > index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"boom","command":["sh","./crash-adapter.sh"],"blocks":["run:boom"]}]}' > crash-cfg.json
+printf '# T\n\n- [Crash](crash.spec.md)\n' > index.md
+printf '{"entry":"index.md","adapters":[{"name":"boom","command":["sh","./crash-adapter.sh"],"blocks":["run:boom"]}]}' > crash-cfg.json
 ! specdown run -config crash-cfg.json 2>/dev/null
 ```
 
@@ -338,7 +338,7 @@ chmod +x bad-adapter.sh
 # Run a spec against the malformed adapter
 BT=$(printf '\140\140\140')
 printf '%s\n' '# Bad' '' "\${BT}run:bad" 'hello' "\${BT}" > bad.spec.md
-printf '# T\n\n- [Bad](bad.spec.md)\n' > index.spec.md
-printf '{"entry":"index.spec.md","adapters":[{"name":"bad","command":["sh","./bad-adapter.sh"],"blocks":["run:bad"]}]}' > bad-cfg.json
+printf '# T\n\n- [Bad](bad.spec.md)\n' > index.md
+printf '{"entry":"index.md","adapters":[{"name":"bad","command":["sh","./bad-adapter.sh"],"blocks":["run:bad"]}]}' > bad-cfg.json
 ! specdown run -config bad-cfg.json 2>/dev/null
 ```
