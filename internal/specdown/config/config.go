@@ -184,13 +184,14 @@ func LoadOrDefault(path string) (Config, string, error) {
 	if err != nil {
 		var pathErr *os.PathError
 		if errors.As(err, &pathErr) && os.IsNotExist(pathErr.Err) {
-			cwd, wdErr := os.Getwd()
-			if wdErr != nil {
-				return Config{}, "", fmt.Errorf("get working directory: %w", wdErr)
+			absPath, absErr := filepath.Abs(path)
+			if absErr != nil {
+				return Config{}, "", fmt.Errorf("resolve config path: %w", absErr)
 			}
+			baseDir := filepath.Dir(absPath)
 			cfg := Default()
-			cfg.Entry = defaultEntry(cwd)
-			return cfg, cwd, nil
+			cfg.Entry = defaultEntry(baseDir)
+			return cfg, baseDir, nil
 		}
 		return Config{}, "", err
 	}

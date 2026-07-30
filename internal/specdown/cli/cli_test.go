@@ -1,8 +1,9 @@
-package main
+package cli
 
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -133,16 +134,17 @@ func TestFailureSummaryIncludesLifecycleFailuresWhenPresent(t *testing.T) {
 
 func TestRunSetupOnlyFailureWritesFirstClassReport(t *testing.T) {
 	root := t.TempDir()
-	command := strconv.Quote(os.Args[0]) + " -test.run=^TestCLILifecycleFailureProcess$ -- cli-lifecycle-fail"
+	helperCommand := strconv.Quote(os.Args[0]) + " -test.run=^TestCLILifecycleFailureProcess$ -- cli-lifecycle-fail"
 	configPath := filepath.Join(root, "specdown.json")
-	configBody := `{"entry":"index.md","setup":` + strconv.Quote(command) +
+	configBody := `{"entry":"index.md","setup":` + strconv.Quote(helperCommand) +
 		`,"reporters":[{"builtin":"json","outFile":"report/report.json"}]}`
 	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	reportDir := filepath.Join(root, "report")
 
-	err := run(context.Background(), []string{
+	cmd := command{stdout: io.Discard, stderr: io.Discard, workingDir: root}
+	err := cmd.run(context.Background(), []string{
 		"-config", configPath,
 		"-setup",
 		"-quiet",
@@ -169,17 +171,18 @@ func TestRunSetupOnlyFailureWritesFirstClassReport(t *testing.T) {
 
 func TestRunWritesLifecycleReportAlongsideDiscoveryError(t *testing.T) {
 	root := t.TempDir()
-	command := strconv.Quote(os.Args[0]) + " -test.run=^TestCLILifecycleFailureProcess$ -- cli-lifecycle-fail"
+	helperCommand := strconv.Quote(os.Args[0]) + " -test.run=^TestCLILifecycleFailureProcess$ -- cli-lifecycle-fail"
 	configPath := filepath.Join(root, "specdown.json")
-	configBody := `{"entry":"missing.md","setup":` + strconv.Quote(command) +
-		`,"teardown":` + strconv.Quote(command) +
+	configBody := `{"entry":"missing.md","setup":` + strconv.Quote(helperCommand) +
+		`,"teardown":` + strconv.Quote(helperCommand) +
 		`,"reporters":[{"builtin":"json","outFile":"report/report.json"}]}`
 	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	reportDir := filepath.Join(root, "report")
 
-	err := run(context.Background(), []string{
+	cmd := command{stdout: io.Discard, stderr: io.Discard, workingDir: root}
+	err := cmd.run(context.Background(), []string{
 		"-config", configPath,
 		"-quiet",
 		"-out", reportDir,
