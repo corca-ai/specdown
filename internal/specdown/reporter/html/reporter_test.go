@@ -300,7 +300,7 @@ func TestWriteRendersLifecycleFailures(t *testing.T) {
 		Ordinal:     1,
 	}
 	report := core.Report{
-		SchemaVersion: 3,
+		SchemaVersion: core.ReportSchemaVersion,
 		Summary: core.Summary{
 			SpecsTotal:      1,
 			SpecsFailed:     1,
@@ -378,7 +378,7 @@ func TestWriteRendersLifecycleFailures(t *testing.T) {
 
 func TestWriteRendersGlobalLifecycleFailureOnEveryPage(t *testing.T) {
 	report := core.Report{
-		SchemaVersion: 3,
+		SchemaVersion: core.ReportSchemaVersion,
 		Summary: core.Summary{
 			SpecsTotal:      2,
 			SpecsSkipped:    2,
@@ -432,7 +432,7 @@ func TestWriteRendersGlobalLifecycleFailureOnEveryPage(t *testing.T) {
 
 func TestWriteLifecycleOnlyReportCreatesLandingPage(t *testing.T) {
 	report := core.Report{
-		SchemaVersion: 3,
+		SchemaVersion: core.ReportSchemaVersion,
 		Summary: core.Summary{
 			LifecycleTotal:  1,
 			LifecycleFailed: 1,
@@ -524,7 +524,7 @@ func TestWriteRendersSkippedStandaloneCheckFromCompiledDocument(t *testing.T) {
 	}
 	const reason = "not executed because the global setup command failed"
 	report := core.Report{
-		SchemaVersion: 3,
+		SchemaVersion: core.ReportSchemaVersion,
 		Results: []core.DocumentResult{{
 			Document: plan.Document,
 			Status:   core.StatusSkipped,

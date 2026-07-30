@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 3,
+  "title": "Contract report",
+  "generatedAt": "2026-07-30T01:02:03Z",
+  "results": [
+    {
+      "document": {
+        "relativeTo": "specs/contract.md",
+        "title": "Contract",
+        "markdown": "# Contract\n",
+        "nodes": [],
+        "frontmatter": {
+          "type": "spec"
+        },
+        "warnings": [
+          "example warning"
+        ]
+      },
+      "status": "failed",
+      "cases": [
+        {
+          "id": {
+            "file": "specs/contract.md",
+            "headingPath": [
+              "Contract",
+              "Code"
+            ],
+            "ordinal": 1,
+            "line": 10
+          },
+          "kind": "code",
+          "status": "passed",
+          "label": "captures output",
+          "durationMs": 12,
+          "bindings": [
+            {
+              "name": "captured",
+              "value": "42"
+            }
+          ],
+          "visibleBindings": [
+            {
+              "name": "seed",
+              "value": 41
+            }
+          ],
+          "events": [
+            {
+              "type": "caseStarted",
+              "id": {
+                "file": "specs/contract.md",
+                "headingPath": [
+                  "Contract",
+                  "Code"
+                ],
+                "ordinal": 1,
+                "line": 10
+              },
+              "label": "captures output"
+            },
+            {
+              "type": "casePassed",
+              "id": {
+                "file": "specs/contract.md",
+                "headingPath": [
+                  "Contract",
+                  "Code"
+                ],
+                "ordinal": 1,
+                "line": 10
+              },
+              "bindings": [
+                {
+                  "name": "captured",
+                  "value": "42"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "block": "run:shell",
+            "template": "echo {{seed}}",
+            "renderedSource": "echo 41",
+            "exitCode": 0,
+            "stderr": "diagnostic"
+          }
+        },
+        {
+          "id": {
+            "file": "specs/contract.md",
+            "headingPath": [
+              "Contract",
+              "Table"
+            ],
+            "ordinal": 2,
+            "line": 20
+          },
+          "kind": "tableRow",
+          "status": "failed",
+          "label": "invalid row",
+          "durationMs": 3,
+          "message": "values differ",
+          "expected": "yes",
+          "actual": "no",
+          "events": [
+            {
+              "type": "caseFailed",
+              "id": {
+                "file": "specs/contract.md",
+                "headingPath": [
+                  "Contract",
+                  "Table"
+                ],
+                "ordinal": 2,
+                "line": 20
+              },
+              "label": "invalid row",
+              "message": "values differ",
+              "expected": "yes",
+              "actual": "no"
+            }
+          ],
+          "table": {
+            "check": "equals",
+            "columns": [
+              "actual",
+              "expected"
+            ],
+            "templateCells": [
+              "{{value}}",
+              "yes"
+            ],
+            "renderedCells": [
+              "no",
+              "yes"
+            ],
+            "rowNumber": 1
+          }
+        },
+        {
+          "id": {
+            "file": "specs/contract.md",
+            "headingPath": [
+              "Contract",
+              "Inline"
+            ],
+            "ordinal": 3,
+            "line": 30
+          },
+          "kind": "inlineExpect",
+          "status": "failed",
+          "label": "known mismatch",
+          "expectFail": true,
+          "message": "expected mismatch",
+          "expected": "green",
+          "actual": "red",
+          "events": [
+            {
+              "type": "caseFailed",
+              "id": {
+                "file": "specs/contract.md",
+                "headingPath": [
+                  "Contract",
+                  "Inline"
+                ],
+                "ordinal": 3,
+                "line": 30
+              },
+              "label": "known mismatch",
+              "message": "expected mismatch",
+              "expected": "green",
+              "actual": "red"
+            }
+          ]
+        },
+        {
+          "id": {
+            "file": "specs/contract.md",
+            "headingPath": [
+              "Contract",
+              "Alloy"
+            ],
+            "ordinal": 4,
+            "line": 40
+          },
+          "kind": "alloy",
+          "status": "skipped",
+          "label": "ownership",
+          "message": "not executed after failure",
+          "events": [
+            {
+              "type": "caseSkipped",
+              "id": {
+                "file": "specs/contract.md",
+                "headingPath": [
+                  "Contract",
+                  "Alloy"
+                ],
+                "ordinal": 4,
+                "line": 40
+              },
+              "label": "ownership",
+              "message": "not executed after failure"
+            }
+          ],
+          "alloy": {
+            "model": "board",
+            "assertion": "singleOwnership",
+            "scope": "for 5",
+            "bundlePath": ".artifacts/board.als",
+            "sourceMapPath": ".artifacts/board.map.json",
+            "bundleLine": 8,
+            "sourceRef": "specs/contract.md:40"
+          }
+        }
+      ],
+      "lifecycleEvents": [
+        {
+          "scope": "section",
+          "phase": "setup",
+          "status": "passed",
+          "file": "specs/contract.md",
+          "headingPath": [
+            "Contract"
+          ],
+          "each": true,
+          "durationMs": 2
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "specsTotal": 1,
+    "specsPassed": 0,
+    "specsFailed": 1,
+    "specsSkipped": 0,
+    "casesTotal": 4,
+    "casesPassed": 1,
+    "casesFailed": 1,
+    "casesSkipped": 1,
+    "casesExpectedFail": 1,
+    "lifecycleTotal": 2,
+    "lifecyclePassed": 1,
+    "lifecycleFailed": 1,
+    "traceErrorCount": 1
+  },
+  "lifecycleEvents": [
+    {
+      "scope": "global",
+      "phase": "teardown",
+      "status": "failed",
+      "message": "exit status 7",
+      "durationMs": 4
+    }
+  ],
+  "traceErrors": [
+    "specs/contract.md: missing covers edge"
+  ],
+  "traceGraph": {
+    "documents": [
+      {
+        "path": "specs/contract.md",
+        "type": "spec"
+      },
+      {
+        "path": "goals/quality.md",
+        "type": "goal"
+      }
+    ],
+    "edges": [
+      {
+        "source": "specs/contract.md",
+        "target": "goals/quality.md",
+        "edgeName": "covers"
+      }
+    ],
+    "transitiveEdges": [
+      {
+        "source": "specs/contract.md",
+        "target": "goals/root.md",
+        "edgeName": "covers"
+      }
+    ]
+  }
+}

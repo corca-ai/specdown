@@ -1,11 +1,11 @@
 {
-  "minimumTotal": 75.1,
+  "minimumTotal": 76.9,
   "minimumPackages": {
-    "github.com/corca-ai/specdown/internal/specdown/adapterhost": 73.2,
-    "github.com/corca-ai/specdown/internal/specdown/adapterprotocol": 70.3,
+    "github.com/corca-ai/specdown/internal/specdown/adapterhost": 75.6,
+    "github.com/corca-ai/specdown/internal/specdown/adapterprotocol": 99.9,
     "github.com/corca-ai/specdown/internal/specdown/alloy": 70.6,
     "github.com/corca-ai/specdown/internal/specdown/binding": 90.8,
-    "github.com/corca-ai/specdown/internal/specdown/cli": 62.4,
+    "github.com/corca-ai/specdown/internal/specdown/cli": 71.8,
     "github.com/corca-ai/specdown/internal/specdown/config": 85.8,
     "github.com/corca-ai/specdown/internal/specdown/core": 75.3,
     "github.com/corca-ai/specdown/internal/specdown/engine": 78.3,

@@ -148,6 +148,9 @@ type TraceEdge struct {
 	EdgeName string `json:"edgeName"`
 }
 
+// ReportSchemaVersion identifies the JSON-compatible Report contract.
+const ReportSchemaVersion = 3
+
 // ModelRunner runs model verification cases for a document plan.
 type ModelRunner interface {
 	RunDocument(ctx context.Context, plan DocumentPlan) ([]CaseResult, error)

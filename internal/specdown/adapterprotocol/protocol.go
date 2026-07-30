@@ -45,21 +45,23 @@ type AssertResponse struct {
 	Label    string `json:"label,omitempty"`
 }
 
+const (
+	AssertResponsePassed = "passed"
+	AssertResponseFailed = "failed"
+)
+
 // ParseExecResponse parses a raw JSON line into an ExecResponse.
 // It uses key-presence detection: "output" means success, "error" means failure.
 func ParseExecResponse(raw []byte) (ExecResponse, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return ExecResponse{}, fmt.Errorf("decode exec response: %w", err)
+	fields, err := parseResponseFields(raw, "exec")
+	if err != nil {
+		return ExecResponse{}, err
 	}
-
-	var resp ExecResponse
-
-	if idRaw, ok := fields["id"]; ok {
-		if err := json.Unmarshal(idRaw, &resp.ID); err != nil {
-			return ExecResponse{}, fmt.Errorf("decode exec response id: %w", err)
-		}
+	id, err := parseResponseID(fields, "exec")
+	if err != nil {
+		return ExecResponse{}, err
 	}
+	resp := ExecResponse{ID: id}
 
 	outputRaw, hasOutput := fields["output"]
 	errorRaw, hasError := fields["error"]
@@ -94,4 +96,87 @@ func ParseExecResponse(raw []byte) (ExecResponse, error) {
 	}
 
 	return resp, nil
+}
+
+// ParseAssertResponse parses and validates a raw assert response.
+// Unknown fields are ignored so adapters can add optional data compatibly.
+func ParseAssertResponse(raw []byte) (AssertResponse, error) {
+	fields, err := parseResponseFields(raw, "assert")
+	if err != nil {
+		return AssertResponse{}, err
+	}
+	id, err := parseResponseID(fields, "assert")
+	if err != nil {
+		return AssertResponse{}, err
+	}
+	typeRaw, ok := fields["type"]
+	if !ok {
+		return AssertResponse{}, fmt.Errorf("assert response must include \"type\"")
+	}
+	var responseType *string
+	if err := json.Unmarshal(typeRaw, &responseType); err != nil || responseType == nil {
+		return AssertResponse{}, fmt.Errorf("decode assert response type: must be a string")
+	}
+	resp := AssertResponse{ID: id, Type: *responseType}
+	switch resp.Type {
+	case AssertResponsePassed, AssertResponseFailed:
+	default:
+		return AssertResponse{}, fmt.Errorf(
+			"assert response type must be %q or %q, got %q",
+			AssertResponsePassed,
+			AssertResponseFailed,
+			resp.Type,
+		)
+	}
+	for _, field := range []struct {
+		key         string
+		destination *string
+	}{
+		{key: "message", destination: &resp.Message},
+		{key: "expected", destination: &resp.Expected},
+		{key: "actual", destination: &resp.Actual},
+		{key: "label", destination: &resp.Label},
+	} {
+		if err := decodeOptionalString(fields, field.key, field.destination); err != nil {
+			return AssertResponse{}, err
+		}
+	}
+	return resp, nil
+}
+
+func parseResponseFields(raw []byte, responseKind string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, fmt.Errorf("decode %s response: %w", responseKind, err)
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("%s response must be a JSON object", responseKind)
+	}
+	return fields, nil
+}
+
+func parseResponseID(fields map[string]json.RawMessage, responseKind string) (int, error) {
+	idRaw, ok := fields["id"]
+	if !ok {
+		return 0, fmt.Errorf("%s response must include \"id\"", responseKind)
+	}
+	var id int
+	if err := json.Unmarshal(idRaw, &id); err != nil {
+		return 0, fmt.Errorf("decode %s response id: %w", responseKind, err)
+	}
+	if id <= 0 {
+		return 0, fmt.Errorf("%s response id must be a positive integer", responseKind)
+	}
+	return id, nil
+}
+
+func decodeOptionalString(fields map[string]json.RawMessage, key string, destination *string) error {
+	raw, ok := fields[key]
+	if !ok {
+		return nil
+	}
+	if err := json.Unmarshal(raw, destination); err != nil {
+		return fmt.Errorf("decode assert response %s: %w", key, err)
+	}
+	return nil
 }

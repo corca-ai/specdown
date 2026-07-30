@@ -174,3 +174,23 @@ fi
 $ jq -c '{schemaVersion,globalScope:.lifecycleEvents[0].scope,globalStatus:.lifecycleEvents[0].status,sectionScope:([.results[].lifecycleEvents[]?][0].scope),sectionStatus:([.results[].lifecycleEvents[]?][0].status),caseStatus:([.results[].cases[]?][0].status),caseEvent:([.results[].cases[]?.events[]?][0].type),skipMessage:([.results[].cases[]?.events[]?][0].message),lifecycleFailed:.summary.lifecycleFailed,casesSkipped:.summary.casesSkipped,specsSkipped:.summary.specsSkipped}' report-lifecycle-out/report.json
 {"schemaVersion":3,"globalScope":"global","globalStatus":"failed","sectionScope":"section","sectionStatus":"failed","caseStatus":"skipped","caseEvent":"caseSkipped","skipMessage":"not executed because a section setup hook failed","lifecycleFailed":2,"casesSkipped":1,"specsSkipped":0}
 ```
+
+## JSON Schema Compatibility
+
+The canonical report schema version lives with the `Report` contract in the
+core package.
+
+```run:shell
+$ grep '^const ReportSchemaVersion = ' ../internal/specdown/core/report.go
+const ReportSchemaVersion = 3
+```
+
+Within one schema version, producers may add fields only when they are optional
+and older consumers can safely ignore them. Omitting an optional field must
+continue to preserve its documented default behavior.
+
+A schema-version bump is required when a change removes or renames a field,
+changes a field's JSON type or meaning, makes an optional field required, or
+adds or changes an enum value that existing consumers may handle exhaustively.
+Golden contract tests must be updated in the same change so the intentional
+wire-format difference is reviewable.

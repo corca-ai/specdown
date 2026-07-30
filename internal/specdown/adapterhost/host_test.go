@@ -254,6 +254,25 @@ func TestExternalAdapterFinalResponseIsReadBeforeProcessExit(t *testing.T) {
 	}
 }
 
+func TestExternalAdapterAssertRejectsInvalidProtocolResponse(t *testing.T) {
+	host := Host{BaseDir: t.TempDir()}
+	session, err := host.StartSession(config.AdapterConfig{
+		Name:    "invalid-assert",
+		Command: []string{os.Args[0], "-test.run=^TestInvalidAssertAdapterProcess$", "--", "adapter-invalid-assert-helper"},
+	})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	_, err = session.Assert("check", nil, nil, nil, 1000)
+	if err == nil || !strings.Contains(err.Error(), `assert response type must be "passed" or "failed"`) {
+		t.Fatalf("assert error = %v, want protocol type diagnostic", err)
+	}
+	if closeErr := session.Close(); closeErr != nil {
+		t.Fatalf("close: %v", closeErr)
+	}
+}
+
 func startIgnoringAdapter(t *testing.T) *Session {
 	t.Helper()
 	host := Host{BaseDir: t.TempDir()}
@@ -295,6 +314,17 @@ func TestRespondingAdapterProcess(t *testing.T) {
 		os.Exit(1)
 	}
 	_, _ = fmt.Fprintln(os.Stdout, `{"id":1,"output":"final response"}`)
+}
+
+func TestInvalidAssertAdapterProcess(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "adapter-invalid-assert-helper" {
+		return
+	}
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		os.Exit(1)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, `{"id":1,"type":"unknown"}`)
+	os.Exit(0)
 }
 
 func TestBuiltinShellSessionExecNoTimeout(t *testing.T) {

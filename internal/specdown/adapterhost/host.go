@@ -271,9 +271,9 @@ func (s *Session) assertExternal(parent, requestCtx context.Context, request ada
 			ch <- result{err: err}
 			return
 		}
-		var resp adapterprotocol.AssertResponse
-		if err := json.Unmarshal(raw, &resp); err != nil {
-			ch <- result{err: fmt.Errorf("adapter %q: decode assert response: %w", s.adapter.Name, err)}
+		resp, err := adapterprotocol.ParseAssertResponse(raw)
+		if err != nil {
+			ch <- result{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
 			return
 		}
 		if resp.ID != request.ID {
@@ -312,7 +312,7 @@ func execTimeoutResponse(id int, source string, timeoutMs int) adapterprotocol.E
 func assertTimeoutResponse(id int, check string, timeoutMs int) adapterprotocol.AssertResponse {
 	return adapterprotocol.AssertResponse{
 		ID:      id,
-		Type:    "failed",
+		Type:    adapterprotocol.AssertResponseFailed,
 		Message: fmt.Sprintf("timeout after %dms (assert: check %q)", timeoutMs, truncate(check, 80)),
 	}
 }
