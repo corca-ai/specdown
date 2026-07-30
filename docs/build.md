@@ -2,7 +2,9 @@
 
 ## Prerequisites
 
-A Go toolchain is required. The project uses [mise](https://mise.jdx.dev/) to manage it (`mise.toml`).
+A Go toolchain is required. `go.mod` is the supported-version source of truth,
+and the tracked `mise.toml` pins the same exact version for local development.
+CI, self-spec, and release workflows use that version too.
 
 ```sh
 mise install        # install Go version from mise.toml
@@ -14,6 +16,19 @@ resolve it via mise:
 ```sh
 export PATH="$(mise where go)/bin:$PATH"
 ```
+
+When upgrading Go, update the `go` directive in `go.mod`, `mise.toml`, and all
+three `actions/setup-go` entries together. Then run the drift check and normal
+project gates:
+
+```sh
+scripts/check-go-version.sh
+go test ./...
+golangci-lint run
+```
+
+Do not use floating versions such as `latest`; toolchain upgrades must be
+reviewed changes.
 
 ## Build
 
