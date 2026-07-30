@@ -288,7 +288,40 @@ If the adapter does not respond within the timeout:
 - **Exec requests**: the engine synthesizes an error response with the message `timeout after Nms (exec: "source")` where *source* is the first 80 characters of the exec source
 - **Assert requests**: the engine synthesizes a failed response with the message `timeout after Nms (assert: check "name")` where *name* is the check name
 
-The adapter process is not killed — only the pending request is abandoned.
+After a timeout, specdown terminates the adapter process and its descendants,
+reaps the process, and marks the session unusable. This guarantees that a
+timed-out adapter cannot keep the spec run alive or perform delayed work.
+
+```run:shell
+# Verify a timed-out adapter and its child process cannot finish delayed work
+rm -f timeout-child-marker
+cat <<'ADAPTER' > timeout-adapter.sh
+#!/bin/sh
+read -r request
+sleep 2
+touch timeout-child-marker
+printf '{"id":1,"output":"late"}\n'
+ADAPTER
+chmod +x timeout-adapter.sh
+BT=$(printf '\140\140\140')
+printf '%s\n' \
+  '---' \
+  'timeout: 100' \
+  '---' \
+  '# Timeout' \
+  '' \
+  "\${BT}run:slow" \
+  'wait forever' \
+  "\${BT}" > timeout-kill.md
+printf '# T\n\n- [Timeout](timeout-kill.md)\n' > timeout-kill-index.md
+cat <<'CFG' > timeout-kill.json
+{"entry":"timeout-kill-index.md","adapters":[{"name":"slow","command":["./timeout-adapter.sh"],"blocks":["run:slow"]}]}
+CFG
+output=$(specdown run -config timeout-kill.json -no-report -quiet 2>&1 || true)
+printf '%s' "$output" | grep -q 'timeout after 100ms'
+sleep 0.2
+test ! -e timeout-child-marker
+```
 
 ## Response Size Limit
 

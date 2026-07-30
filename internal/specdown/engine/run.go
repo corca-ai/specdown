@@ -1,10 +1,10 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,6 +16,7 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/alloy"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/subprocess"
 	"github.com/corca-ai/specdown/internal/specdown/trace"
 )
 
@@ -46,11 +47,11 @@ type ProgressFunc func(ProgressEvent)
 var errMaxFailures = errors.New("maximum failure count reached")
 
 type RunOptions struct {
-	Filter      string
-	Jobs        int
-	DryRun      bool
-	Progress    ProgressFunc
-	MaxFailures int // 0 means unlimited
+	Filter       string
+	Jobs         int
+	DryRun       bool
+	Progress     ProgressFunc
+	MaxFailures  int // 0 means unlimited
 	NoSetup      bool
 	NoTeardown   bool
 	OnlySetup    bool
@@ -64,6 +65,8 @@ type adapterRegistry struct {
 
 // executionContext carries shared state through the document execution call chain.
 type executionContext struct {
+	ctx            context.Context
+	cancel         context.CancelFunc
 	registry       adapterRegistry
 	host           adapterhost.Host
 	alloyRunner    core.ModelRunner
@@ -73,34 +76,44 @@ type executionContext struct {
 	failures       *atomic.Int32
 	casesTotal     int
 	caseCounter    *atomic.Int32
+	limitHit       *atomic.Bool
 }
 
-func runShellCommand(baseDir, command string) error {
+func runShellCommand(ctx context.Context, baseDir, command string) error {
 	shell, flag := "sh", "-c"
 	if runtime.GOOS == "windows" {
 		shell, flag = "cmd", "/C"
 	}
-	cmd := exec.Command(shell, flag, command)
+	cmd := subprocess.CommandContext(ctx, shell, flag, command)
 	cmd.Dir = baseDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 //nolint:gocognit // top-level orchestration with setup/teardown/trace phases
 func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
+	return RunContext(context.Background(), baseDir, cfg, modelRunner, opts)
+}
+
+//nolint:gocognit // top-level orchestration with setup/teardown/trace phases
+func RunContext(ctx context.Context, baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts RunOptions) (core.Report, error) {
 	if opts.OnlySetup || opts.OnlyTeardown {
-		return runOnlyLifecycle(baseDir, cfg, opts)
+		return runOnlyLifecycle(ctx, baseDir, cfg, opts)
 	}
 
 	if cfg.Setup != "" && !opts.NoSetup {
-		if err := runShellCommand(baseDir, cfg.Setup); err != nil {
+		if err := runShellCommand(ctx, baseDir, cfg.Setup); err != nil {
 			return core.Report{}, fmt.Errorf("setup command failed: %w", err)
 		}
 	}
 	if cfg.Teardown != "" && !opts.NoTeardown {
 		defer func() {
-			if terr := runShellCommand(baseDir, cfg.Teardown); terr != nil {
+			if terr := runShellCommand(ctx, baseDir, cfg.Teardown); terr != nil {
 				fmt.Fprintf(os.Stderr, "warning: teardown command failed: %v\n", terr)
 			}
 		}()
@@ -116,7 +129,7 @@ func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts R
 	if progress == nil {
 		progress = func(ProgressEvent) {}
 	}
-	report, err := runWithDocs(title, docs, cfg, host, modelRunner, opts, defaultTimeout, progress)
+	report, err := runWithDocs(ctx, title, docs, cfg, host, modelRunner, opts, defaultTimeout, progress)
 	if err != nil {
 		return core.Report{}, err
 	}
@@ -139,7 +152,7 @@ func Run(baseDir string, cfg config.Config, modelRunner core.ModelRunner, opts R
 
 // ModelExplorer runs Alloy models and returns instance-level results.
 type ModelExplorer interface {
-	ExploreDocument(plan core.DocumentPlan, opts alloy.ExploreOptions) ([]alloy.ExploreModelResult, error)
+	ExploreDocument(ctx context.Context, plan core.DocumentPlan, opts alloy.ExploreOptions) ([]alloy.ExploreModelResult, error)
 }
 
 // ModelDumper can write model artifacts without running verification.
@@ -150,6 +163,10 @@ type ModelDumper interface {
 // ExploreModels runs Alloy models from all discovered documents and returns
 // per-model results grouped by document path.
 func ExploreModels(baseDir string, cfg config.Config, explorer ModelExplorer, filter string, opts alloy.ExploreOptions) (map[string][]alloy.ExploreModelResult, error) {
+	return ExploreModelsContext(context.Background(), baseDir, cfg, explorer, filter, opts)
+}
+
+func ExploreModelsContext(ctx context.Context, baseDir string, cfg config.Config, explorer ModelExplorer, filter string, opts alloy.ExploreOptions) (map[string][]alloy.ExploreModelResult, error) {
 	_, docs, err := core.DiscoverFromEntry(baseDir, cfg.Entry, cfg.IgnorePrefixes)
 	if err != nil {
 		return nil, err
@@ -167,7 +184,7 @@ func ExploreModels(baseDir string, cfg config.Config, explorer ModelExplorer, fi
 	results := make(map[string][]alloy.ExploreModelResult)
 	for i := range plan.Documents {
 		docPath := plan.Documents[i].Document.RelativeTo
-		explored, err := explorer.ExploreDocument(plan.Documents[i], opts)
+		explored, err := explorer.ExploreDocument(ctx, plan.Documents[i], opts)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +228,7 @@ func DumpModels(baseDir string, cfg config.Config, dumper ModelDumper) ([]string
 	return paths, nil
 }
 
-func runWithDocs(title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions, defaultTimeout int, progress ProgressFunc) (core.Report, error) {
+func runWithDocs(ctx context.Context, title string, docs []core.Document, cfg config.Config, host adapterhost.Host, alloyRunner core.ModelRunner, opts RunOptions, defaultTimeout int, progress ProgressFunc) (core.Report, error) {
 	plan, err := core.CompileDocuments(docs)
 	if err != nil {
 		return core.Report{}, err
@@ -244,7 +261,12 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 
 	var failures atomic.Int32
 	var caseCounter atomic.Int32
+	var limitHit atomic.Bool
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ec := &executionContext{
+		ctx:            runCtx,
+		cancel:         cancel,
 		registry:       registry,
 		host:           host,
 		alloyRunner:    alloyRunner,
@@ -254,6 +276,7 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 		failures:       &failures,
 		casesTotal:     casesTotal,
 		caseCounter:    &caseCounter,
+		limitHit:       &limitHit,
 	}
 	results, err := ec.executeDocuments(plan.Documents, jobs)
 	hitLimit := errors.Is(err, errMaxFailures)
@@ -286,45 +309,80 @@ func runWithDocs(title string, docs []core.Document, cfg config.Config, host ada
 
 func (ec *executionContext) executeDocuments(documents []core.DocumentPlan, jobs int) ([]core.DocumentResult, error) {
 	results := make([]core.DocumentResult, len(documents))
-	if jobs == 1 {
-		for i := range documents {
-			result, err := ec.runDocument(documents[i])
-			if errors.Is(err, errMaxFailures) {
-				results[i] = result
-				return results, err
-			}
-			if err != nil {
-				return nil, err
-			}
-			results[i] = result
-		}
+	if len(documents) == 0 {
 		return results, nil
 	}
 
-	errs := make([]error, len(documents))
-	sem := make(chan struct{}, jobs)
+	if jobs > len(documents) {
+		jobs = len(documents)
+	}
+	tasks := make(chan int)
 	var wg sync.WaitGroup
-	for i := range documents {
+	var errOnce sync.Once
+	var firstErr error
+
+	recordError := func(err error) {
+		errOnce.Do(func() {
+			firstErr = err
+			ec.cancel()
+		})
+	}
+
+	for range jobs {
 		wg.Add(1)
-		go func(i int, dp core.DocumentPlan) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			result, err := ec.runDocument(dp)
-			results[i] = result
-			errs[i] = err
-		}(i, documents[i])
+		go ec.runDocumentWorker(documents, results, tasks, recordError, &wg)
 	}
+
+	ec.sendDocumentTasks(tasks, len(documents))
 	wg.Wait()
-	for _, err := range errs {
-		if errors.Is(err, errMaxFailures) {
-			return results, err
-		}
-		if err != nil {
-			return nil, err
+
+	switch {
+	case ec.limitHit.Load():
+		return results, errMaxFailures
+	case firstErr != nil:
+		return results, firstErr
+	case ec.ctx.Err() != nil:
+		return results, ec.ctx.Err()
+	default:
+		return results, nil
+	}
+}
+
+func (ec *executionContext) runDocumentWorker(
+	documents []core.DocumentPlan,
+	results []core.DocumentResult,
+	tasks <-chan int,
+	recordError func(error),
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	for {
+		select {
+		case <-ec.ctx.Done():
+			return
+		case i, ok := <-tasks:
+			if !ok || ec.ctx.Err() != nil {
+				return
+			}
+			result, err := ec.runDocument(documents[i])
+			results[i] = result
+			if err != nil {
+				recordError(err)
+				return
+			}
 		}
 	}
-	return results, nil
+}
+
+func (ec *executionContext) sendDocumentTasks(tasks chan<- int, count int) {
+	defer close(tasks)
+	for i := range count {
+		select {
+		case tasks <- i:
+		case <-ec.ctx.Done():
+			return
+		}
+	}
 }
 
 func filterPlan(plan core.Plan, filter string) core.Plan {
@@ -473,6 +531,9 @@ func (r adapterRegistry) adapterFor(specCase core.CaseSpec) (adapterEntry, error
 }
 
 func (ec *executionContext) runDocument(plan core.DocumentPlan) (core.DocumentResult, error) {
+	if err := ec.ctx.Err(); err != nil {
+		return core.DocumentResult{}, err
+	}
 	ec.progress(ProgressEvent{Kind: "spec", Spec: plan.Document.RelativeTo})
 
 	if len(plan.Cases) == 0 {
@@ -490,10 +551,10 @@ func (ec *executionContext) runDocument(plan core.DocumentPlan) (core.DocumentRe
 		}
 		host = adapterhost.Host{BaseDir: resolved}
 	}
-	sm := newSessionManager(host)
+	sm := newSessionManager(ec.ctx, host)
 
 	// Pre-compute model verification results via ModelRunner before the case loop.
-	modelResults, modelErr := ec.alloyRunner.RunDocument(plan)
+	modelResults, modelErr := ec.alloyRunner.RunDocument(ec.ctx, plan)
 	if modelErr != nil {
 		return core.DocumentResult{}, modelErr
 	}
@@ -551,6 +612,8 @@ func (ec *executionContext) runDocumentCases(plan core.DocumentPlan, sm *session
 		timeout = ec.defaultTimeout
 	}
 	ctx := &caseRunContext{
+		ctx:         ec.ctx,
+		cancel:      ec.cancel,
 		registry:    ec.registry,
 		sessions:    sm,
 		bindings:    newBindingsManager(),
@@ -564,9 +627,13 @@ func (ec *executionContext) runDocumentCases(plan core.DocumentPlan, sm *session
 		casesTotal:  ec.casesTotal,
 		caseCounter: ec.caseCounter,
 		precomputed: precomputed,
+		limitHit:    ec.limitHit,
 	}
 
 	for i := range plan.Cases {
+		if err := ec.ctx.Err(); err != nil {
+			return ctx.results, err
+		}
 		nextPath := peekNextPath(plan.Cases, i)
 		if err := ctx.processCase(plan.Cases[i], nextPath); err != nil {
 			if errors.Is(err, errMaxFailures) {
@@ -579,6 +646,8 @@ func (ec *executionContext) runDocumentCases(plan core.DocumentPlan, sm *session
 }
 
 type caseRunContext struct {
+	ctx         context.Context
+	cancel      context.CancelFunc
 	registry    adapterRegistry
 	sessions    *sessionManager
 	bindings    *bindingsManager
@@ -593,6 +662,7 @@ type caseRunContext struct {
 	casesTotal  int
 	caseCounter *atomic.Int32
 	precomputed map[string]core.CaseResult
+	limitHit    *atomic.Bool
 }
 
 // processCase handles a single case: hooks, execution, result recording.
@@ -627,7 +697,7 @@ func (c *caseRunContext) processCase(specCase core.CaseSpec, nextPath core.Headi
 		return shouldRunHook(h, prevPath, currPath)
 	})
 
-	result, err := runSingleCase(specCase, c.registry, c.sessions, c.bindings.VisibleAt(specCase.ID.HeadingPath), c.timeoutMs)
+	result, err := runSingleCase(c.ctx, specCase, c.registry, c.sessions, c.bindings.VisibleAt(specCase.ID.HeadingPath), c.timeoutMs)
 	if err != nil {
 		return err
 	}
@@ -661,6 +731,12 @@ func (c *caseRunContext) recordResult(result core.CaseResult, path core.HeadingP
 	if result.Status == core.StatusFailed && !result.ExpectFail &&
 		c.maxFailures > 0 && c.failures != nil {
 		if int(c.failures.Add(1)) >= c.maxFailures {
+			if c.limitHit != nil {
+				c.limitHit.Store(true)
+			}
+			if c.cancel != nil {
+				c.cancel()
+			}
 			return errMaxFailures
 		}
 	}
@@ -696,12 +772,12 @@ func buildTraceGraphData(g trace.Graph) *core.TraceGraphData {
 }
 
 // runOnlyLifecycle runs only setup and/or teardown commands without executing specs.
-func runOnlyLifecycle(baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
+func runOnlyLifecycle(ctx context.Context, baseDir string, cfg config.Config, opts RunOptions) (core.Report, error) {
 	if opts.OnlySetup {
 		if cfg.Setup == "" {
 			return core.Report{}, fmt.Errorf("no setup command configured in specdown.json")
 		}
-		if err := runShellCommand(baseDir, cfg.Setup); err != nil {
+		if err := runShellCommand(ctx, baseDir, cfg.Setup); err != nil {
 			return core.Report{}, fmt.Errorf("setup command failed: %w", err)
 		}
 	}
@@ -709,7 +785,7 @@ func runOnlyLifecycle(baseDir string, cfg config.Config, opts RunOptions) (core.
 		if cfg.Teardown == "" {
 			return core.Report{}, fmt.Errorf("no teardown command configured in specdown.json")
 		}
-		if err := runShellCommand(baseDir, cfg.Teardown); err != nil {
+		if err := runShellCommand(ctx, baseDir, cfg.Teardown); err != nil {
 			return core.Report{}, fmt.Errorf("teardown command failed: %w", err)
 		}
 	}

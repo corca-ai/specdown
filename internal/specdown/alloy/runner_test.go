@@ -1,15 +1,19 @@
 package alloy
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/testutil"
@@ -358,7 +362,7 @@ func TestCollectOrderedResultsMissingKey(t *testing.T) {
 
 func TestRunDocumentNoModels(t *testing.T) {
 	runner := Runner{BaseDir: t.TempDir()}
-	results, err := runner.RunDocument(core.DocumentPlan{
+	results, err := runner.RunDocument(context.Background(), core.DocumentPlan{
 		Cases: []core.CaseSpec{alloyCheck("m", "a1", "5", 1)},
 	})
 	testutil.NilErr(t, err)
@@ -367,7 +371,7 @@ func TestRunDocumentNoModels(t *testing.T) {
 
 func TestRunDocumentNoAlloyCases(t *testing.T) {
 	runner := Runner{BaseDir: t.TempDir()}
-	results, err := runner.RunDocument(core.DocumentPlan{
+	results, err := runner.RunDocument(context.Background(), core.DocumentPlan{
 		AlloyModels: []core.AlloyModelSpec{{Name: "m"}},
 		Cases:       []core.CaseSpec{nonAlloyCase()},
 	})
@@ -379,7 +383,7 @@ func TestRunDocumentNoJava(t *testing.T) {
 	// Set PATH to empty so java is not found.
 	t.Setenv("PATH", "")
 	runner := Runner{BaseDir: t.TempDir()}
-	results, err := runner.RunDocument(core.DocumentPlan{
+	results, err := runner.RunDocument(context.Background(), core.DocumentPlan{
 		Document: core.Document{RelativeTo: "test.md"},
 		AlloyModels: []core.AlloyModelSpec{
 			{Name: "m", Fragments: []core.AlloyFragmentSpec{{Model: "m", HeadingPath: []string{"T"}, Source: "module m"}}},
@@ -390,6 +394,35 @@ func TestRunDocumentNoJava(t *testing.T) {
 	testutil.Len(t, results, 1)
 	testutil.Equal(t, results[0].Status, core.StatusFailed)
 	testutil.Contains(t, results[0].Message, "java not found")
+}
+
+func TestRunModelHonorsContextCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper is a POSIX shell script")
+	}
+	root := t.TempDir()
+	javaPath := filepath.Join(root, "slow-java")
+	testutil.NilErr(t, os.WriteFile(javaPath, []byte("#!/bin/sh\nsleep 30\n"), 0o755))
+	bundlePath := filepath.Join(root, "model.als")
+	testutil.NilErr(t, os.WriteFile(bundlePath, []byte("module model\n"), 0o644))
+	bundle := modelBundle{
+		Model:        "model",
+		RelativePath: "model.als",
+		AbsolutePath: bundlePath,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := (Runner{BaseDir: root}).runModel(ctx, javaPath, "ignored.jar", bundle, []core.CaseSpec{
+		alloyCheck("model", "assertion", "5", 1),
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("runModel error = %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Alloy cancellation returned after %s, want under 2s", elapsed)
+	}
 }
 
 // --- failedChecksAll ---
@@ -475,7 +508,6 @@ func TestEvaluateCheckCounterexample(t *testing.T) {
 	testutil.True(t, !filepath.IsAbs(result.Alloy.CounterexamplePath))
 }
 
-
 // --- writeCounterexample ---
 
 func TestWriteCounterexample(t *testing.T) {
@@ -550,6 +582,32 @@ func TestEnsureAlloyJarDownloadFailsHTTPError(t *testing.T) {
 	_, err := runner.ensureAlloyJar()
 	testutil.WantErr(t, err)
 	testutil.Contains(t, err.Error(), "unexpected status")
+}
+
+func TestEnsureAlloyJarHonorsContextCancellation(t *testing.T) {
+	requestStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(requestStarted)
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	origURL := alloyJarURL
+	alloyJarURL = server.URL + "/" + alloyJarName
+	defer func() { alloyJarURL = origURL }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := (Runner{HTTPClient: server.Client()}).ensureAlloyJarContext(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ensureAlloyJarContext error = %v, want context deadline exceeded", err)
+	}
+	select {
+	case <-requestStarted:
+	default:
+		t.Fatal("download request did not start")
+	}
 }
 
 // --- alloyCacheDir ---
@@ -867,7 +925,7 @@ func TestSummarizeInstance(t *testing.T) {
 
 func TestExploreDocumentNoModels(t *testing.T) {
 	runner := Runner{BaseDir: t.TempDir()}
-	results, err := runner.ExploreDocument(core.DocumentPlan{}, ExploreOptions{})
+	results, err := runner.ExploreDocument(context.Background(), core.DocumentPlan{}, ExploreOptions{})
 	testutil.NilErr(t, err)
 	testutil.Len(t, results, 0)
 }
@@ -875,7 +933,7 @@ func TestExploreDocumentNoModels(t *testing.T) {
 func TestExploreDocumentNoJava(t *testing.T) {
 	t.Setenv("PATH", "")
 	runner := Runner{BaseDir: t.TempDir()}
-	_, err := runner.ExploreDocument(core.DocumentPlan{
+	_, err := runner.ExploreDocument(context.Background(), core.DocumentPlan{
 		Document: core.Document{RelativeTo: "test.md"},
 		AlloyModels: []core.AlloyModelSpec{
 			{Name: "m", Fragments: []core.AlloyFragmentSpec{{Model: "m", HeadingPath: []string{"T"}, Source: "module m"}}},

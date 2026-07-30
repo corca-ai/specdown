@@ -129,12 +129,46 @@ $ cat reporter-json/out.json | head -1
 ## Parallel Execution
 
 When `-jobs N` is greater than 1, the engine executes documents
-concurrently using a semaphore of size N. Each document gets its own
-adapter sessions — sessions are never shared across documents.
+with a bounded worker queue containing at most N workers. Each document gets
+its own adapter sessions — sessions are never shared across documents.
 
 Within a single document, cases execute sequentially in document order.
 Variable bindings from earlier blocks are available to later blocks
 within the same scope.
+
+When `-max-failures` is reached, the shared run context is canceled. Documents
+still waiting in the queue do not start, while in-flight adapter, shell, and
+Alloy subprocesses are terminated. The completed result that reached the limit
+is retained; canceled in-flight documents that did not complete are omitted
+from the report.
+
+```run:shell
+# A failure cancels in-flight work and leaves queued documents unstarted
+rm -f queue-running-marker queue-pending-marker
+cat <<'ADAPTER' > queue-adapter.sh
+#!/bin/sh
+read -r request
+case "$request" in
+  *fail*) printf '{"id":1,"error":"failed"}\n' ;;
+  *slow*) sleep 2; touch queue-running-marker; printf '{"id":1,"output":"late"}\n' ;;
+  *pending*) touch queue-pending-marker; printf '{"id":1,"output":"started"}\n' ;;
+esac
+ADAPTER
+chmod +x queue-adapter.sh
+BT=$(printf '\140\140\140')
+printf '%s\n' '# First' '' "\${BT}run:queue" 'fail' "\${BT}" > queue-first.md
+printf '%s\n' '# Second' '' "\${BT}run:queue" 'slow' "\${BT}" > queue-second.md
+printf '%s\n' '# Third' '' "\${BT}run:queue" 'pending' "\${BT}" > queue-third.md
+printf '%s\n' '# Queue' '' '- [First](queue-first.md)' '- [Second](queue-second.md)' '- [Third](queue-third.md)' > queue-index.md
+printf '%s\n' '{"entry":"queue-index.md","adapters":[{"name":"queue","command":["sh","./queue-adapter.sh"],"blocks":["run:queue"]}],"reporters":[{"builtin":"json","outFile":"queue-report.json"}]}' > queue-config.json
+specdown run -config queue-config.json -jobs 2 -max-failures 1 -quiet >/dev/null 2>&1 || true
+sleep 0.2
+test ! -e queue-running-marker
+test ! -e queue-pending-marker
+grep -q '"relativeTo": "queue-first.md"' queue-report.json
+! grep -q '"relativeTo": "queue-second.md"' queue-report.json
+! grep -q '"relativeTo": "queue-third.md"' queue-report.json
+```
 
 The default is `-jobs 1` (sequential). Setting `-jobs` to the number
 of CPU cores is safe because each goroutine blocks on adapter I/O,
@@ -154,9 +188,9 @@ Results are indexed by `SpecID` and looked up inline during case
 processing. The `ModelRunner` interface keeps model verification
 decoupled from the engine.
 
-```text
+```go
 ModelRunner
-  RunDocument(plan) -> []CaseResult
+  RunDocument(ctx context.Context, plan DocumentPlan) -> []CaseResult
 ```
 
 For each document, the runner:

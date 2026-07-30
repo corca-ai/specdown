@@ -1,7 +1,10 @@
 package jqadapter
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 )
@@ -208,6 +211,24 @@ func TestAssertMultipleResults(t *testing.T) {
 	))
 	if resp.Type != "passed" {
 		t.Fatalf("expected passed, got %s (actual=%q)", resp.Type, resp.Actual)
+	}
+}
+
+func TestAssertContextCancelsNonTerminatingExpression(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	resp := AssertContext(ctx, 1, makeReq(
+		map[string]string{"input": `{}`},
+		[]string{"expr", "expected"},
+		[]string{"def forever: forever; forever", "never"},
+	))
+	if resp.Type != "failed" || !strings.Contains(resp.Message, context.DeadlineExceeded.Error()) {
+		t.Fatalf("response = %+v, want deadline failure", resp)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("jq cancellation returned after %s, want under 2s", elapsed)
 	}
 }
 

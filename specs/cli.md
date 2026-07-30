@@ -79,11 +79,20 @@ echo "$help" | grep -q "alloy dump"
 | `-no-report` | `false` | Execute specs without writing report artifacts |
 | `-show-bindings` | `false` | Print resolved variable bindings for each case |
 | `-quiet` | `false` | Suppress progress output; show only final summary |
-| `-max-failures` | `0` | Stop after N unexpected failures (0 = unlimited) |
+| `-max-failures` | `0` | Stop after N unexpected failures, canceling in-flight and queued documents (0 = unlimited) |
 | `-no-setup` | `false` | Skip the global setup command |
 | `-no-teardown` | `false` | Skip the global teardown command |
 | `-setup` | `false` | Run only the global setup command, then exit |
 | `-teardown` | `false` | Run only the global teardown command, then exit |
+
+The run command exposes both parallelism and early-cancellation controls. Their
+worker-queue behavior is specified in [Parallel Execution](internals.md#parallel-execution).
+
+```run:shell
+# Verify both controls are available from the CLI
+specdown run -help 2>&1 | grep -q -- '-jobs'
+specdown run -help 2>&1 | grep -q -- '-max-failures'
+```
 
 ### Trace Flags
 

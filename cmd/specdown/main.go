@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "embed"
@@ -44,7 +47,9 @@ func main() {
 	case "init":
 		err = initCmd(os.Args[2:])
 	case "run":
-		err = run(os.Args[2:])
+		ctx, stop := interruptContext()
+		err = run(ctx, os.Args[2:])
+		stop()
 	case "trace":
 		err = traceCmd(os.Args[2:])
 	case "alloy":
@@ -60,6 +65,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "specdown: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func interruptContext() (context.Context, context.CancelFunc) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+	return ctx, stop
 }
 
 func unknownCmd(args []string) {
@@ -95,7 +109,7 @@ func hasHelpFlag(args []string) bool {
 }
 
 //nolint:gocognit // CLI entry point with flag parsing
-func run(args []string) error {
+func run(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() {
@@ -134,10 +148,10 @@ func run(args []string) error {
 	}
 
 	opts := engine.RunOptions{
-		Filter:      *filter,
-		Jobs:        *jobs,
-		DryRun:      *dryRun,
-		MaxFailures: *maxFailures,
+		Filter:       *filter,
+		Jobs:         *jobs,
+		DryRun:       *dryRun,
+		MaxFailures:  *maxFailures,
 		NoSetup:      *noSetup,
 		NoTeardown:   *noTeardown,
 		OnlySetup:    *onlySetup,
@@ -148,7 +162,7 @@ func run(args []string) error {
 	}
 
 	runStart := time.Now()
-	report, err := engine.Run(configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, opts)
+	report, err := engine.RunContext(ctx, configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, opts)
 	elapsed := time.Since(runStart)
 	if err != nil {
 		return err
@@ -405,13 +419,15 @@ func alloyCmd(args []string) error {
 	case "dump":
 		return alloyDump(args[1:])
 	case "explore":
-		return alloyExplore(args[1:])
+		ctx, stop := interruptContext()
+		defer stop()
+		return alloyExplore(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown alloy subcommand %q\nhint: run 'specdown alloy --help' for available subcommands", args[0])
 	}
 }
 
-func alloyExplore(args []string) error {
+func alloyExplore(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("alloy explore", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() {
@@ -440,7 +456,7 @@ func alloyExplore(args []string) error {
 	}
 
 	opts := alloy.ExploreOptions{Repeat: *repeat}
-	resultsByDoc, err := engine.ExploreModels(configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, *filter, opts)
+	resultsByDoc, err := engine.ExploreModelsContext(ctx, configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, *filter, opts)
 	if err != nil {
 		return err
 	}

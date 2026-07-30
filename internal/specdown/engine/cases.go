@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
-func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) (core.CaseResult, error) {
+func runSingleCase(ctx context.Context, specCase core.CaseSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) (core.CaseResult, error) {
 	start := time.Now()
 
 	if specCase.Kind == core.CaseKindInlineExpect {
@@ -45,9 +46,9 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 	var result core.CaseResult
 	switch specCase.Kind {
 	case core.CaseKindCode:
-		result, err = runCodeCase(specCase, prepared, session, timeoutMs)
+		result, err = runCodeCase(ctx, specCase, prepared, session, timeoutMs)
 	case core.CaseKindTableRow:
-		result, err = runTableRowCase(specCase, prepared, session, timeoutMs)
+		result, err = runTableRowCase(ctx, specCase, prepared, session, timeoutMs)
 	default:
 		return core.CaseResult{}, fmt.Errorf("unsupported case kind %q", specCase.Kind)
 	}
@@ -64,7 +65,7 @@ func runSingleCase(specCase core.CaseSpec, registry adapterRegistry, sm *session
 	return result, nil
 }
 
-func runCodeCase(specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+func runCodeCase(ctx context.Context, specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
 	code := specCase.Code
 	result := core.CaseResult{
 		ID:    specCase.ID,
@@ -84,10 +85,10 @@ func runCodeCase(specCase, prepared core.CaseSpec, session *adapterhost.Session,
 	})
 
 	if core.IsDoctestContent(prepared.Code.Template) {
-		return runDoctestCase(specCase, prepared, session, result, timeoutMs)
+		return runDoctestCase(ctx, specCase, prepared, session, result, timeoutMs)
 	}
 
-	resp, err := session.Exec(prepared.Code.Template, timeoutMs)
+	resp, err := session.ExecContext(ctx, prepared.Code.Template, timeoutMs)
 	if err != nil {
 		return result, err
 	}
@@ -126,12 +127,12 @@ func runCodeCase(specCase, prepared core.CaseSpec, session *adapterhost.Session,
 	return result, nil
 }
 
-func runDoctestCase(_, prepared core.CaseSpec, session *adapterhost.Session, result core.CaseResult, timeoutMs int) (core.CaseResult, error) {
+func runDoctestCase(ctx context.Context, _, prepared core.CaseSpec, session *adapterhost.Session, result core.CaseResult, timeoutMs int) (core.CaseResult, error) {
 	steps := core.ParseDoctestSource(prepared.Code.Template)
 	result.Status = core.StatusPassed
 
 	for _, step := range steps {
-		resp, err := session.Exec(step.Command, timeoutMs)
+		resp, err := session.ExecContext(ctx, step.Command, timeoutMs)
 		if err != nil {
 			return result, err
 		}
@@ -191,7 +192,7 @@ func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string
 	}
 }
 
-func runTableRowCase(specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
+func runTableRowCase(ctx context.Context, specCase, prepared core.CaseSpec, session *adapterhost.Session, timeoutMs int) (core.CaseResult, error) {
 	tr := specCase.TableRow
 	pr := prepared.TableRow
 	result := core.CaseResult{
@@ -213,7 +214,7 @@ func runTableRowCase(specCase, prepared core.CaseSpec, session *adapterhost.Sess
 		Label: result.Label,
 	})
 
-	resp, err := session.Assert(pr.Check, pr.CheckParams, pr.Columns, pr.Cells, timeoutMs)
+	resp, err := session.AssertContext(ctx, pr.Check, pr.CheckParams, pr.Columns, pr.Cells, timeoutMs)
 	if err != nil {
 		return result, err
 	}

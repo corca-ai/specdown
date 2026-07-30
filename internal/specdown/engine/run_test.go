@@ -2,13 +2,16 @@ package engine
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
 	"github.com/corca-ai/specdown/internal/specdown/alloy"
@@ -19,7 +22,9 @@ import (
 // noopModelRunner satisfies core.ModelRunner but never returns results.
 type noopModelRunner struct{}
 
-func (noopModelRunner) RunDocument(core.DocumentPlan) ([]core.CaseResult, error) { return nil, nil }
+func (noopModelRunner) RunDocument(context.Context, core.DocumentPlan) ([]core.CaseResult, error) {
+	return nil, nil
+}
 
 func TestRunSupportsBoardAndCardLifecycleChecks(t *testing.T) {
 	source := strings.Join([]string{
@@ -239,7 +244,7 @@ func TestRunTracksAlloyChecksAlongsideAdapterCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	report, err := runWithDocs(title, docs, config.Config{
+	report, err := runWithDocs(context.Background(), title, docs, config.Config{
 		Entry:    "specs/index.spec.md",
 		Adapters: helperAdapterConfig().Adapters,
 	}, adapterhost.Host{BaseDir: root}, fakeAlloyRunner{
@@ -596,6 +601,119 @@ func TestRunWithFrontmatterTimeout(t *testing.T) {
 	}
 	if report.Summary.CasesPassed != 1 {
 		t.Fatalf("expected 1 passed case, got %+v", report.Summary)
+	}
+}
+
+func TestRunContextCancelsGlobalSetupProcess(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := RunContext(ctx, t.TempDir(), config.Config{
+		Entry: "specs/index.md",
+		Setup: strconv.Quote(os.Args[0]) + " -test.run=^TestCancellationHelperProcess$ -- lifecycle-helper",
+	}, noopModelRunner{}, RunOptions{})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("run error = %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("setup cancellation returned after %s, want under 2s", elapsed)
+	}
+}
+
+func TestParallelMaxFailuresDoesNotStartQueuedDocuments(t *testing.T) {
+	root := t.TempDir()
+	specsDir := filepath.Join(root, "specs")
+	if err := os.MkdirAll(specsDir, 0o755); err != nil {
+		t.Fatalf("mkdir specs: %v", err)
+	}
+	secondMarker := filepath.Join(root, "second-finished")
+	thirdMarker := filepath.Join(root, "third-started")
+	specFiles := []struct {
+		name   string
+		source string
+	}{
+		{"first.md", "# First\n\n```run:cancel\nfail\n```\n"},
+		{"second.md", "# Second\n\n```run:cancel\nslow:" + secondMarker + "\n```\n"},
+		{"third.md", "# Third\n\n```run:cancel\nmark:" + thirdMarker + "\n```\n"},
+	}
+	var paths []string
+	for _, specFile := range specFiles {
+		path := filepath.Join(specsDir, specFile.name)
+		if err := os.WriteFile(path, []byte(specFile.source), 0o644); err != nil {
+			t.Fatalf("write %s: %v", specFile.name, err)
+		}
+		paths = append(paths, path)
+	}
+	writeEntryFile(t, root, paths...)
+
+	started := make(chan string, len(specFiles)+1)
+	start := time.Now()
+	report, err := RunContext(context.Background(), root, config.Config{
+		Entry: "specs/index.spec.md",
+		Adapters: []config.AdapterConfig{{
+			Name:    "cancel",
+			Command: []string{os.Args[0], "-test.run=^TestCancellationHelperProcess$", "--", "adapter-helper"},
+			Blocks:  []string{"run:cancel"},
+		}},
+	}, noopModelRunner{}, RunOptions{
+		Jobs:        2,
+		MaxFailures: 1,
+		Progress: func(event ProgressEvent) {
+			if event.Kind == "spec" {
+				started <- event.Spec
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesFailed != 1 {
+		t.Fatalf("summary = %+v, want one failed case", report.Summary)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("max-failures cancellation returned after %s, want under 2s", elapsed)
+	}
+
+	close(started)
+	for spec := range started {
+		if spec == "specs/third.md" {
+			t.Fatal("queued third document started after the failure limit")
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+	for _, marker := range []string{secondMarker, thirdMarker} {
+		if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
+			t.Fatalf("canceled work created marker %s", marker)
+		}
+	}
+}
+
+func TestCancellationHelperProcess(t *testing.T) {
+	if len(os.Args) == 0 {
+		return
+	}
+	switch os.Args[len(os.Args)-1] {
+	case "lifecycle-helper":
+		time.Sleep(30 * time.Second)
+	case "adapter-helper":
+		var request struct {
+			ID     int    `json:"id"`
+			Source string `json:"source"`
+		}
+		if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
+			os.Exit(1)
+		}
+		switch {
+		case request.Source == "fail":
+			_, _ = fmt.Fprintf(os.Stdout, `{"id":%d,"error":"failed"}`+"\n", request.ID)
+		case strings.HasPrefix(request.Source, "slow:"):
+			time.Sleep(30 * time.Second)
+			_ = os.WriteFile(strings.TrimPrefix(request.Source, "slow:"), []byte("late"), 0o644)
+		case strings.HasPrefix(request.Source, "mark:"):
+			_ = os.WriteFile(strings.TrimPrefix(request.Source, "mark:"), []byte("started"), 0o644)
+			_, _ = fmt.Fprintf(os.Stdout, `{"id":%d,"output":"marked"}`+"\n", request.ID)
+		}
 	}
 }
 
@@ -1337,7 +1455,7 @@ type fakeModelExplorer struct {
 	results map[string][]alloy.ExploreModelResult
 }
 
-func (f fakeModelExplorer) ExploreDocument(plan core.DocumentPlan, _ alloy.ExploreOptions) ([]alloy.ExploreModelResult, error) {
+func (f fakeModelExplorer) ExploreDocument(_ context.Context, plan core.DocumentPlan, _ alloy.ExploreOptions) ([]alloy.ExploreModelResult, error) {
 	return f.results[plan.Document.RelativeTo], nil
 }
 
@@ -1447,7 +1565,7 @@ type fakeAlloyRunner struct {
 	results map[string]core.CaseResult
 }
 
-func (f fakeAlloyRunner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
+func (f fakeAlloyRunner) RunDocument(_ context.Context, plan core.DocumentPlan) ([]core.CaseResult, error) {
 	var alloyChecks []core.CaseSpec
 	for i := range plan.Cases {
 		if plan.Cases[i].Kind == core.CaseKindAlloy {

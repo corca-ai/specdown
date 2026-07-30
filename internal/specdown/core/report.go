@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type Binding struct {
 	Name  string `json:"name"`
@@ -34,18 +37,18 @@ type DoctestStep struct {
 
 type CaseResult struct {
 	// Common (always set)
-	ID              SpecID        `json:"id"`
-	Kind            CaseKind      `json:"kind"`
-	Status          Status        `json:"status"`
-	Label           string        `json:"label"`
-	DurationMs      int           `json:"durationMs,omitempty"`
-	ExpectFail      bool          `json:"expectFail,omitempty"`
-	Message         string        `json:"message,omitempty"`
-	Expected        string        `json:"expected,omitempty"`
-	Actual          string        `json:"actual,omitempty"`
-	Bindings        []Binding     `json:"bindings,omitempty"`
-	VisibleBindings []Binding     `json:"visibleBindings,omitempty"`
-	Events          []Event       `json:"events,omitempty"`
+	ID              SpecID    `json:"id"`
+	Kind            CaseKind  `json:"kind"`
+	Status          Status    `json:"status"`
+	Label           string    `json:"label"`
+	DurationMs      int       `json:"durationMs,omitempty"`
+	ExpectFail      bool      `json:"expectFail,omitempty"`
+	Message         string    `json:"message,omitempty"`
+	Expected        string    `json:"expected,omitempty"`
+	Actual          string    `json:"actual,omitempty"`
+	Bindings        []Binding `json:"bindings,omitempty"`
+	VisibleBindings []Binding `json:"visibleBindings,omitempty"`
+	Events          []Event   `json:"events,omitempty"`
 
 	// Kind-specific (exactly one is set, or none for InlineExpect)
 	Code  *CodeResultDetail  `json:"code,omitempty"`
@@ -120,7 +123,7 @@ type TraceEdge struct {
 
 // ModelRunner runs model verification cases for a document plan.
 type ModelRunner interface {
-	RunDocument(plan DocumentPlan) ([]CaseResult, error)
+	RunDocument(ctx context.Context, plan DocumentPlan) ([]CaseResult, error)
 }
 
 type Report struct {

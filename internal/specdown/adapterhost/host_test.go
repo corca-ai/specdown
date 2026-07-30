@@ -2,12 +2,15 @@ package adapterhost
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
-	"io"
+	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/config"
 )
@@ -144,37 +147,67 @@ func TestBuiltinShellSessionCloseIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestExecTimeoutReturnsSyntheticError(t *testing.T) {
-	// Use a pipe-based session to test the timeout path without spawning
-	// a real long-running process that cannot be interrupted.
-	stdinReader, stdinWriter := io.Pipe()
-	stdoutReader, _ := io.Pipe() // never write — simulates a slow adapter
+func TestBuiltinShellTimeoutTerminatesProcessTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the built-in shell adapter requires a POSIX shell")
+	}
+	host := Host{BaseDir: t.TempDir()}
+	session, err := host.StartBuiltinShellSession(shellAdapter())
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	marker := filepath.Join(host.BaseDir, "late-marker")
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// drain stdin so encoder doesn't block
-		buf := make([]byte, 4096)
-		for {
-			if _, err := stdinReader.Read(buf); err != nil {
-				return
-			}
-		}
-	}()
+	start := time.Now()
+	resp, err := session.Exec("sleep 5; touch "+marker, 100)
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if !strings.HasPrefix(resp.Error, `timeout after 100ms (exec: "sleep 5; touch `) {
+		t.Fatalf("unexpected error %q", resp.Error)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("timeout returned after %s, want under 2s", elapsed)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("timed-out shell child survived and created %s", marker)
+	}
+}
 
-	scanner := bufio.NewScanner(stdoutReader)
-	scanner.Buffer(make([]byte, 1024), 1024*1024)
-
-	session := &Session{
-		adapter: shellAdapter(),
-		stdin:   stdinWriter,
-		scanner: scanner,
-		encoder: json.NewEncoder(stdinWriter),
-		stderr:  &bytes.Buffer{},
-		builtin: true,
-		done:    done,
+func TestBuiltinJQTimeoutStopsEvaluation(t *testing.T) {
+	session, err := (Host{}).StartBuiltinJQSession(config.AdapterConfig{
+		Name:      "jq",
+		BuiltinJQ: true,
+	})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
 	}
 
+	start := time.Now()
+	resp, err := session.Assert("jq", map[string]string{
+		"input":    `{}`,
+		"expr":     "def forever: forever; forever",
+		"expected": "never",
+	}, nil, nil, 100)
+	if err != nil {
+		t.Fatalf("assert: %v", err)
+	}
+	if resp.Message != `timeout after 100ms (assert: check "jq")` {
+		t.Fatalf("unexpected message %q", resp.Message)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("jq timeout returned after %s, want under 2s", elapsed)
+	}
+}
+
+func TestExternalAdapterExecTimeoutTerminatesProcess(t *testing.T) {
+	session := startIgnoringAdapter(t)
+
+	start := time.Now()
 	resp, err := session.Exec("ignored", 100)
 	if err != nil {
 		t.Fatalf("exec: %v", err)
@@ -182,11 +215,86 @@ func TestExecTimeoutReturnsSyntheticError(t *testing.T) {
 	if resp.Error != `timeout after 100ms (exec: "ignored")` {
 		t.Fatalf("unexpected error %q", resp.Error)
 	}
+	assertSessionTerminatedPromptly(t, session, start)
+}
 
-	// Clean up: close stdin to unblock drain goroutine, then close pipes
-	_ = stdinWriter.Close()
-	_ = stdinReader.Close()
-	_ = stdoutReader.Close()
+func TestExternalAdapterAssertTimeoutTerminatesProcess(t *testing.T) {
+	session := startIgnoringAdapter(t)
+
+	start := time.Now()
+	resp, err := session.Assert("stuck", nil, nil, nil, 100)
+	if err != nil {
+		t.Fatalf("assert: %v", err)
+	}
+	if resp.Message != `timeout after 100ms (assert: check "stuck")` {
+		t.Fatalf("unexpected message %q", resp.Message)
+	}
+	assertSessionTerminatedPromptly(t, session, start)
+}
+
+func TestExternalAdapterFinalResponseIsReadBeforeProcessExit(t *testing.T) {
+	host := Host{BaseDir: t.TempDir()}
+	session, err := host.StartSession(config.AdapterConfig{
+		Name:    "responds-then-exits",
+		Command: []string{os.Args[0], "-test.run=^TestRespondingAdapterProcess$", "--", "adapter-response-helper"},
+	})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	resp, err := session.Exec("hello", 1000)
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if !resp.HasOutput || string(resp.Output) != `"final response"` {
+		t.Fatalf("unexpected response %+v", resp)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}
+
+func startIgnoringAdapter(t *testing.T) *Session {
+	t.Helper()
+	host := Host{BaseDir: t.TempDir()}
+	session, err := host.StartSession(config.AdapterConfig{
+		Name:    "ignores-eof",
+		Command: []string{os.Args[0], "-test.run=^TestIgnoringAdapterProcess$", "--", "adapter-helper"},
+	})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	return session
+}
+
+func assertSessionTerminatedPromptly(t *testing.T, session *Session, start time.Time) {
+	t.Helper()
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("timeout cleanup returned after %s, want under 2s", elapsed)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if session.cmd.ProcessState == nil {
+		t.Fatal("adapter process was not reaped")
+	}
+}
+
+func TestIgnoringAdapterProcess(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "adapter-helper" {
+		return
+	}
+	time.Sleep(30 * time.Second)
+}
+
+func TestRespondingAdapterProcess(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "adapter-response-helper" {
+		return
+	}
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		os.Exit(1)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, `{"id":1,"output":"final response"}`)
 }
 
 func TestBuiltinShellSessionExecNoTimeout(t *testing.T) {
@@ -205,71 +313,4 @@ func TestBuiltinShellSessionExecNoTimeout(t *testing.T) {
 	if resp.Error != "" {
 		t.Fatalf("unexpected error: %s", resp.Error)
 	}
-}
-
-func TestHandleBuiltinMessageExec(t *testing.T) {
-	raw := []byte(`{"type":"exec","id":1,"source":"echo test"}`)
-	var results []json.RawMessage
-	encoder := json.NewEncoder(&capturingWriter{results: &results})
-
-	if err := handleBuiltinMessage(raw, encoder, ""); err != nil {
-		t.Fatalf("handle: %v", err)
-	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
-	}
-
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(results[0], &fields); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if _, ok := fields["output"]; !ok {
-		if errRaw, ok := fields["error"]; ok {
-			t.Fatalf("expected output key, got error: %s", errRaw)
-		}
-		t.Fatal("expected output key in response")
-	}
-}
-
-func TestHandleBuiltinMessageUnknownType(t *testing.T) {
-	raw := []byte(`{"type":"unknown","id":1}`)
-	var results []json.RawMessage
-	encoder := json.NewEncoder(&capturingWriter{results: &results})
-
-	err := handleBuiltinMessage(raw, encoder, "")
-	if err == nil {
-		t.Fatal("expected error for unknown type")
-	}
-}
-
-func TestHandleBuiltinMessageInvalidJSON(t *testing.T) {
-	raw := []byte(`not json`)
-	var results []json.RawMessage
-	encoder := json.NewEncoder(&capturingWriter{results: &results})
-
-	err := handleBuiltinMessage(raw, encoder, "")
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func TestHandleBuiltinMessageMissingType(t *testing.T) {
-	raw := []byte(`{"id":1}`)
-	var results []json.RawMessage
-	encoder := json.NewEncoder(&capturingWriter{results: &results})
-
-	err := handleBuiltinMessage(raw, encoder, "")
-	if err == nil {
-		t.Fatal("expected error for missing type")
-	}
-}
-
-// capturingWriter collects each JSON line written by an encoder.
-type capturingWriter struct {
-	results *[]json.RawMessage
-}
-
-func (w *capturingWriter) Write(p []byte) (int, error) {
-	*w.results = append(*w.results, append(json.RawMessage(nil), p...))
-	return len(p), nil
 }
