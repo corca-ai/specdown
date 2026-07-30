@@ -70,13 +70,15 @@ for WORKFLOW in \
   .github/workflows/selfspec.yml \
   .github/workflows/release.yml
 do
-  COUNT=$(awk -F"'" '/^[[:space:]]*go-version:/ { count++ } END { print count + 0 }' "$WORKFLOW")
-  if [ "$COUNT" -ne 1 ]; then
-    fail "$WORKFLOW must contain exactly one single-quoted go-version"
+  TOTAL=$(awk '/^[[:space:]]*go-version:/ { count++ } END { print count + 0 }' "$WORKFLOW")
+  COUNT=$(awk -F"'" '/^[[:space:]]*go-version:/ && NF >= 3 { count++ } END { print count + 0 }' "$WORKFLOW")
+  if [ "$TOTAL" -eq 0 ] || [ "$COUNT" -ne "$TOTAL" ]; then
+    fail "$WORKFLOW must contain at least one single-quoted go-version"
   fi
-  WORKFLOW_VERSION=$(awk -F"'" '/^[[:space:]]*go-version:/ { print $2 }' "$WORKFLOW")
-  if [ "$WORKFLOW_VERSION" != "$GO_VERSION" ]; then
-    fail "$WORKFLOW uses ${WORKFLOW_VERSION:-<missing>}, go.mod uses $GO_VERSION"
+  if ! awk -F"'" -v expected="$GO_VERSION" '
+    /^[[:space:]]*go-version:/ && $2 != expected { exit 1 }
+  ' "$WORKFLOW"; then
+    fail "$WORKFLOW contains a go-version that differs from go.mod ($GO_VERSION)"
   fi
 done
 

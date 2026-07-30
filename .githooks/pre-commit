@@ -1,25 +1,7 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-cleanup() { rm -rf .tmp-bin; }
-trap cleanup EXIT
-
-echo "Running tests..."
-go test ./...
-
-echo "Running lint..."
-golangci-lint run ./...
-
-echo "Building specdown..."
-go generate ./cmd/specdown/...
-mkdir -p .tmp-bin
-go build -o .tmp-bin/specdown ./cmd/specdown
-export PATH="$PWD/.tmp-bin:$PATH"
-
-echo "Running selfspecs..."
-specdown run
-
-echo "Running example specs..."
-cd examples/pocket-board && ../../.tmp-bin/specdown run
+./scripts/verify.sh fast
+./scripts/verify.sh spec

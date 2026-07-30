@@ -2,12 +2,14 @@
 
 ## Prerequisites
 
-A Go toolchain is required. `go.mod` is the supported-version source of truth,
-and the tracked `mise.toml` pins the same exact version for local development.
-CI, self-spec, and release workflows use that version too.
+A Go toolchain is required. Java 21 is required for the Alloy self-specs.
+`go.mod` is the supported Go version source of truth, and the tracked
+`mise.toml` pins Go, golangci-lint, and GoReleaser for local development.
+CI, self-spec, and release workflows use the same versions.
 
 ```sh
-mise install        # install Go version from mise.toml
+mise install
+go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
 ```
 
 If `go` is not on `PATH` (common in non-interactive shells and CI agents),
@@ -17,18 +19,32 @@ resolve it via mise:
 export PATH="$(mise where go)/bin:$PATH"
 ```
 
-When upgrading Go, update the `go` directive in `go.mod`, `mise.toml`, and all
-three `actions/setup-go` entries together. Then run the drift check and normal
-project gates:
+When upgrading Go, update the `go` directive in `go.mod`, `mise.toml`, and every
+`actions/setup-go` entry together. The drift check enforces this contract.
+
+## Verification
+
+Checked-in verification entry points are the source of truth for local hooks
+and CI:
 
 ```sh
-scripts/check-go-version.sh
-go test ./...
-golangci-lint run
+./scripts/verify.sh fast
+./scripts/verify.sh spec
+./scripts/verify.sh release
+./scripts/verify.sh security
 ```
 
-Do not use floating versions such as `latest`; toolchain upgrades must be
-reviewed changes.
+| command | coverage | prerequisites |
+| --- | --- | --- |
+| `fast` | toolchain drift, module integrity/tidiness, race tests, lint, build | Go, golangci-lint |
+| `spec` | full self-spec and pocket-board example | Go, Java 21 |
+| `release` | GoReleaser config, non-publishing snapshot, installer smoke tests | Go, GoReleaser |
+| `security` | pinned `govulncheck` scan | govulncheck |
+
+All build outputs go to temporary or ignored directories. Module tidiness uses
+`go mod tidy -diff`, so verification does not rewrite tracked module files.
+Do not use floating tool versions such as `latest`; upgrades must be reviewed
+changes.
 
 ## Build
 
@@ -54,29 +70,18 @@ specdown alloy dump       # generate only Alloy model .als files
 
 Reports are generated in `specs/report/`.
 
-## Test
+## Test and executable specifications
+
+The fast suite includes race-enabled unit tests. The project's own
+specifications and the pocket-board example are executable through the shared
+spec verification command:
 
 ```sh
-go test ./...
-```
-
-### Selfspecs
-
-The project's own specifications are executable. After building,
-run them from the project root. Selfspecs invoke `specdown`
-recursively, so `bin/` must be on `PATH`:
-
-```sh
-PATH="$(pwd)/bin:$PATH" bin/specdown run
+./scripts/verify.sh fast
+./scripts/verify.sh spec
 ```
 
 Reports are generated in `specs/report/`.
-
-### Pocket-Board Example
-
-```sh
-cd examples/pocket-board && PATH="$(pwd)/../../bin:$PATH" ../../bin/specdown run
-```
 
 ### Pre-commit hook
 
@@ -86,29 +91,26 @@ The repository includes a pre-commit hook in `.githooks/`. Enable it once after 
 git config core.hooksPath .githooks
 ```
 
-The hook runs tests, lint, build, selfspecs, and example specs.
-
-## Lint
-
-The project uses [golangci-lint](https://golangci-lint.run/) with the configuration in `.golangci.yml`.
-
-```sh
-golangci-lint run
-```
-
-Enabled linters: errcheck, govet, staticcheck, unused, ineffassign, gocritic, gocognit, bodyclose, nilerr, errorlint, unparam, unconvert.
+The hook calls `verify.sh fast` and `verify.sh spec`, the same entry points used
+by GitHub Actions.
 
 ## CI
 
-GitHub Actions runs on every push to `main` and on pull requests (`.github/workflows/ci.yml`).
+GitHub Actions runs the full matrix below. Branch protection should require the
+`test`, `selfspec`, `release-smoke`, and `dependency-review` jobs on pull
+requests.
 
-The workflow pins Go 1.26.5 and `govulncheck` v1.6.0 so security results are
-reproducible.
+| workflow job | events | checked-in entry point or gate |
+| --- | --- | --- |
+| `CI / test` | pushes and pull requests | `verify.sh fast`, then `verify.sh security` |
+| `Self-Spec / selfspec` | pushes and pull requests | `verify.sh spec`; publishes Pages artifacts only from `main` |
+| `CI / release-smoke` | pull requests | `verify.sh release`; never publishes |
+| `CI / dependency-review` | pull requests | GitHub dependency review action |
+| `Release / release` | `v*` tags | publishing GoReleaser workflow |
 
-1. Verify and tidy Go modules.
-2. Run `go test -race ./...`.
-3. Run the blocking vulnerability scan.
-4. Run `golangci-lint`.
+The workflow pins Go 1.26.5, golangci-lint 2.12.2, GoReleaser 2.17.1, and
+`govulncheck` v1.6.0 so verification is reproducible. Dependency review is the
+only GitHub-hosted gate without a local equivalent.
 
 ## Release
 
@@ -121,7 +123,6 @@ git tag v0.8.0
 git push origin v0.8.0
 ```
 
-Configuration is in `.goreleaser.yaml`. Keep the Homebrew `brews` entry pointed
-at `directory: Formula`; the shared `corca-ai/homebrew-tap` uses `Formula/` as
-the canonical formula directory, and root-level formula files are ignored once
-that directory exists.
+Configuration is in `.goreleaser.yaml`. The Homebrew binary package is
+generated through `homebrew_casks` into the shared
+`corca-ai/homebrew-tap` repository's `Casks/` directory.

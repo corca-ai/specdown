@@ -1,0 +1,50 @@
+<html lang="en">
+<head>
+</head>
+<body>
+<main>
+<div class="layout">
+<aside class="toc" aria-label="Table of contents">
+<div class="toc-inner">
+<section class="toc-spec current">
+<div class="toc-spec-header">
+</div>
+</section>
+<section class="toc-group">
+<button class="toc-group-title " aria-expanded="false">
+</button>
+<div class="toc-group-body">
+<section class="toc-spec">
+<div class="toc-spec-header">
+</div>
+</section>
+</div>
+</section>
+</div>
+</aside>
+<div class="content">
+<div class="content-header">
+</div>
+<div class="content-body">
+<article class="spec">
+<section class="spec-body">
+<section class="s1" id="section-specs-overview-md-overview">
+<h1>
+</h1>
+</section>
+</section>
+</article>
+</div>
+</div>
+<div class="mobile-title" aria-hidden="true">
+<h1>
+</h1>
+</div>
+</div>
+</main>
+<footer class="site-footer">
+</footer>
+<script src="./script.js">
+</script>
+</body>
+</html>
