@@ -209,6 +209,51 @@ func TestWriteBundleWritesSourceMapArtifact(t *testing.T) {
 	testutil.Equal(t, filepath.Ext(bundle.SourceMapAbsolutePath), ".json")
 }
 
+func TestWriteBundleSuffixPreservesPerCaseArtifacts(t *testing.T) {
+	root := t.TempDir()
+	runner := Runner{BaseDir: root}
+	model := core.AlloyModelSpec{
+		Name: "multi",
+		Fragments: []core.AlloyFragmentSpec{{
+			Model:       "multi",
+			HeadingPath: []string{"Multiple"},
+			Source: strings.Join([]string{
+				"module multi",
+				"sig Item {}",
+				"assert first { some Item }",
+				"assert second { no Item }",
+			}, "\n"),
+		}},
+	}
+
+	first, err := runner.writeBundleWithSuffix(
+		"specs/multi.spec.md",
+		model,
+		[]core.CaseSpec{alloyCheck("multi", "first", "3", 1)},
+		"case-1",
+	)
+	testutil.NilErr(t, err)
+	second, err := runner.writeBundleWithSuffix(
+		"specs/multi.spec.md",
+		model,
+		[]core.CaseSpec{alloyCheck("multi", "second", "3", 2)},
+		"case-2",
+	)
+	testutil.NilErr(t, err)
+
+	if first.RelativePath == second.RelativePath {
+		t.Fatalf("bundle paths are equal: %q", first.RelativePath)
+	}
+	firstBody, err := os.ReadFile(first.AbsolutePath)
+	testutil.NilErr(t, err)
+	secondBody, err := os.ReadFile(second.AbsolutePath)
+	testutil.NilErr(t, err)
+	testutil.Contains(t, string(firstBody), "check first")
+	testutil.NotContains(t, string(firstBody), "check second")
+	testutil.Contains(t, string(secondBody), "check second")
+	testutil.NotContains(t, string(secondBody), "check first")
+}
+
 // --- parseReceipt ---
 
 func TestParseReceiptWithMapScopes(t *testing.T) {

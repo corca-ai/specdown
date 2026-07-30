@@ -16,6 +16,7 @@ const (
 	EventCaseStarted EventType = "caseStarted"
 	EventCasePassed  EventType = "casePassed"
 	EventCaseFailed  EventType = "caseFailed"
+	EventCaseSkipped EventType = "caseSkipped"
 )
 
 type Event struct {
@@ -56,6 +57,26 @@ type CaseResult struct {
 	Alloy *AlloyResultDetail `json:"alloy,omitempty"`
 }
 
+type LifecycleScope string
+
+const (
+	LifecycleScopeGlobal  LifecycleScope = "global"
+	LifecycleScopeSection LifecycleScope = "section"
+)
+
+// LifecycleEvent records one completed setup or teardown execution.
+// Section events belong to a DocumentResult; global events belong to Report.
+type LifecycleEvent struct {
+	Scope       LifecycleScope `json:"scope"`
+	Phase       HookKind       `json:"phase"`
+	Status      Status         `json:"status"`
+	File        string         `json:"file,omitempty"`
+	HeadingPath HeadingPath    `json:"headingPath,omitempty"`
+	Each        bool           `json:"each,omitempty"`
+	Message     string         `json:"message,omitempty"`
+	DurationMs  int            `json:"durationMs,omitempty"`
+}
+
 type CodeResultDetail struct {
 	Block          string        `json:"block"`
 	Template       string        `json:"template,omitempty"`
@@ -85,19 +106,25 @@ type AlloyResultDetail struct {
 }
 
 type DocumentResult struct {
-	Document Document     `json:"document"`
-	Status   Status       `json:"status"`
-	Cases    []CaseResult `json:"cases,omitempty"`
+	Document        Document         `json:"document"`
+	Status          Status           `json:"status"`
+	Cases           []CaseResult     `json:"cases,omitempty"`
+	LifecycleEvents []LifecycleEvent `json:"lifecycleEvents,omitempty"`
 }
 
 type Summary struct {
 	SpecsTotal        int `json:"specsTotal"`
 	SpecsPassed       int `json:"specsPassed"`
 	SpecsFailed       int `json:"specsFailed"`
+	SpecsSkipped      int `json:"specsSkipped"`
 	CasesTotal        int `json:"casesTotal"`
 	CasesPassed       int `json:"casesPassed"`
 	CasesFailed       int `json:"casesFailed"`
+	CasesSkipped      int `json:"casesSkipped"`
 	CasesExpectedFail int `json:"casesExpectedFail"`
+	LifecycleTotal    int `json:"lifecycleTotal"`
+	LifecyclePassed   int `json:"lifecyclePassed"`
+	LifecycleFailed   int `json:"lifecycleFailed"`
 	TraceErrorCount   int `json:"traceErrorCount,omitempty"`
 }
 
@@ -127,11 +154,12 @@ type ModelRunner interface {
 }
 
 type Report struct {
-	SchemaVersion int              `json:"schemaVersion"`
-	Title         string           `json:"title"`
-	GeneratedAt   time.Time        `json:"generatedAt"`
-	Results       []DocumentResult `json:"results"`
-	Summary       Summary          `json:"summary"`
-	TraceErrors   []string         `json:"traceErrors,omitempty"`
-	TraceGraph    *TraceGraphData  `json:"traceGraph,omitempty"`
+	SchemaVersion   int              `json:"schemaVersion"`
+	Title           string           `json:"title"`
+	GeneratedAt     time.Time        `json:"generatedAt"`
+	Results         []DocumentResult `json:"results"`
+	Summary         Summary          `json:"summary"`
+	LifecycleEvents []LifecycleEvent `json:"lifecycleEvents,omitempty"`
+	TraceErrors     []string         `json:"traceErrors,omitempty"`
+	TraceGraph      *TraceGraphData  `json:"traceGraph,omitempty"`
 }

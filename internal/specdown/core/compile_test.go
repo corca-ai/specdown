@@ -39,6 +39,79 @@ func TestCompileDocumentAcceptsVisibleCapturedVariable(t *testing.T) {
 	}
 }
 
+func TestCompileDocumentKeepsExplicitAlloyRefsInMarkdownOrder(t *testing.T) {
+	doc, err := ParseDocument("ordered.spec.md", strings.Join([]string{
+		"# Ordered",
+		"",
+		"## A",
+		"",
+		"```alloy:model(order)",
+		"module order",
+		"sig Item {}",
+		"assert exists { some Item }",
+		"```",
+		"",
+		"```run:shell",
+		"printf before",
+		"```",
+		"",
+		"> alloy:ref(order#exists, scope=3)",
+		"",
+		"## B",
+		"",
+		"```run:shell",
+		"printf after",
+		"```",
+		"",
+	}, "\n"), nil)
+	if err != nil {
+		t.Fatalf("parse document: %v", err)
+	}
+
+	plan, err := CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile document: %v", err)
+	}
+	if len(plan.Cases) != 3 {
+		t.Fatalf("cases = %+v, want three ordered cases", plan.Cases)
+	}
+	wantKinds := []CaseKind{CaseKindCode, CaseKindAlloy, CaseKindCode}
+	for i := range wantKinds {
+		if plan.Cases[i].Kind != wantKinds[i] || plan.Cases[i].ID.Ordinal != i+1 {
+			t.Fatalf("case %d = %+v, want kind %q ordinal %d", i, plan.Cases[i], wantKinds[i], i+1)
+		}
+	}
+}
+
+func TestCompileDocumentReplacesStandaloneCheckDirectiveWithRenderableNode(t *testing.T) {
+	doc, err := ParseDocument(
+		"check.spec.md",
+		"# Check\n\n> check:jq(input=1, expr=., expected=1)\n",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("parse document: %v", err)
+	}
+
+	plan, err := CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile document: %v", err)
+	}
+	if len(plan.Cases) != 1 {
+		t.Fatalf("cases = %+v, want one standalone check", plan.Cases)
+	}
+	var checkCall *CheckCallNode
+	for _, node := range plan.Document.Nodes {
+		if current, ok := node.(CheckCallNode); ok {
+			checkCall = &current
+			break
+		}
+	}
+	if checkCall == nil || checkCall.ID == nil || checkCall.ID.Key() != plan.Cases[0].ID.Key() {
+		t.Fatalf("nodes = %+v, want renderable check call with case ID", plan.Document.Nodes)
+	}
+}
+
 func TestCompileDocumentAcceptsVariablesInCheckRows(t *testing.T) {
 	doc, err := ParseDocument("specs/pocket-board.spec.md", strings.Join([]string{
 		"# Pocket Board",

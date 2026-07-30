@@ -9,8 +9,9 @@ import (
 type Status string
 
 const (
-	StatusPassed Status = "passed"
-	StatusFailed Status = "failed"
+	StatusPassed  Status = "passed"
+	StatusFailed  Status = "failed"
+	StatusSkipped Status = "skipped"
 )
 
 type SpecID struct {

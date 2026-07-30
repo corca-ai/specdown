@@ -26,8 +26,8 @@ type CodeCaseSpec struct {
 }
 
 func (c *CodeCaseSpec) VariableRefs() []string { return variableReferences(c.Template) }
-func (c *CodeCaseSpec) TargetKey() string       { return c.Block.Descriptor() }
-func (c *CodeCaseSpec) DisplayKind() string     { return c.Block.Descriptor() }
+func (c *CodeCaseSpec) TargetKey() string      { return c.Block.Descriptor() }
+func (c *CodeCaseSpec) DisplayKind() string    { return c.Block.Descriptor() }
 
 // TableRowCaseSpec holds fields specific to table row and check call cases.
 type TableRowCaseSpec struct {
@@ -39,8 +39,8 @@ type TableRowCaseSpec struct {
 }
 
 func (c *TableRowCaseSpec) VariableRefs() []string { return mergeVariableReferences(c.Cells...) }
-func (c *TableRowCaseSpec) TargetKey() string       { return c.Check }
-func (c *TableRowCaseSpec) DisplayKind() string     { return "check:" + c.Check }
+func (c *TableRowCaseSpec) TargetKey() string      { return c.Check }
+func (c *TableRowCaseSpec) DisplayKind() string    { return "check:" + c.Check }
 
 func (c *TableRowCaseSpec) DefaultLabel(headingPath HeadingPath) string {
 	display := c.DisplayKind()
@@ -107,10 +107,11 @@ type HookSpec struct {
 }
 
 type DocumentPlan struct {
-	Document    Document
-	Cases       []CaseSpec
-	Hooks       []HookSpec
-	AlloyModels []AlloyModelSpec
+	Document       Document
+	Cases          []CaseSpec
+	Hooks          []HookSpec
+	AlloyModels    []AlloyModelSpec
+	ArtifactSuffix string
 }
 
 type Plan struct {
@@ -352,6 +353,17 @@ func CompileDocument(doc Document) (DocumentPlan, error) {
 	}
 
 	cases = append(cases, alloyChecks...)
+	sort.SliceStable(cases, func(i, j int) bool {
+		leftLine := cases[i].ID.Line
+		rightLine := cases[j].ID.Line
+		if leftLine == 0 {
+			return false
+		}
+		if rightLine == 0 {
+			return true
+		}
+		return leftLine < rightLine
+	})
 
 	return DocumentPlan{
 		Document:    doc,
@@ -508,7 +520,7 @@ func processCheckDirective(current CheckDirectiveNode, doc Document, i int, maxO
 		return cases, skip, nil
 	case len(current.CheckParams) > 0:
 		*maxOrd++
-		return []CaseSpec{{
+		specCase := CaseSpec{
 			ID: SpecID{
 				File:        doc.RelativeTo,
 				HeadingPath: copyPath(current.HeadingPath),
@@ -520,7 +532,15 @@ func processCheckDirective(current CheckDirectiveNode, doc Document, i int, maxO
 				Check:       current.Check,
 				CheckParams: current.CheckParams,
 			},
-		}}, 0, nil
+		}
+		doc.Nodes[i] = CheckCallNode{
+			Check:       current.Check,
+			CheckParams: current.CheckParams,
+			Raw:         current.Raw,
+			HeadingPath: copyPath(current.HeadingPath),
+			ID:          &specCase.ID,
+		}
+		return []CaseSpec{specCase}, 0, nil
 	default:
 		return nil, 0, fmt.Errorf("%s: check directive %q must be followed by a table", doc.RelativeTo, current.Check)
 	}

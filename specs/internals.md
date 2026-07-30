@@ -28,7 +28,7 @@ dev
 Four components process a spec document:
 
 - **Core** — parses Markdown (headings, prose, blocks, tables), computes variable scopes, assigns executable unit IDs, and extracts embedded Alloy model fragments. Produces an execution plan — a list of blocks and table rows tagged with adapter names. Never executes anything itself.
-- **ModelRunner** — the engine calls `ModelRunner.RunDocument()` before the case loop. Model verification results are pre-indexed and looked up inline during case processing, flowing through the same case sequence as adapter results.
+- **ModelRunner** — model verification flows through the same ordered case sequence as adapter results. Explicit Alloy references keep their Markdown ordinal; checks written only inside a model run after authored cases. In documents with hooks, each Alloy check is deferred until the applicable setup scope succeeds; hook-free documents may batch their checks.
 - **Runtime Adapter** — receives each unit, runs the actual code, and emits pass/fail events.
 - **Reporter** — collects events and renders the final HTML or JSON output.
 
@@ -77,18 +77,60 @@ carries a type, a case identifier, and optional diagnostic fields:
 
 | Field    | Type   | Description                                    |
 | -------- | ------ | ---------------------------------------------- |
-| type     | string | `caseStarted`, `casePassed`, or `caseFailed`   |
+| type     | string | `caseStarted`, `casePassed`, `caseFailed`, or `caseSkipped` |
 | id       | SpecID | Unique identifier for the case                 |
 | label    | string | Human-readable description of the case         |
-| message  | string | Failure reason (failed events only)            |
+| message  | string | Failure or skip diagnostic                     |
 | expected | string | Expected value (failed events only)            |
 | actual   | string | Actual value (failed events only)              |
 | bindings | array  | Variable bindings captured during execution    |
 
 Events flow from adapters into case results; model verification
-results (via `ModelRunner`) are pre-computed and looked up inline.
-The reporter never sees raw adapter protocol messages — only the
-unified event stream assembled by the engine.
+results (via `ModelRunner`) are scheduled only after applicable setup hooks.
+Setup and teardown executions use a separate lifecycle event with
+`scope`, `phase`, `status`, location, duration, and optional failure message.
+The reporter never sees raw adapter protocol messages — only the unified
+events assembled by the engine.
+
+```run:shell
+# Verify setup failure prevents its Alloy check from producing artifacts
+rm -rf internals-hook-order internals-hook-order-out
+rm -f .artifacts/specdown/models/internals-hook-order-spec-md-order*.als
+mkdir -p internals-hook-order
+printf '# Hook order\n\n- [Spec](spec.md)\n' > internals-hook-order/index.md
+shell_fence=$(printf '\140\140\140run:shell')
+alloy_fence=$(printf '\140\140\140alloy:model(order)')
+fence=$(printf '\140\140\140')
+cat <<SPEC > internals-hook-order/spec.md
+# Hook Order
+
+> setup
+$shell_fence
+exit 7
+$fence
+
+$alloy_fence
+module order
+sig Item {}
+assert exists { some Item }
+$fence
+
+> alloy:ref(order#exists, scope=3)
+SPEC
+printf '{"entry":"internals-hook-order/index.md","adapters":[],"reporters":[{"builtin":"json","outFile":"internals-hook-order-out/report.json"}]}' > internals-hook-order.json
+if specdown run -config internals-hook-order.json -out internals-hook-order-out >/dev/null 2>&1; then
+  exit 1
+else
+  test $? -eq 1
+fi
+```
+
+```run:shell
+$ jq -r '[.results[].cases[]?][0].status + ":" + [ .results[].lifecycleEvents[]? ][0].scope' internals-hook-order-out/report.json
+skipped:section
+$ test -z "$(find .artifacts/specdown/models -name 'internals-hook-order-spec-md-order*.als' -print -quit 2>/dev/null)" && echo no-alloy-artifacts
+no-alloy-artifacts
+```
 
 ## Reporter Contract
 
@@ -97,14 +139,15 @@ writes output artifacts. The report contains:
 
 - **Title** — derived from the entry document heading.
 - **Results** — one `DocumentResult` per spec, each holding an ordered list of `CaseResult` values. Kind-specific fields are nested in `code`, `table`, or `alloy` sub-structs.
-- **Summary** — aggregate counts: specs total/passed/failed, cases total/passed/failed/expected-fail.
+- **LifecycleEvents** — completed global setup/teardown executions; section hook events live on their `DocumentResult`.
+- **Summary** — aggregate counts for specs, cases, and lifecycle executions.
 - **TraceErrors** — validation messages from the traceability checker (if configured).
 - **TraceGraph** — the document graph with typed edges (if configured).
 
 Two built-in reporters are supported:
 
 - **html** — writes a multi-page HTML site with a global table of contents, per-document pages, shared CSS/JS assets, and optional trace graph visualization.
-- **json** — writes the full `Report` struct as indented JSON. The report includes a `schemaVersion` field (currently `2`).
+- **json** — writes the full `Report` struct as indented JSON. The report includes a `schemaVersion` field (currently `3`).
 
 Reporter selection is configured in [depends::specdown.json](config.md) via the `reporters` array. Each entry specifies a `builtin` name and an `outFile` path.
 
@@ -122,8 +165,8 @@ specdown run -config reporter-json/specdown.json -quiet 2>&1 | tail -1
 ```
 
 ```run:shell
-$ cat reporter-json/out.json | head -1
-{
+$ grep '"schemaVersion": 3' reporter-json/out.json
+  "schemaVersion": 3,
 ```
 
 ## Parallel Execution

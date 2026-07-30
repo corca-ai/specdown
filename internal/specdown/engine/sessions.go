@@ -14,6 +14,22 @@ type sessionManager struct {
 	sessions map[string]*adapterhost.Session
 }
 
+type sessionProvider interface {
+	For(config.AdapterConfig) (*adapterhost.Session, error)
+}
+
+type cleanupSessionProvider struct {
+	primary  *sessionManager
+	fallback *sessionManager
+}
+
+func (p cleanupSessionProvider) For(adapter config.AdapterConfig) (*adapterhost.Session, error) {
+	if session, ok := p.primary.sessions[adapter.Name]; ok && session.Usable() {
+		return session, nil
+	}
+	return p.fallback.For(adapter)
+}
+
 func newSessionManager(ctx context.Context, host adapterhost.Host) *sessionManager {
 	return &sessionManager{
 		ctx:      ctx,

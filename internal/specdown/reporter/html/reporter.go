@@ -117,19 +117,42 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) ([
 		return nil, fmt.Errorf("write script.js: %w", err)
 	}
 
+	results := report.Results
+	if len(results) == 0 && len(report.LifecycleEvents) > 0 {
+		status := core.StatusPassed
+		if report.Summary.LifecycleFailed > 0 {
+			status = core.StatusFailed
+		}
+		results = []core.DocumentResult{{
+			Document: core.Document{
+				Title:      "Lifecycle",
+				RelativeTo: "index.md",
+				Nodes: []core.Node{
+					core.HeadingNode{
+						Level:       1,
+						Text:        "Lifecycle",
+						Raw:         "# Lifecycle\n",
+						HeadingPath: core.HeadingPath{"Lifecycle"},
+					},
+				},
+			},
+			Status: status,
+		}}
+	}
+
 	// Determine entry path for relative path computation.
 	entryPath := ""
-	if len(report.Results) > 0 {
-		entryPath = report.Results[0].Document.RelativeTo
+	if len(results) > 0 {
+		entryPath = results[0].Document.RelativeTo
 	}
 	entryDir := path.Dir(path.Clean(entryPath))
 
-	docs := collectDocTOCs(report.Results, entryDir)
+	docs := collectDocTOCs(results, entryDir)
 
 	var allWarnings []string
-	for i := range report.Results {
-		docType := report.Results[i].Document.Frontmatter.Type
-		meta := buildDocMeta(report.Results[i], docType)
+	for i := range results {
+		docType := results[i].Document.Frontmatter.Type
+		meta := buildDocMeta(results[i], report.LifecycleEvents, docType)
 		if i == 0 {
 			meta = buildMeta(report, docType)
 		}
@@ -145,7 +168,7 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) ([
 			tocView = flatTOC(docs, i, assetRoot)
 		}
 
-		if err := writePage(outDir, entryDir, report.Results[i], meta, tocView, report.TraceGraph); err != nil {
+		if err := writePage(outDir, entryDir, results[i], report.LifecycleEvents, meta, tocView, report.TraceGraph); err != nil {
 			return allWarnings, err
 		}
 	}
@@ -154,11 +177,19 @@ func writeReport(report core.Report, outDir string, tocCfg []config.TOCEntry) ([
 }
 
 //nolint:gocognit // page assembly with conditional trace panel
-func writePage(outDir, entryDir string, result core.DocumentResult, meta string, tocView globalTOCView, traceGraph *core.TraceGraphData) error {
+func writePage(
+	outDir,
+	entryDir string,
+	result core.DocumentResult,
+	globalEvents []core.LifecycleEvent,
+	meta string,
+	tocView globalTOCView,
+	traceGraph *core.TraceGraphData,
+) error {
 	htmlPath := docToHTMLPath(result.Document.RelativeTo, entryDir)
 	fullPath := filepath.Join(outDir, filepath.FromSlash(htmlPath))
 
-	body, err := renderDocument(result)
+	body, err := renderDocument(result, globalEvents)
 	if err != nil {
 		return fmt.Errorf("render %s: %w", result.Document.RelativeTo, err)
 	}
@@ -270,14 +301,17 @@ func writeTypeBadge(b *strings.Builder, docType string) {
 		hue, template.HTMLEscapeString(docType))
 }
 
-func buildDocMeta(result core.DocumentResult, docType string) string {
+func buildDocMeta(result core.DocumentResult, globalEvents []core.LifecycleEvent, docType string) string {
 	passed := 0
 	failed := 0
+	skipped := 0
 	xfail := 0
 	for i := range result.Cases {
 		switch {
 		case result.Cases[i].Status == core.StatusPassed:
 			passed++
+		case result.Cases[i].Status == core.StatusSkipped:
+			skipped++
 		case result.Cases[i].ExpectFail:
 			xfail++
 		default:
@@ -288,6 +322,8 @@ func buildDocMeta(result core.DocumentResult, docType string) string {
 	b.WriteString(`<p class="content-meta">`)
 	writeTypeBadge(&b, docType)
 	writePills(&b, passed, failed, xfail)
+	writeSkippedPill(&b, skipped)
+	writeLifecyclePill(&b, countLifecycleFailures(globalEvents)+countLifecycleFailures(result.LifecycleEvents))
 	b.WriteString(`</p>`)
 	return b.String()
 }
@@ -300,8 +336,32 @@ func buildMeta(report core.Report, docType string) string {
 	b.WriteString(`<p class="content-meta">`)
 	writeTypeBadge(&b, docType)
 	writePills(&b, passed, failed, xfail)
+	writeSkippedPill(&b, report.Summary.CasesSkipped)
+	writeLifecyclePill(&b, report.Summary.LifecycleFailed)
 	b.WriteString(`</p>`)
 	return b.String()
+}
+
+func countLifecycleFailures(events []core.LifecycleEvent) int {
+	failed := 0
+	for i := range events {
+		if events[i].Status == core.StatusFailed {
+			failed++
+		}
+	}
+	return failed
+}
+
+func writeLifecyclePill(b *strings.Builder, failed int) {
+	if failed > 0 {
+		fmt.Fprintf(b, `<span class="pill lifecycle">%d lifecycle failed</span>`, failed)
+	}
+}
+
+func writeSkippedPill(b *strings.Builder, skipped int) {
+	if skipped > 0 {
+		fmt.Fprintf(b, `<span class="pill skipped">%d skipped</span>`, skipped)
+	}
 }
 
 var tocEntryTmpl = `

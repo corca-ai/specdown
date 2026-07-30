@@ -204,6 +204,7 @@ func dirGroupName(dir string) string {
 // groupStatus returns the worst status among entries in a group.
 func groupStatus(entries []globalTocEntry) string {
 	hasXFail := false
+	hasSkipped := false
 	for _, e := range entries {
 		if e.Status == "failed" {
 			return "failed"
@@ -211,9 +212,15 @@ func groupStatus(entries []globalTocEntry) string {
 		if e.Status == "expected-fail" {
 			hasXFail = true
 		}
+		if e.Status == "skipped" {
+			hasSkipped = true
+		}
 	}
 	if hasXFail {
 		return "expected-fail"
+	}
+	if hasSkipped {
+		return "skipped"
 	}
 	return ""
 }
@@ -273,6 +280,11 @@ func collectHeadingStatuses(result core.DocumentResult) map[string]string {
 			mark(result.Cases[i].ID.HeadingPath, "expected-fail")
 		}
 	}
+	for i := range result.LifecycleEvents {
+		if result.LifecycleEvents[i].Status == core.StatusFailed {
+			mark(result.LifecycleEvents[i].HeadingPath, "failed")
+		}
+	}
 	return statuses
 }
 
@@ -280,8 +292,14 @@ func headingPathKey(hp core.HeadingPath) string {
 	return hp.Key()
 }
 
-// docStatusClass returns "failed", "expected-fail", or "" for a document.
+// docStatusClass returns the display status for a document.
 func docStatusClass(result core.DocumentResult) string {
+	if result.Status == core.StatusFailed {
+		return "failed"
+	}
+	if result.Status == core.StatusSkipped {
+		return "skipped"
+	}
 	hasXFail := false
 	for i := range result.Cases {
 		if result.Cases[i].Status == core.StatusFailed && !result.Cases[i].ExpectFail {
