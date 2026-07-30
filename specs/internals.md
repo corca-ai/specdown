@@ -226,9 +226,10 @@ $ specdown run -dry-run 2>&1 | grep 'spec(s)'
 
 ## Alloy Runner Integration
 
-The engine calls `ModelRunner.RunDocument()` before the case loop.
-Results are indexed by `SpecID` and looked up inline during case
-processing. The `ModelRunner` interface keeps model verification
+For hook-free documents, the engine can batch all model verification before
+the adapter case loop and index results by `SpecID`. For documents with hooks,
+it schedules each Alloy case in the normal case sequence only after the
+applicable setup scope succeeds. The `ModelRunner` interface keeps both paths
 decoupled from the engine.
 
 ```go
@@ -236,17 +237,29 @@ ModelRunner
   RunDocument(ctx context.Context, plan DocumentPlan) -> []CaseResult
 ```
 
-For each document, the runner:
+For each runner invocation:
 
-1. Collects all `CaseKindAlloy` cases from the plan.
-2. Groups them by model name.
-3. Bundles embedded Alloy fragments into a single `.als` file per model.
+1. Collects the applicable `CaseKindAlloy` cases from the plan.
+2. Groups the cases by model name.
+3. Bundles each model's embedded Alloy fragments into a `.als` file.
 4. Invokes the Alloy solver (Java subprocess) on each bundle.
 5. Maps solver output back to individual assertion results.
 
-The runner caches the Alloy JAR in `~/.cache/specdown/`. If the JAR
-is missing, it downloads the official release automatically.
+The runner caches the Alloy JAR under
+`~/.cache/specdown/alloy/<version>/`. Every cached or newly downloaded JAR
+must match the SHA-256 stored for that Alloy version. Automatic downloads
+have a 30-second deadline and a 64 MiB response limit; a timeout, oversized
+response, or checksum mismatch leaves no promoted JAR or partial temp file.
 
-Model results are pre-computed via `ModelRunner` before the case loop;
-alloy cases execute in document order within the normal case sequence.
+```run:shell
+go test ../internal/specdown/alloy -run 'TestEnsureAlloyJar(DoesNotReuseUnversionedCache|RejectsChecksumMismatch|RejectsOversized|AppliesDownloadTimeout)' >/dev/null
+echo alloy-download-verified
+```
+
+```run:shell
+$ echo alloy-download-verified
+alloy-download-verified
+```
+
+Alloy cases execute in document order within the normal case sequence.
 Alloy failures respect `-max-failures` and stream progress inline.
