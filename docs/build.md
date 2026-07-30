@@ -30,6 +30,7 @@ and CI:
 ```sh
 ./scripts/verify.sh fast
 ./scripts/verify.sh spec
+./scripts/verify.sh coverage
 ./scripts/verify.sh release
 ./scripts/verify.sh security
 ```
@@ -38,6 +39,7 @@ and CI:
 | --- | --- | --- |
 | `fast` | toolchain drift, module integrity/tidiness, race tests, lint, build | Go, golangci-lint |
 | `spec` | full self-spec and pocket-board example | Go, Java 21 |
+| `coverage` | internal-package profile and total/package regression policy | Go |
 | `release` | GoReleaser config, non-publishing snapshot, installer smoke tests | Go, GoReleaser |
 | `security` | pinned `govulncheck` scan | govulncheck |
 
@@ -81,6 +83,21 @@ spec verification command:
 ./scripts/verify.sh spec
 ```
 
+### Coverage policy
+
+`./scripts/verify.sh coverage` writes its profile to a temporary directory and
+checks it against `scripts/coverage-policy.json`. The policy ratchets both the
+internal-package total and each package with meaningful production behavior.
+CLI, report, adapter protocol, engine, and trace packages have explicit floors
+so a stable global percentage cannot hide a regression at a user-facing
+boundary.
+
+Packages without statements do not appear in Go coverage profiles and therefore
+need no exception. Thin platform wrappers and test-support packages remain part
+of the total but do not have individual floors; their behavior is exercised by
+race, self-spec, and release smoke tests. Update a floor only with an explained
+behavior or test change, never merely to make CI pass.
+
 Reports are generated in `specs/report/`.
 
 ### Pre-commit hook
@@ -102,7 +119,7 @@ requests.
 
 | workflow job | events | checked-in entry point or gate |
 | --- | --- | --- |
-| `CI / test` | pushes and pull requests | `verify.sh fast`, then `verify.sh security` |
+| `CI / test` | pushes and pull requests | `verify.sh fast`, `verify.sh coverage`, then `verify.sh security` |
 | `Self-Spec / selfspec` | pushes and pull requests | `verify.sh spec`; publishes Pages artifacts only from `main` |
 | `CI / release-smoke` | pull requests | `verify.sh release`; never publishes |
 | `CI / dependency-review` | pull requests | GitHub dependency review action |
