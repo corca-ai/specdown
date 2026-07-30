@@ -514,7 +514,10 @@ func TestDryRunReportHasZeroStatuses(t *testing.T) {
 			},
 		},
 	}
-	report := dryRunReport(plan)
+	report := dryRunReport("Dry run", plan)
+	if report.Title != "Dry run" {
+		t.Fatalf("dry-run title = %q, want %q", report.Title, "Dry run")
+	}
 	if report.Summary.CasesTotal != 2 {
 		t.Fatalf("unexpected totals %+v", report.Summary)
 	}
