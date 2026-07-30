@@ -243,7 +243,79 @@ When the adapter returns structured (non-string) output, the value is
 stored as-is and fields are accessible via dot-path syntax:
 `${result.field}`. Nested access works to arbitrary depth:
 `${result.outer.inner}`. Accessing a missing key or indexing into a
-non-object value is a compile-time error.
+non-object value fails the affected case during execution.
+
+```run:shell
+# Verify typed dot paths and escaped prose references share one contract.
+rm -rf structured-binding-test
+mkdir -p structured-binding-test
+cat <<'ADAPTER' > structured-binding-test/object-adapter.sh
+#!/bin/sh
+while IFS= read -r line; do
+  type=$(printf '%s' "$line" | grep -o '"type":"[^"]*"' | head -1 | cut -d'"' -f4)
+  id=$(printf '%s' "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+  case "$type" in
+    exec) printf '{"id":%s,"output":{"profile":{"name":"alice"},"enabled":true}}\n' "$id" ;;
+  esac
+done
+ADAPTER
+chmod +x structured-binding-test/object-adapter.sh
+
+BT=$(printf '\140\140\140')
+DOLLAR='$'
+{
+  printf '%s\n' '# Structured Binding' ''
+  printf '%s\n' "$BT"'run:object -> $result' 'ignored' "$BT" ''
+  printf 'Resolved: %s. Escaped: %s.\n\n' "$DOLLAR{result.profile.name}" "\\$DOLLAR{result.profile.name}"
+  printf '%s\n' "$BT"'run:shell'
+  printf 'test "%s" = alice\n' "$DOLLAR{result.profile.name}"
+  printf 'test "%s" = true\n' "$DOLLAR{result.enabled}"
+  printf '%s\n' "$BT"
+} > structured-binding-test/structured.md
+cat <<'CONFIG' > structured-binding-test/specdown.json
+{
+  "entry": "structured.md",
+  "adapters": [
+    {
+      "name": "object",
+      "command": ["sh", "./object-adapter.sh"],
+      "blocks": ["run:object"]
+    }
+  ],
+  "reporters": [
+    {"builtin": "html", "outFile": "report"}
+  ]
+}
+CONFIG
+
+specdown run -config structured-binding-test/specdown.json -quiet
+grep -Fq 'title="$result.profile.name">alice</span>' structured-binding-test/report/structured.html
+grep -Fq "$DOLLAR{result.profile.name}" structured-binding-test/report/structured.html
+
+{
+  printf '%s\n' '# Invalid Binding Path' ''
+  printf '%s\n' "$BT"'run:object -> $result' 'ignored' "$BT" ''
+  printf '%s\n' "$BT"'run:shell'
+  printf 'printf "%%s" "%s"\n' "$DOLLAR{result.missing}"
+  printf '%s\n' "$BT"
+} > structured-binding-test/invalid.md
+cat <<'CONFIG' > structured-binding-test/invalid-config.json
+{
+  "entry": "invalid.md",
+  "adapters": [
+    {
+      "name": "object",
+      "command": ["sh", "./object-adapter.sh"],
+      "blocks": ["run:object"]
+    }
+  ]
+}
+CONFIG
+if specdown run -config structured-binding-test/invalid-config.json -no-report > structured-binding-test/invalid.log 2>&1; then
+  exit 1
+fi
+grep -Fq 'cannot resolve "result.missing": key "missing" not found' structured-binding-test/invalid.log
+```
 
 ### Scoping rules
 

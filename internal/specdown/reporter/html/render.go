@@ -2,7 +2,6 @@ package html
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 
+	"github.com/corca-ai/specdown/internal/specdown/binding"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
@@ -343,7 +343,7 @@ func renderVisibleBindings(out *htmlBuilder, bindings []core.Binding) {
 		out.raw(`$`)
 		out.text(b.Name)
 		out.raw(`=`)
-		out.text(bindingValueToString(b.Value))
+		out.text(binding.Format(b.Value))
 	}
 	out.close("div")
 }
@@ -359,7 +359,7 @@ func renderBindings(out *htmlBuilder, bindings []core.Binding) {
 		}
 		out.text(b.Name)
 		out.raw(`=`)
-		out.text(bindingValueToString(b.Value))
+		out.text(binding.Format(b.Value))
 	}
 	out.close("div")
 }
@@ -698,28 +698,30 @@ func accumulateNodeBindings(bindings []core.Binding, node core.Node, caseResults
 
 var htmlCodeExpectPattern = regexp.MustCompile(`<code>expect:\s*(.+?)\s*==\s*(.+?)\s*</code>`)
 var htmlCodeCheckPattern = regexp.MustCompile(`<code>check:([A-Za-z0-9_-]+)\(([^)]*)\)</code>`)
-var proseVarPattern = regexp.MustCompile(`\$\{(` + core.VariableRefExpr + `)\}`)
 var htmlCodeTagPattern = regexp.MustCompile(`<code[^>]*>[^<]*</code>`)
 
 func renderProseNode(node core.ProseNode, caseResults map[string]core.CaseResult, accBindings []core.Binding) (string, error) {
-	html, err := markdownToHTML(node.Markdown())
+	source, protectedReferences := binding.ProtectEscapedReferences(node.Markdown())
+	html, err := markdownToHTML(source)
 	if err != nil {
 		return "", err
 	}
+
+	// Restore protected references inside code spans before matching inline
+	// expectations and checks. Their source metadata still contains the escape,
+	// so comparisons normalize that metadata below.
+	html = htmlCodeTagPattern.ReplaceAllStringFunc(html, protectedReferences.Restore)
+
+	// Resolve prose references while inline expressions are still code spans and
+	// therefore excluded. Restore remaining escaped prose references afterward.
+	html = replaceProseVariables(html, binding.New(accBindings))
+	html = protectedReferences.Restore(html)
 
 	// Replace <code>expect: ... == ...</code> and <code>check:...()</code>
 	// with inline result spans. Matching uses content comparison to avoid
 	// index desync when escaped code spans produce extra <code> tags.
 	html = replaceInlineExpects(html, node.Inlines, caseResults)
 	html = replaceInlineChecks(html, node.Inlines, caseResults)
-
-	// Replace ${var} in non-<code> parts with variable display spans
-	bindingMap := make(map[string]string, len(accBindings))
-	for _, b := range accBindings {
-		bindingMap[b.Name] = bindingValueToString(b.Value)
-	}
-	html = replaceProseVariables(html, bindingMap)
-
 	return html, nil
 }
 
@@ -731,7 +733,7 @@ func replaceInlineExpects(html string, inlines []core.InlineElement, caseResults
 			return match
 		}
 		inner := match[len("<code>") : len(match)-len("</code>")]
-		if expects[idx].Raw != "`"+inner+"`" {
+		if binding.UnescapeReferences(expects[idx].Raw) != "`"+inner+"`" {
 			return match
 		}
 		inline := expects[idx]
@@ -755,7 +757,7 @@ func replaceInlineChecks(html string, inlines []core.InlineElement, caseResults 
 			return match
 		}
 		inner := match[len("<code>") : len(match)-len("</code>")]
-		if checks[idx].Raw != "`"+inner+"`" {
+		if binding.UnescapeReferences(checks[idx].Raw) != "`"+inner+"`" {
 			return match
 		}
 		inline := checks[idx]
@@ -837,94 +839,42 @@ func renderInlineCheckSpan(inline core.InlineElement, cr core.CaseResult) string
 	return out.String()
 }
 
-func replaceProseVariables(html string, bindings map[string]string) string {
-	if len(bindings) == 0 {
-		return html
-	}
+func replaceProseVariables(html string, resolver binding.Resolver) string {
 	// Split by <code>...</code> segments to avoid replacing inside code spans
 	codeLocs := htmlCodeTagPattern.FindAllStringIndex(html, -1)
 	if len(codeLocs) == 0 {
-		return replaceVarRefs(html, bindings)
+		return replaceVarRefs(html, resolver)
 	}
 	var out strings.Builder
 	lastEnd := 0
 	for _, loc := range codeLocs {
-		out.WriteString(replaceVarRefs(html[lastEnd:loc[0]], bindings))
+		out.WriteString(replaceVarRefs(html[lastEnd:loc[0]], resolver))
 		out.WriteString(html[loc[0]:loc[1]])
 		lastEnd = loc[1]
 	}
-	out.WriteString(replaceVarRefs(html[lastEnd:], bindings))
+	out.WriteString(replaceVarRefs(html[lastEnd:], resolver))
 	return out.String()
 }
 
-func bindingValueToString(v any) string {
-	switch val := v.(type) {
-	case string:
-		return val
-	case nil:
-		return ""
-	default:
-		data, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Sprintf("%v", val)
-		}
-		return string(data)
-	}
-}
-
-func replaceVarRefs(text string, bindings map[string]string) string {
-	return proseVarPattern.ReplaceAllStringFunc(text, func(match string) string {
-		name := proseVarPattern.FindStringSubmatch(match)[1]
-		value, ok := resolveProseVar(name, bindings)
+func replaceVarRefs(text string, resolver binding.Resolver) string {
+	rendered, err := binding.ReplaceReferences(text, func(name string) (string, error) {
+		value, ok := resolveProseReference(resolver, name)
 		if !ok {
-			return match
+			return "${" + name + "}", nil
 		}
 		return `<span class="inline-var" title="$` +
 			template.HTMLEscapeString(name) + `">` +
-			template.HTMLEscapeString(value) + `</span>`
+			template.HTMLEscapeString(binding.Format(value)) + `</span>`, nil
 	})
-}
-
-// resolveProseVar looks up a variable name (possibly dotted like "foo.bar")
-// in the binding map. For dot-path access, the root name is looked up and
-// the value is parsed as JSON to traverse the path.
-func resolveProseVar(name string, bindings map[string]string) (string, bool) {
-	if value, ok := bindings[name]; ok {
-		return value, true
-	}
-	parts := strings.SplitN(name, ".", 2)
-	if len(parts) != 2 {
-		return "", false
-	}
-	rootValue, ok := bindings[parts[0]]
-	if !ok {
-		return "", false
-	}
-	var parsed interface{}
-	if err := json.Unmarshal([]byte(rootValue), &parsed); err != nil {
-		return "", false
-	}
-	resolved, err := resolveDotPath(parsed, strings.Split(parts[1], "."))
 	if err != nil {
-		return "", false
+		return text
 	}
-	return bindingValueToString(resolved), true
+	return rendered
 }
 
-func resolveDotPath(value interface{}, path []string) (interface{}, error) {
-	current := value
-	for _, key := range path {
-		m, ok := current.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("cannot access %q on non-object", key)
-		}
-		next, exists := m[key]
-		if !exists {
-			return nil, fmt.Errorf("key %q not found", key)
-		}
-		current = next
-	}
-	return current, nil
+func resolveProseReference(resolver binding.Resolver, name string) (any, bool) {
+	value, err := resolver.Resolve(name)
+	return value, err == nil
 }
 
 func renderDoctestSteps(out *htmlBuilder, steps []core.DoctestStep) {

@@ -537,6 +537,30 @@ func TestRenderTemplateEscapesBackslashDollar(t *testing.T) {
 	}
 }
 
+func TestRenderTemplateResolvesTypedDotPaths(t *testing.T) {
+	bindings := []core.Binding{{
+		Name: "user",
+		Value: map[string]any{
+			"profile": map[string]any{"name": "alice"},
+		},
+	}}
+	got, err := renderTemplate(`${user.profile.name}`, bindings)
+	if err != nil {
+		t.Fatalf("render typed dot path: %v", err)
+	}
+	if got != "alice" {
+		t.Fatalf("rendered = %q, want alice", got)
+	}
+}
+
+func TestRenderTemplateReportsInvalidDotPath(t *testing.T) {
+	bindings := []core.Binding{{Name: "user", Value: "alice"}}
+	_, err := renderTemplate(`${user.name}`, bindings)
+	if err == nil || !strings.Contains(err.Error(), `cannot resolve "user.name": cannot access "name" on non-object value`) {
+		t.Fatalf("error = %v, want specific invalid-traversal diagnostic", err)
+	}
+}
+
 func TestRenderTemplateReturnsErrorForUnresolved(t *testing.T) {
 	_, err := renderTemplate("${missing}", nil)
 	if err == nil {
