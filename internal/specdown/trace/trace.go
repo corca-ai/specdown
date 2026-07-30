@@ -154,6 +154,14 @@ type discoverResult struct {
 
 // discover scans the directory tree and finds all .md files with types and trace links.
 func discover(baseDir string, traceConfig *config.TraceConfig) ([]TypedDocument, []TraceLink, []TraceError) {
+	return discoverWithReadFile(baseDir, traceConfig, os.ReadFile)
+}
+
+func discoverWithReadFile(
+	baseDir string,
+	traceConfig *config.TraceConfig,
+	readFile func(string) ([]byte, error),
+) ([]TypedDocument, []TraceLink, []TraceError) {
 	typeSet := make(map[string]struct{}, len(traceConfig.Types))
 	for _, t := range traceConfig.Types {
 		typeSet[t] = struct{}{}
@@ -163,7 +171,7 @@ func discover(baseDir string, traceConfig *config.TraceConfig) ([]TypedDocument,
 
 	err := filepath.Walk(baseDir, func(absPath string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
-			return nil //nolint:nilerr // skip walk errors
+			return walkErr
 		}
 		if info.IsDir() {
 			if strings.HasPrefix(info.Name(), ".") && info.Name() != "." {
@@ -172,7 +180,7 @@ func discover(baseDir string, traceConfig *config.TraceConfig) ([]TypedDocument,
 			return nil
 		}
 		if strings.HasSuffix(info.Name(), ".md") {
-			discoverFile(absPath, baseDir, traceConfig.Ignore, typeSet, result)
+			discoverFile(absPath, baseDir, traceConfig.Ignore, typeSet, result, readFile)
 		}
 		return nil
 	})
@@ -186,9 +194,19 @@ func discover(baseDir string, traceConfig *config.TraceConfig) ([]TypedDocument,
 	return result.docs, result.links, result.errs
 }
 
-func discoverFile(absPath, baseDir string, ignorePatterns []string, typeSet map[string]struct{}, result *discoverResult) {
+func discoverFile(
+	absPath, baseDir string,
+	ignorePatterns []string,
+	typeSet map[string]struct{},
+	result *discoverResult,
+	readFile func(string) ([]byte, error),
+) {
 	relPath, relErr := filepath.Rel(baseDir, absPath)
 	if relErr != nil {
+		result.errs = append(result.errs, TraceError{
+			File:    absPath,
+			Message: fmt.Sprintf("resolve document path: %v", relErr),
+		})
 		return
 	}
 	relPath = filepath.ToSlash(relPath)
@@ -196,8 +214,12 @@ func discoverFile(absPath, baseDir string, ignorePatterns []string, typeSet map[
 		return
 	}
 
-	body, readErr := os.ReadFile(absPath)
+	body, readErr := readFile(absPath)
 	if readErr != nil {
+		result.errs = append(result.errs, TraceError{
+			File:    relPath,
+			Message: fmt.Sprintf("read document: %v", readErr),
+		})
 		return
 	}
 	markdown := string(body)

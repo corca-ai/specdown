@@ -29,6 +29,7 @@ type command struct {
 	version    string
 	skill      string
 	workingDir string
+	filesystem skillFilesystem
 }
 
 type recordingWriter struct {
@@ -94,6 +95,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer, options O
 		version:    options.Version,
 		skill:      options.SkillSpecdown,
 		workingDir: workingDir,
+		filesystem: osSkillFilesystem{},
 	}
 	status := cmd.execute(args)
 	if status == 0 && (recordedStdout.err != nil || recordedStderr.err != nil) {
