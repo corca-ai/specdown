@@ -1,6 +1,7 @@
 package trace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -520,6 +521,65 @@ func TestValidateNilConfig(t *testing.T) {
 	graph, errs := Validate(t.TempDir(), nil)
 	testutil.Len(t, errs, 0)
 	testutil.Len(t, graph.Documents, 0)
+}
+
+func TestValidateReportsMissingRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing")
+	cfg := &config.TraceConfig{
+		Types: []string{"spec"},
+		Edges: map[string]config.TraceEdge{
+			"covers": {From: "spec", To: "spec"},
+		},
+	}
+
+	graph, errs := Validate(root, cfg)
+
+	testutil.Len(t, graph.Documents, 0)
+	testutil.Len(t, errs, 1)
+	testutil.Contains(t, errs[0].Message, "directory scan failed")
+	testutil.Equal(t, errs[0].File, root)
+}
+
+func TestValidateReportsInvalidRoot(t *testing.T) {
+	root := "invalid\x00path"
+	cfg := &config.TraceConfig{
+		Types: []string{"spec"},
+		Edges: map[string]config.TraceEdge{
+			"covers": {From: "spec", To: "spec"},
+		},
+	}
+
+	_, errs := Validate(root, cfg)
+
+	testutil.Len(t, errs, 1)
+	testutil.Equal(t, errs[0].File, root)
+	testutil.Contains(t, errs[0].Message, "directory scan failed")
+}
+
+func TestDiscoverReportsDocumentReadFailure(t *testing.T) {
+	root := t.TempDir()
+	docPath := filepath.Join(root, "doc.md")
+	testutil.NilErr(t, os.WriteFile(docPath, []byte("---\ntype: spec\n---\n"), 0o600))
+	readErr := errors.New("read denied")
+	cfg := &config.TraceConfig{
+		Types: []string{"spec"},
+		Edges: map[string]config.TraceEdge{
+			"covers": {From: "spec", To: "spec"},
+		},
+	}
+
+	docs, _, errs := discoverWithReadFile(root, cfg, func(path string) ([]byte, error) {
+		if path == docPath {
+			return nil, readErr
+		}
+		return os.ReadFile(path)
+	})
+
+	testutil.Len(t, docs, 0)
+	testutil.Len(t, errs, 1)
+	testutil.Equal(t, errs[0].File, "doc.md")
+	testutil.Contains(t, errs[0].Message, "read document")
+	testutil.Contains(t, errs[0].Message, readErr.Error())
 }
 
 func TestValidateUndeclaredType(t *testing.T) {

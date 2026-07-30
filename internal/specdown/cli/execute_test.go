@@ -331,6 +331,40 @@ func TestExecuteInstallSkillsSuccessAndUserError(t *testing.T) {
 	}
 }
 
+func TestExecuteInstallSkillsPreservesConflictingDirectories(t *testing.T) {
+	root := t.TempDir()
+	legacyPath := filepath.Join(root, ".claude", "skills", "legacy.txt")
+	currentPath := filepath.Join(root, ".agents", "skills", "current.txt")
+	writeCLIFile(t, root, filepath.Join(".claude", "skills", "legacy.txt"), "legacy")
+	writeCLIFile(t, root, filepath.Join(".agents", "skills", "current.txt"), "current")
+
+	result := executeForTest(t, root, "install", "skills", "--overwrite")
+
+	for _, want := range []string{
+		"both .claude/skills and .agents/skills exist",
+		"merge or remove one directory and retry",
+	} {
+		if !strings.Contains(result.stderr, want) {
+			t.Fatalf("result = %+v, want diagnostic %q", result, want)
+		}
+	}
+	if result.status != 1 {
+		t.Fatalf("result = %+v, want a conflict error", result)
+	}
+	for path, want := range map[string]string{
+		legacyPath:  "legacy",
+		currentPath: "current",
+	} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read preserved file %s: %v", path, err)
+		}
+		if string(body) != want {
+			t.Fatalf("preserved file %s = %q, want %q", path, body, want)
+		}
+	}
+}
+
 func TestExecuteVersionRejectsArguments(t *testing.T) {
 	result := executeForTest(t, t.TempDir(), "version", "extra")
 	if result.status != 1 || !strings.Contains(result.stderr, "does not accept positional arguments") {

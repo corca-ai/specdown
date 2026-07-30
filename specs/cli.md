@@ -251,6 +251,21 @@ $ cd skill-migrate && test -d .agents/skills/specdown && readlink .claude/skills
 migrated
 ```
 
+When both the legacy and current skills directories contain data, installation
+stops and preserves both directories so the conflict can be resolved explicitly:
+
+```run:shell
+rm -rf skill-conflict
+mkdir -p skill-conflict/.claude/skills skill-conflict/.agents/skills
+echo "legacy" > skill-conflict/.claude/skills/legacy.txt
+echo "current" > skill-conflict/.agents/skills/current.txt
+! (cd skill-conflict && specdown install skills --overwrite) 2>skill-conflict/error.txt
+grep -Fq "both .claude/skills and .agents/skills exist" skill-conflict/error.txt
+grep -Fq "merge or remove one directory and retry" skill-conflict/error.txt
+test "$(cat skill-conflict/.claude/skills/legacy.txt)" = "legacy"
+test "$(cat skill-conflict/.agents/skills/current.txt)" = "current"
+```
+
 ## Error Messages
 
 The CLI reports clear errors for common mistakes.
