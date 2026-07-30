@@ -3,7 +3,6 @@
 **/report.json
 /bin/
 .envrc
-mise.toml
 .tmp-test/
 .tmp-bin/
 .board-state.json
