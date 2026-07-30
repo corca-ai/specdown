@@ -1,15 +1,13 @@
 package engine
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/corca-ai/specdown/internal/specdown/binding"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
-
-var variablePattern = core.VariablePattern
 
 func prepareCase(specCase core.CaseSpec, bindings []core.Binding) (core.CaseSpec, error) {
 	prepared := specCase
@@ -94,87 +92,29 @@ func prepareTableRowCase(tr *core.TableRowCaseSpec, bindings []core.Binding) (*c
 }
 
 func renderTemplate(tmpl string, bindings []core.Binding) (string, error) {
-	values := make(map[string]any, len(bindings))
-	for _, binding := range bindings {
-		values[binding.Name] = binding.Value
-	}
-
-	var unresolved error
-	rendered := variablePattern.ReplaceAllStringFunc(tmpl, func(raw string) string {
-		match := variablePattern.FindStringSubmatch(raw)
-		if len(match) != 3 {
-			return raw
-		}
-		if match[1] == `\` {
-			// escaped \${...} → literal ${...}
-			return raw[1:]
-		}
-		ref := match[2]
-		parts := strings.SplitN(ref, ".", 2)
-		rootName := parts[0]
-		rootValue, ok := values[rootName]
-		if !ok {
-			unresolved = undefinedVariableError(rootName, values)
-			return raw
-		}
-		if len(parts) == 1 {
-			return valueToString(rootValue)
-		}
-		// Dot-path access
-		resolved, err := resolveValue(rootValue, strings.Split(parts[1], "."))
+	resolver := binding.New(bindings)
+	return binding.ReplaceReferences(tmpl, func(reference string) (string, error) {
+		value, err := resolver.Resolve(reference)
 		if err != nil {
-			unresolved = fmt.Errorf("cannot resolve %q: %w", ref, err)
-			return raw
+			var undefined *binding.UndefinedError
+			if errors.As(err, &undefined) {
+				return "", undefinedVariableError(undefined.Name, resolver.Names())
+			}
+			return "", fmt.Errorf("cannot resolve %q: %w", reference, err)
 		}
-		return valueToString(resolved)
+		return binding.Format(value), nil
 	})
-	if unresolved != nil {
-		return "", unresolved
-	}
-	return rendered, nil
 }
 
-func undefinedVariableError(name string, values map[string]any) error {
-	names := make([]string, 0, len(values))
-	for k := range values {
-		names = append(names, "$"+k)
+func undefinedVariableError(name string, names []string) error {
+	available := make([]string, len(names))
+	for index, availableName := range names {
+		available[index] = "$" + availableName
 	}
-	sort.Strings(names)
-	if len(names) > 0 {
-		return fmt.Errorf("variable $%s is not defined; available bindings: %s", name, strings.Join(names, ", "))
+	if len(available) > 0 {
+		return fmt.Errorf("variable $%s is not defined; available bindings: %s", name, strings.Join(available, ", "))
 	}
 	return fmt.Errorf("variable $%s is not defined; no bindings are available in this scope", name)
-}
-
-func resolveValue(value any, path []string) (any, error) {
-	current := value
-	for _, key := range path {
-		m, ok := current.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("cannot access %q on non-object value", key)
-		}
-		next, exists := m[key]
-		if !exists {
-			return nil, fmt.Errorf("key %q not found", key)
-		}
-		current = next
-	}
-	return current, nil
-}
-
-func valueToString(v any) string {
-	switch val := v.(type) {
-	case string:
-		return val
-	case nil:
-		return ""
-	default:
-		data, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Sprintf("%v", val)
-		}
-		return string(data)
-	}
 }
 
 func variableFailure(specCase core.CaseSpec, err error) core.CaseResult {

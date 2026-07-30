@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/corca-ai/specdown/internal/specdown/binding"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
@@ -1278,18 +1279,116 @@ func TestWriteDocTypeBadgeInTOC(t *testing.T) {
 }
 
 func TestReplaceProseVariablesDotPath(t *testing.T) {
-	// A structured binding like {"name": "alice"} stored under root "user"
-	// should allow ${user.name} in prose to resolve to "alice".
-	bindings := map[string]string{
-		"user": `{"name":"alice"}`,
-	}
-	input := `<p>Hello ${user.name}, welcome.</p>`
-	result := replaceProseVariables(input, bindings)
+	resolver := binding.New([]core.Binding{{
+		Name: "user",
+		Value: map[string]any{
+			"name": `<alice & bob>`,
+		},
+	}})
+	input := `<p>Hello ${user.name}; ${user.missing} stays.</p>`
+	result := replaceProseVariables(input, resolver)
 	if strings.Contains(result, "${user.name}") {
 		t.Fatalf("dot-path variable was not resolved: %s", result)
 	}
-	if !strings.Contains(result, "alice") {
-		t.Fatalf("expected resolved value 'alice', got: %s", result)
+	if !strings.Contains(result, "&lt;alice &amp; bob&gt;") {
+		t.Fatalf("expected safely escaped resolved value, got: %s", result)
+	}
+	if !strings.Contains(result, "${user.missing}") {
+		t.Fatalf("unresolved presentation reference was not preserved: %s", result)
+	}
+}
+
+func TestRenderProseNodePreservesEscapedVariable(t *testing.T) {
+	node := core.ProseNode{Raw: `Escaped \${user.name}; resolved ${user.name}.`}
+	bindings := []core.Binding{{
+		Name:  "user",
+		Value: map[string]any{"name": "alice"},
+	}}
+
+	result, err := renderProseNode(node, nil, bindings)
+	if err != nil {
+		t.Fatalf("render prose: %v", err)
+	}
+	if !strings.Contains(result, `Escaped ${user.name}`) {
+		t.Fatalf("escaped reference was not preserved as a literal: %s", result)
+	}
+	if strings.Count(result, `class="inline-var"`) != 1 || !strings.Contains(result, ">alice</span>") {
+		t.Fatalf("unescaped reference was not resolved exactly once: %s", result)
+	}
+}
+
+func TestRenderProseNodeHandlesEscapedReferencesInInlineCases(t *testing.T) {
+	expectID := core.SpecID{File: "inline.md", HeadingPath: core.HeadingPath{"Inline"}, Ordinal: 1}
+	checkID := core.SpecID{File: "inline.md", HeadingPath: core.HeadingPath{"Inline"}, Ordinal: 2}
+	followingExpectID := core.SpecID{File: "inline.md", HeadingPath: core.HeadingPath{"Inline"}, Ordinal: 3}
+	node := core.ProseNode{
+		Raw: "`expect: \\${missing} == \\${missing}` " +
+			"`check:value(input=\\${missing})` `expect: ok == ok`",
+		Inlines: []core.InlineElement{
+			{
+				Kind:        core.InlineExpect,
+				Raw:         "`expect: \\${missing} == \\${missing}`",
+				ExpectExpr:  `\${missing}`,
+				ExpectValue: `\${missing}`,
+				ID:          &expectID,
+			},
+			{
+				Kind:        core.InlineCheck,
+				Raw:         "`check:value(input=\\${missing})`",
+				Check:       "value",
+				CheckParams: map[string]string{"input": `\${missing}`},
+				ID:          &checkID,
+			},
+			{
+				Kind:        core.InlineExpect,
+				Raw:         "`expect: ok == ok`",
+				ExpectExpr:  "ok",
+				ExpectValue: "ok",
+				ID:          &followingExpectID,
+			},
+		},
+	}
+	caseResults := map[string]core.CaseResult{
+		expectID.Key(): {
+			ID:       expectID,
+			Kind:     core.CaseKindInlineExpect,
+			Status:   core.StatusPassed,
+			Expected: `${missing}`,
+			Actual:   `${missing}`,
+		},
+		checkID.Key(): {
+			ID:     checkID,
+			Kind:   core.CaseKindCode,
+			Status: core.StatusPassed,
+			Actual: `${missing}`,
+		},
+		followingExpectID.Key(): {
+			ID:       followingExpectID,
+			Kind:     core.CaseKindInlineExpect,
+			Status:   core.StatusPassed,
+			Expected: "ok",
+			Actual:   "ok",
+		},
+	}
+
+	result, err := renderProseNode(node, caseResults, nil)
+	if err != nil {
+		t.Fatalf("render prose: %v", err)
+	}
+	if strings.Count(result, `class="inline-expect passed"`) != 2 {
+		t.Fatalf("escaped inline expect desynchronized later cases: %s", result)
+	}
+	if strings.Count(result, `class="inline-check passed"`) != 1 {
+		t.Fatalf("escaped inline check was not rendered: %s", result)
+	}
+	if strings.Contains(result, "<code>expect:") || strings.Contains(result, "<code>check:") {
+		t.Fatalf("inline case code was left unreplaced: %s", result)
+	}
+	if strings.Contains(result, `class="inline-var"`) {
+		t.Fatalf("escaped inline result was reprocessed as a prose reference: %s", result)
+	}
+	if strings.Count(result, `${missing}`) != 4 {
+		t.Fatalf("escaped inline literals were not preserved in results: %s", result)
 	}
 }
 
