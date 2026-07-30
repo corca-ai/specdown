@@ -132,7 +132,45 @@ and optional label:
 ```
 
 The HTML report renders expected/actual as an inline diff.
-The JSON report includes a `schemaVersion` field (currently `2`).
+The JSON report includes a `schemaVersion` field (currently `3`).
 Common fields (`expected`, `actual`, `label`) remain at the top level
 of each case result. Kind-specific fields are nested under `code`,
-`table`, or `alloy` keys.
+`table`, or `alloy` keys. Section hook executions appear in each
+document's `lifecycleEvents`; global setup and teardown executions appear in
+the report-level `lifecycleEvents`.
+
+```run:shell
+# Produce both section and global lifecycle failures for JSON contract checks
+rm -rf report-lifecycle report-lifecycle-out
+mkdir -p report-lifecycle
+printf '# Lifecycle\n\n- [Spec](spec.md)\n' > report-lifecycle/index.md
+shell_fence=$(printf '\140\140\140run:shell')
+fence=$(printf '\140\140\140')
+cat <<SPEC > report-lifecycle/spec.md
+# Lifecycle Spec
+
+> setup
+$shell_fence
+exit 8
+$fence
+
+## Affected
+
+$shell_fence
+printf should-not-run
+$fence
+SPEC
+cat <<'CFG' > report-lifecycle.json
+{"entry":"report-lifecycle/index.md","teardown":"exit 9","adapters":[],"reporters":[{"builtin":"json","outFile":"report-lifecycle-out/report.json"}]}
+CFG
+if specdown run -config report-lifecycle.json -out report-lifecycle-out >/dev/null 2>&1; then
+  exit 1
+else
+  test $? -eq 1
+fi
+```
+
+```run:shell
+$ jq -c '{schemaVersion,globalScope:.lifecycleEvents[0].scope,globalStatus:.lifecycleEvents[0].status,sectionScope:([.results[].lifecycleEvents[]?][0].scope),sectionStatus:([.results[].lifecycleEvents[]?][0].status),caseStatus:([.results[].cases[]?][0].status),caseEvent:([.results[].cases[]?.events[]?][0].type),skipMessage:([.results[].cases[]?.events[]?][0].message),lifecycleFailed:.summary.lifecycleFailed,casesSkipped:.summary.casesSkipped,specsSkipped:.summary.specsSkipped}' report-lifecycle-out/report.json
+{"schemaVersion":3,"globalScope":"global","globalStatus":"failed","sectionScope":"section","sectionStatus":"failed","caseStatus":"skipped","caseEvent":"caseSkipped","skipMessage":"not executed because a section setup hook failed","lifecycleFailed":2,"casesSkipped":1,"specsSkipped":0}
+```

@@ -164,11 +164,13 @@ func run(ctx context.Context, args []string) error {
 	runStart := time.Now()
 	report, err := engine.RunContext(ctx, configDir, cfg, alloy.Runner{BaseDir: configDir, JarPath: cfg.Models.JarPath}, opts)
 	elapsed := time.Since(runStart)
-	if err != nil {
+	runErr := err
+	if runErr != nil && len(report.Results) == 0 && len(report.LifecycleEvents) == 0 {
 		return err
 	}
 
 	if !*quiet {
+		printLifecycleFailures(report)
 		printWarnings(report)
 		printTraceErrors(report)
 	}
@@ -177,7 +179,10 @@ func run(ctx context.Context, args []string) error {
 		if !*quiet {
 			printDryRun(report)
 		}
-		return nil
+		if reportFailed(report) {
+			return fmt.Errorf("spec run failed")
+		}
+		return runErr
 	}
 
 	if *showBindings && !*quiet {
@@ -191,14 +196,16 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-
-	if report.Summary.SpecsFailed > 0 || report.Summary.TraceErrorCount > 0 {
-		xfailSuffix := ""
-		if report.Summary.CasesExpectedFail > 0 {
-			xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
+	if runErr != nil {
+		if !*quiet && reportPath != "" {
+			fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
 		}
+		return runErr
+	}
+
+	if reportFailed(report) {
 		if !*quiet {
-			fmt.Fprintf(os.Stderr, "\nFAIL %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsFailed, report.Summary.CasesFailed, xfailSuffix, elapsed.Milliseconds())
+			fmt.Fprintf(os.Stderr, "\n%s\n", failureSummary(report, elapsed))
 			if reportPath != "" {
 				fmt.Fprintf(os.Stderr, "report: %s\n", reportPath)
 			}
@@ -217,6 +224,39 @@ func run(ctx context.Context, args []string) error {
 		}
 	}
 	return nil
+}
+
+func failureSummary(report core.Report, elapsed time.Duration) string {
+	lifecycleSuffix := ""
+	if report.Summary.LifecycleFailed > 0 {
+		lifecycleSuffix = fmt.Sprintf(", %d lifecycle failure(s)", report.Summary.LifecycleFailed)
+	}
+	xfailSuffix := ""
+	if report.Summary.CasesExpectedFail > 0 {
+		xfailSuffix = fmt.Sprintf(", %d expected", report.Summary.CasesExpectedFail)
+	}
+	skippedSuffix := ""
+	if report.Summary.SpecsSkipped > 0 {
+		skippedSuffix = fmt.Sprintf(", %d spec(s) skipped", report.Summary.SpecsSkipped)
+	}
+	if report.Summary.CasesSkipped > 0 {
+		skippedSuffix += fmt.Sprintf(", %d case(s) skipped", report.Summary.CasesSkipped)
+	}
+	return fmt.Sprintf(
+		"FAIL %d spec(s), %d case(s)%s%s%s in %dms",
+		report.Summary.SpecsFailed,
+		report.Summary.CasesFailed,
+		lifecycleSuffix,
+		xfailSuffix,
+		skippedSuffix,
+		elapsed.Milliseconds(),
+	)
+}
+
+func reportFailed(report core.Report) bool {
+	return report.Summary.SpecsFailed > 0 ||
+		report.Summary.LifecycleFailed > 0 ||
+		report.Summary.TraceErrorCount > 0
 }
 
 func traceCmd(args []string) error {
@@ -800,6 +840,41 @@ func printWarnings(report core.Report) {
 	}
 }
 
+func printLifecycleFailures(report core.Report) {
+	for i := range report.LifecycleEvents {
+		printLifecycleFailure(report.LifecycleEvents[i])
+	}
+	for i := range report.Results {
+		for j := range report.Results[i].LifecycleEvents {
+			printLifecycleFailure(report.Results[i].LifecycleEvents[j])
+		}
+	}
+}
+
+func printLifecycleFailure(event core.LifecycleEvent) {
+	if event.Status != core.StatusFailed {
+		return
+	}
+	label := string(event.Scope) + " " + string(event.Phase)
+	if event.Each {
+		label += ":each"
+	}
+	location := ""
+	if event.File != "" {
+		location = "  " + event.File
+	}
+	if len(event.HeadingPath) > 0 {
+		location += "  " + strings.Join(event.HeadingPath, " > ")
+	}
+	fmt.Fprintf(os.Stderr, "  FAIL  lifecycle %s%s  (%dms)\n", label, location, event.DurationMs)
+	if event.Message != "" {
+		lines := strings.Split(event.Message, "\n")
+		for _, line := range lines {
+			fmt.Fprintf(os.Stderr, "        %s\n", line)
+		}
+	}
+}
+
 func stdoutProgress() engine.ProgressFunc {
 	var mu sync.Mutex
 	return func(ev engine.ProgressEvent) {
@@ -815,6 +890,9 @@ func stdoutProgress() engine.ProgressFunc {
 }
 
 func caseTag(status core.Status, expectFail bool) string {
+	if status == core.StatusSkipped {
+		return "SKIP"
+	}
 	if status == core.StatusFailed {
 		if expectFail {
 			return "XFAIL"

@@ -119,7 +119,8 @@ main {
 }
 
 .toc-group-title.failed::after,
-.toc-group-title.expected-fail::after {
+.toc-group-title.expected-fail::after,
+.toc-group-title.skipped::after {
   content: "";
   width: 0.38rem;
   height: 0.38rem;
@@ -129,6 +130,9 @@ main {
 }
 .toc-group-title.expected-fail::after {
   background: var(--xfail-mark);
+}
+.toc-group-title.skipped::after {
+  background: var(--muted);
 }
 
 /* -- TOC type badge -- */
@@ -201,8 +205,10 @@ main {
 
 .toc-spec-header:has(.toc-spec-title.failed)::before,
 .toc-spec-header:has(.toc-spec-title.expected-fail)::before,
+.toc-spec-header:has(.toc-spec-title.skipped)::before,
 .toc-link.failed::before,
-.toc-link.expected-fail::before {
+.toc-link.expected-fail::before,
+.toc-link.skipped::before {
   content: "";
   position: absolute;
   left: -0.85rem;
@@ -216,6 +222,10 @@ main {
 .toc-spec-header:has(.toc-spec-title.expected-fail)::before,
 .toc-link.expected-fail::before {
   background: var(--xfail-mark);
+}
+.toc-spec-header:has(.toc-spec-title.skipped)::before,
+.toc-link.skipped::before {
+  background: var(--muted);
 }
 
 .toc-level-4 { padding-left: 0.7rem; }
@@ -250,6 +260,8 @@ main {
 .pill.pass { color: var(--pass-ink); }
 .pill.fail { color: var(--fail-ink); }
 .pill.xfail { color: var(--xfail-ink); }
+.pill.skipped { color: var(--muted); }
+.pill.lifecycle { color: var(--fail-ink); }
 
 /* ── Spec articles ── */
 .spec + .spec { padding-top: 2rem; }
@@ -258,6 +270,44 @@ main {
   line-height: 1.9;
 }
 .spec-body > :first-child { margin-top: 0; }
+
+.lifecycle-failures {
+  margin: 0 0 1.5rem;
+  padding: 1rem;
+  border-left: 3px solid var(--fail-mark);
+  background: var(--fail-bg);
+}
+
+.lifecycle-title {
+  margin: 0 0 0.75rem;
+  color: var(--fail-ink);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.lifecycle-failure + .lifecycle-failure {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rule);
+}
+
+.lifecycle-label {
+  margin: 0;
+  color: var(--fail-ink);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.lifecycle-location {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.lifecycle-message {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+}
 
 .spec-body h1 {
   font-family: serif;
@@ -368,6 +418,16 @@ main {
 .exec-block.expected-fail > .exec-source:not(.resolved) {
   border-left-color: var(--xfail-mark);
   background: var(--xfail-bg);
+}
+
+.exec-block.skipped > .exec-source:not(.resolved) {
+  border-left-color: var(--muted);
+}
+
+.skip-reason {
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 /* ── Collapsible blocks with summary lines ── */
@@ -524,10 +584,12 @@ main {
 .exec-table-block.passed .exec-table { border-left-color: var(--pass-mark); }
 .exec-table-block.failed .exec-table { border-left-color: var(--fail-mark); }
 .exec-table-block.expected-fail .exec-table { border-left-color: var(--xfail-mark); }
+.exec-table-block.skipped .exec-table { border-left-color: var(--muted); }
 
 .exec-table tbody tr.passed td { background: var(--pass-bg); }
 .exec-table tbody tr.failed td { background: var(--fail-bg); }
 .exec-table tbody tr.expected-fail td { background: var(--xfail-bg); }
+.exec-table tbody tr.skipped td { color: var(--muted); }
 
 /* ── Prose code blocks & tables ── */
 .spec-body :not(.exec-source) > pre {
@@ -594,6 +656,11 @@ main {
   padding-bottom: 0.02em;
 }
 
+.inline-expect.skipped {
+  background: var(--code-bg);
+  color: var(--muted);
+}
+
 .inline-expect.expected-fail > .annotation,
 .inline-expect.failed > .annotation,
 .inline-check > .annotation {
@@ -637,6 +704,11 @@ main {
 .inline-check.failed {
   background: var(--fail-bg);
   color: var(--fail-ink);
+}
+
+.inline-check.skipped {
+  background: var(--code-bg);
+  color: var(--muted);
 }
 
 .inline-check:has(.annotation) {
@@ -909,4 +981,3 @@ code, pre, kbd, samp {
   color: hsl(var(--type-hue) 50% 35%);
   border: 1px solid hsl(var(--type-hue) 40% 82%);
 }
-

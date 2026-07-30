@@ -47,6 +47,11 @@ type Session struct {
 	waitErr      error
 }
 
+// Usable reports whether the session can accept another request.
+func (s *Session) Usable() bool {
+	return !s.poisoned.Load() && !s.closed
+}
+
 func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
 	return h.StartSessionContext(context.Background(), adapter)
 }

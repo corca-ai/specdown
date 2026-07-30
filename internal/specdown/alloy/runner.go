@@ -372,7 +372,7 @@ func (r Runner) runAllModels(ctx context.Context, plan core.DocumentPlan, alloyC
 			continue
 		}
 
-		bundle, err := r.writeBundle(plan.Document.RelativeTo, model, checks)
+		bundle, err := r.writeBundleWithSuffix(plan.Document.RelativeTo, model, checks, plan.ArtifactSuffix)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +401,11 @@ func collectOrderedResults(checks []core.CaseSpec, resultsByKey map[string]core.
 }
 
 func (r Runner) writeBundle(documentPath string, model core.AlloyModelSpec, checks []core.CaseSpec) (modelBundle, error) {
-	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "models", bundleFileName(documentPath, model.Name)))
+	return r.writeBundleWithSuffix(documentPath, model, checks, "")
+}
+
+func (r Runner) writeBundleWithSuffix(documentPath string, model core.AlloyModelSpec, checks []core.CaseSpec, suffix string) (modelBundle, error) {
+	relativePath := filepath.ToSlash(filepath.Join(".artifacts", "specdown", "models", bundleFileNameWithSuffix(documentPath, model.Name, suffix)))
 	absolutePath := filepath.Join(r.BaseDir, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
 		return modelBundle{}, fmt.Errorf("create alloy artifact dir: %w", err)
@@ -792,7 +796,15 @@ func (r Runner) downloadAlloyJar(ctx context.Context) (_ string, err error) {
 }
 
 func bundleFileName(documentPath, modelName string) string {
-	return core.Slug(documentPath) + "-" + core.Slug(modelName) + ".als"
+	return bundleFileNameWithSuffix(documentPath, modelName, "")
+}
+
+func bundleFileNameWithSuffix(documentPath, modelName, suffix string) string {
+	name := core.Slug(documentPath) + "-" + core.Slug(modelName)
+	if suffix != "" {
+		name += "-" + core.Slug(suffix)
+	}
+	return name + ".als"
 }
 
 func splitBundleLines(source string) []string {

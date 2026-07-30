@@ -1,7 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
 	"github.com/corca-ai/specdown/internal/specdown/trace"
@@ -18,6 +25,7 @@ func TestCaseTag(t *testing.T) {
 		{"failed without expectFail", core.StatusFailed, false, "FAIL"},
 		{"passed", core.StatusPassed, false, "PASS"},
 		{"passed with expectFail", core.StatusPassed, true, "PASS"},
+		{"skipped", core.StatusSkipped, false, "SKIP"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,6 +88,124 @@ func TestJsonReportPath(t *testing.T) {
 	want := "/out/report/report.json"
 	if got != want {
 		t.Errorf("jsonReportPath(%q) = %q, want %q", "/out/report", got, want)
+	}
+}
+
+func TestReportFailedIncludesLifecycleFailures(t *testing.T) {
+	report := core.Report{
+		Summary: core.Summary{
+			SpecsFailed:     0,
+			CasesFailed:     0,
+			LifecycleFailed: 1,
+		},
+	}
+	if !reportFailed(report) {
+		t.Fatal("reportFailed = false, want true for a lifecycle failure")
+	}
+}
+
+func TestFailureSummaryPreservesCaseOnlyFormat(t *testing.T) {
+	report := core.Report{Summary: core.Summary{
+		SpecsFailed: 1,
+		CasesFailed: 2,
+	}}
+	got := failureSummary(report, 12*time.Millisecond)
+	want := "FAIL 1 spec(s), 2 case(s) in 12ms"
+	if got != want {
+		t.Fatalf("failure summary = %q, want %q", got, want)
+	}
+}
+
+func TestFailureSummaryIncludesLifecycleFailuresWhenPresent(t *testing.T) {
+	report := core.Report{Summary: core.Summary{
+		SpecsFailed:     1,
+		SpecsSkipped:    3,
+		CasesFailed:     0,
+		CasesSkipped:    2,
+		LifecycleFailed: 1,
+	}}
+	got := failureSummary(report, 12*time.Millisecond)
+	want := "FAIL 1 spec(s), 0 case(s), 1 lifecycle failure(s), 3 spec(s) skipped, 2 case(s) skipped in 12ms"
+	if got != want {
+		t.Fatalf("failure summary = %q, want %q", got, want)
+	}
+}
+
+func TestRunSetupOnlyFailureWritesFirstClassReport(t *testing.T) {
+	root := t.TempDir()
+	command := strconv.Quote(os.Args[0]) + " -test.run=^TestCLILifecycleFailureProcess$ -- cli-lifecycle-fail"
+	configPath := filepath.Join(root, "specdown.json")
+	configBody := `{"entry":"index.md","setup":` + strconv.Quote(command) +
+		`,"reporters":[{"builtin":"json","outFile":"report/report.json"}]}`
+	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	reportDir := filepath.Join(root, "report")
+
+	err := run(context.Background(), []string{
+		"-config", configPath,
+		"-setup",
+		"-quiet",
+		"-out", reportDir,
+	})
+	if err == nil || !strings.Contains(err.Error(), "spec run failed") {
+		t.Fatalf("run error = %v, want spec run failure", err)
+	}
+	body, readErr := os.ReadFile(filepath.Join(reportDir, "report.json"))
+	if readErr != nil {
+		t.Fatalf("read JSON report after %v: %v", err, readErr)
+	}
+	var report core.Report
+	if unmarshalErr := json.Unmarshal(body, &report); unmarshalErr != nil {
+		t.Fatalf("unmarshal JSON report: %v", unmarshalErr)
+	}
+	if report.Summary.LifecycleFailed != 1 {
+		t.Fatalf("summary = %+v, want one lifecycle failure", report.Summary)
+	}
+	if _, statErr := os.Stat(filepath.Join(reportDir, "index.html")); statErr != nil {
+		t.Fatalf("HTML lifecycle landing page: %v", statErr)
+	}
+}
+
+func TestRunWritesLifecycleReportAlongsideDiscoveryError(t *testing.T) {
+	root := t.TempDir()
+	command := strconv.Quote(os.Args[0]) + " -test.run=^TestCLILifecycleFailureProcess$ -- cli-lifecycle-fail"
+	configPath := filepath.Join(root, "specdown.json")
+	configBody := `{"entry":"missing.md","setup":` + strconv.Quote(command) +
+		`,"teardown":` + strconv.Quote(command) +
+		`,"reporters":[{"builtin":"json","outFile":"report/report.json"}]}`
+	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	reportDir := filepath.Join(root, "report")
+
+	err := run(context.Background(), []string{
+		"-config", configPath,
+		"-quiet",
+		"-out", reportDir,
+	})
+	if err == nil || !strings.Contains(err.Error(), "setup command failed") {
+		t.Fatalf("run error = %v, want setup/discovery error", err)
+	}
+	body, readErr := os.ReadFile(filepath.Join(reportDir, "report.json"))
+	if readErr != nil {
+		t.Fatalf("read JSON report: %v", readErr)
+	}
+	var report core.Report
+	if unmarshalErr := json.Unmarshal(body, &report); unmarshalErr != nil {
+		t.Fatalf("unmarshal JSON report: %v", unmarshalErr)
+	}
+	if report.Summary.LifecycleFailed != 2 || len(report.LifecycleEvents) != 2 {
+		t.Fatalf("report = %+v, want setup and teardown failures", report)
+	}
+	if _, statErr := os.Stat(filepath.Join(reportDir, "index.html")); statErr != nil {
+		t.Fatalf("HTML lifecycle landing page: %v", statErr)
+	}
+}
+
+func TestCLILifecycleFailureProcess(_ *testing.T) {
+	if len(os.Args) > 0 && os.Args[len(os.Args)-1] == "cli-lifecycle-fail" {
+		os.Exit(7)
 	}
 }
 

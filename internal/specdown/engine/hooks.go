@@ -3,22 +3,74 @@ package engine
 import (
 	"context"
 	"fmt"
-	"os"
+	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
-func (c *caseRunContext) runHooksMatching(kind core.HookKind, shouldRun func(core.HookSpec) bool) {
-	for i := range c.hooks {
+func (c *caseRunContext) runHooksMatching(
+	kind core.HookKind,
+	currentPath core.HeadingPath,
+	shouldRun func(core.HookSpec) bool,
+) *core.HookSpec {
+	return c.runHooksMatchingWith(c.ctx, c.sessions, kind, currentPath, shouldRun)
+}
+
+//nolint:gocognit // records ordered hook execution, failure, and teardown continuation
+func (c *caseRunContext) runHooksMatchingWith(
+	ctx context.Context,
+	sessions sessionProvider,
+	kind core.HookKind,
+	currentPath core.HeadingPath,
+	shouldRun func(core.HookSpec) bool,
+) *core.HookSpec {
+	var firstFailure *core.HookSpec
+	for step := range len(c.hooks) {
+		i := step
+		if kind == core.HookTeardown {
+			i = len(c.hooks) - 1 - step
+		}
 		hook := c.hooks[i]
 		if hook.Kind != kind || !shouldRun(hook) {
 			continue
 		}
+		activationKey := ""
+		if kind == core.HookTeardown {
+			activationKey = teardownActivationKey(i, hookExecutionScope(hook, currentPath))
+			if _, active := c.activeTeardowns[activationKey]; !active {
+				continue
+			}
+		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		if err := runHook(c.ctx, hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: %s hook failed: %v\n", hook.Kind, err)
+		startedAt := time.Now()
+		event := core.LifecycleEvent{
+			Scope:       core.LifecycleScopeSection,
+			Phase:       hook.Kind,
+			Status:      core.StatusPassed,
+			File:        c.spec,
+			HeadingPath: hookExecutionScope(hook, currentPath),
+			Each:        hook.Each,
+		}
+		if err := runHook(ctx, hook, c.registry, sessions, visible, c.timeoutMs); err != nil {
+			event.Status = core.StatusFailed
+			event.Message = err.Error()
+		}
+		event.DurationMs = int(time.Since(startedAt).Milliseconds())
+		c.lifecycleEvents = append(c.lifecycleEvents, event)
+		if activationKey != "" {
+			delete(c.activeTeardowns, activationKey)
+		}
+		if event.Status == core.StatusFailed {
+			if firstFailure == nil {
+				failed := hook
+				firstFailure = &failed
+			}
+			if kind == core.HookSetup {
+				return firstFailure
+			}
 		}
 	}
+	return firstFailure
 }
 
 func shouldRunHook(hook core.HookSpec, prevPath, currPath core.HeadingPath) bool {
@@ -55,7 +107,18 @@ func shouldRunTeardownHook(hook core.HookSpec, currPath, nextPath core.HeadingPa
 	return currPath[depth] != nextPath[depth]
 }
 
-func runHook(ctx context.Context, hook core.HookSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) error {
+func hookExecutionScope(hook core.HookSpec, currPath core.HeadingPath) core.HeadingPath {
+	if !hook.Each {
+		return append(core.HeadingPath(nil), hook.HeadingPath...)
+	}
+	depth := len(hook.HeadingPath) + 1
+	if depth > len(currPath) {
+		depth = len(currPath)
+	}
+	return append(core.HeadingPath(nil), currPath[:depth]...)
+}
+
+func runHook(ctx context.Context, hook core.HookSpec, registry adapterRegistry, sm sessionProvider, visible []core.Binding, timeoutMs int) error {
 	synthetic := core.CaseSpec{
 		ID: core.SpecID{
 			File:        "_hook",

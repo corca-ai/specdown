@@ -225,6 +225,263 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 	})
 }
 
+func TestWriteRendersLifecycleFailures(t *testing.T) {
+	caseID := core.SpecID{
+		File:        "specs/lifecycle.md",
+		HeadingPath: core.HeadingPath{"Lifecycle", "Affected"},
+		Ordinal:     1,
+	}
+	report := core.Report{
+		SchemaVersion: 3,
+		Summary: core.Summary{
+			SpecsTotal:      1,
+			SpecsFailed:     1,
+			CasesTotal:      1,
+			CasesSkipped:    1,
+			LifecycleTotal:  2,
+			LifecycleFailed: 2,
+		},
+		LifecycleEvents: []core.LifecycleEvent{{
+			Scope:   core.LifecycleScopeGlobal,
+			Phase:   core.HookTeardown,
+			Status:  core.StatusFailed,
+			Message: "global cleanup <failed>",
+		}},
+		Results: []core.DocumentResult{{
+			Status: core.StatusFailed,
+			Document: core.Document{
+				Title:      "Lifecycle",
+				RelativeTo: "specs/lifecycle.md",
+				Nodes: []core.Node{
+					core.HeadingNode{
+						Level:       1,
+						Text:        "Lifecycle",
+						Raw:         "# Lifecycle\n",
+						HeadingPath: core.HeadingPath{"Lifecycle"},
+					},
+					core.HeadingNode{
+						Level:       2,
+						Text:        "Affected",
+						Raw:         "## Affected\n",
+						HeadingPath: core.HeadingPath{"Lifecycle", "Affected"},
+					},
+					core.CodeBlockNode{
+						Block:  core.BlockSpec{Raw: "run:shell", Kind: core.BlockKindRun, Target: "shell"},
+						Source: "echo should-not-run",
+						Raw:    "```run:shell\necho should-not-run\n```\n",
+						ID:     &caseID,
+					},
+				},
+			},
+			Cases: []core.CaseResult{{
+				ID:      caseID,
+				Kind:    core.CaseKindCode,
+				Status:  core.StatusSkipped,
+				Label:   "run:shell @ Affected",
+				Message: "not executed because a setup hook failed",
+				Code: &core.CodeResultDetail{
+					Block:    "run:shell",
+					Template: "echo should-not-run",
+				},
+			}},
+			LifecycleEvents: []core.LifecycleEvent{{
+				Scope:       core.LifecycleScopeSection,
+				Phase:       core.HookSetup,
+				Status:      core.StatusFailed,
+				File:        "specs/lifecycle.md",
+				HeadingPath: core.HeadingPath{"Lifecycle", "Affected"},
+				Each:        true,
+				Message:     "section setup failed",
+			}},
+		}},
+	}
+
+	html := writeAndReadReport(t, report)
+	assertContains(t, html, "Lifecycle failures", "lifecycle failure panel")
+	assertContains(t, html, "global teardown", "global teardown label")
+	assertContains(t, html, "section setup:each", "section setup label")
+	assertContains(t, html, "global cleanup &lt;failed&gt;", "escaped global failure")
+	assertContains(t, html, "section setup failed", "section failure message")
+	assertContains(t, html, "2 lifecycle failed", "lifecycle summary pill")
+	assertContains(t, html, "1 skipped", "skipped case summary pill")
+	assertContains(t, html, `class="exec-block skipped"`, "skipped case status")
+	assertContains(t, html, "toc-link toc-level-2 failed", "failed lifecycle heading in toc")
+}
+
+func TestWriteRendersGlobalLifecycleFailureOnEveryPage(t *testing.T) {
+	report := core.Report{
+		SchemaVersion: 3,
+		Summary: core.Summary{
+			SpecsTotal:      2,
+			SpecsSkipped:    2,
+			CasesTotal:      1,
+			CasesSkipped:    1,
+			LifecycleTotal:  1,
+			LifecycleFailed: 1,
+		},
+		LifecycleEvents: []core.LifecycleEvent{{
+			Scope:   core.LifecycleScopeGlobal,
+			Phase:   core.HookSetup,
+			Status:  core.StatusFailed,
+			Message: "global setup exploded",
+		}},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusSkipped,
+				Document: core.Document{
+					Title:      "Index",
+					RelativeTo: "specs/index.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Index", Raw: "# Index\n", HeadingPath: []string{"Index"}},
+					},
+				},
+			},
+			{
+				Status: core.StatusSkipped,
+				Document: core.Document{
+					Title:      "Deep Link",
+					RelativeTo: "specs/deep.spec.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Deep Link", Raw: "# Deep Link\n", HeadingPath: []string{"Deep Link"}},
+					},
+				},
+			},
+		},
+	}
+	outDir := filepath.Join(t.TempDir(), "report")
+	if _, err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(outDir, "deep.html"))
+	if err != nil {
+		t.Fatalf("read deep page: %v", err)
+	}
+	html := string(body)
+	assertContains(t, html, "global setup exploded", "global failure on deep-linked page")
+	assertContains(t, html, "1 lifecycle failed", "global lifecycle count on deep-linked page")
+	assertContains(t, html, "toc-spec-title skipped", "skipped document status")
+}
+
+func TestWriteLifecycleOnlyReportCreatesLandingPage(t *testing.T) {
+	report := core.Report{
+		SchemaVersion: 3,
+		Summary: core.Summary{
+			LifecycleTotal:  1,
+			LifecycleFailed: 1,
+		},
+		LifecycleEvents: []core.LifecycleEvent{{
+			Scope:   core.LifecycleScopeGlobal,
+			Phase:   core.HookTeardown,
+			Status:  core.StatusFailed,
+			Message: "cleanup failed",
+		}},
+	}
+	outDir := filepath.Join(t.TempDir(), "report")
+	if _, err := Write(report, outDir); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(outDir, "index.html"))
+	if err != nil {
+		t.Fatalf("read lifecycle landing page: %v", err)
+	}
+	html := string(body)
+	assertContains(t, html, "cleanup failed", "lifecycle-only failure")
+	assertContains(t, html, "<h1>Lifecycle</h1>", "accessible lifecycle heading")
+}
+
+func TestRenderSkippedDiagnosticsAcrossCaseKinds(t *testing.T) {
+	id := core.SpecID{File: "spec.md", HeadingPath: core.HeadingPath{"Skipped"}, Ordinal: 1}
+	const reason = "not executed because a section setup hook failed"
+
+	tableHTML, err := renderTable(core.TableNode{
+		Check:   "value",
+		Columns: []string{"value"},
+		Rows: []core.TableRowNode{{
+			Cells: []string{"x"},
+			ID:    &id,
+		}},
+	}, map[string]core.CaseResult{
+		id.Key(): {
+			ID:      id,
+			Kind:    core.CaseKindTableRow,
+			Status:  core.StatusSkipped,
+			Message: reason,
+			Table:   &core.TableResultDetail{TemplateCells: []string{"x"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render table: %v", err)
+	}
+	assertContains(t, tableHTML, reason, "table skip reason")
+
+	checkHTML := renderCheckCall(core.CheckCallNode{
+		Check: "value",
+		ID:    &id,
+	}, map[string]core.CaseResult{
+		id.Key(): {ID: id, Kind: core.CaseKindCode, Status: core.StatusSkipped, Message: reason},
+	})
+	assertContains(t, checkHTML, reason, "check-call skip reason")
+
+	inlineHTML := renderInlineCheckSpan(core.InlineElement{Kind: core.InlineCheck, Check: "value"}, core.CaseResult{
+		ID:      id,
+		Status:  core.StatusSkipped,
+		Message: reason,
+	})
+	assertContains(t, inlineHTML, reason, "inline-check skip reason")
+
+	alloyHTML := renderAlloyModel(core.AlloyModelNode{Model: "sample", Source: "sig Item {}"}, map[string]core.CaseResult{
+		id.Key(): {
+			ID:      id,
+			Kind:    core.CaseKindAlloy,
+			Status:  core.StatusSkipped,
+			Message: reason,
+			Alloy:   &core.AlloyResultDetail{Model: "sample"},
+		},
+	})
+	assertContains(t, alloyHTML, reason, "Alloy skip reason")
+}
+
+func TestWriteRendersSkippedStandaloneCheckFromCompiledDocument(t *testing.T) {
+	doc, err := core.ParseDocument(
+		"specs/check.md",
+		"# Check\n\n> check:jq(input=1, expr=., expected=1)\n",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("parse document: %v", err)
+	}
+	plan, err := core.CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile document: %v", err)
+	}
+	const reason = "not executed because the global setup command failed"
+	report := core.Report{
+		SchemaVersion: 3,
+		Results: []core.DocumentResult{{
+			Document: plan.Document,
+			Status:   core.StatusSkipped,
+			Cases: []core.CaseResult{{
+				ID:      plan.Cases[0].ID,
+				Kind:    core.CaseKindTableRow,
+				Status:  core.StatusSkipped,
+				Label:   plan.Cases[0].DefaultLabel(),
+				Message: reason,
+				Table:   &core.TableResultDetail{Check: "jq"},
+			}},
+		}},
+		Summary: core.Summary{
+			SpecsTotal:   1,
+			SpecsSkipped: 1,
+			CasesTotal:   1,
+			CasesSkipped: 1,
+		},
+	}
+	html := writeAndReadReport(t, report)
+	assertContains(t, html, "check-call skipped", "compiled standalone check")
+	assertContains(t, html, "jq(expected=1, expr=., input=1)", "standalone check label")
+	assertContains(t, html, reason, "standalone check skip reason")
+}
+
 func TestWriteRendersAlloyReferencesWithoutArtifactMetadata(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "report")
 
@@ -995,8 +1252,8 @@ func TestWriteDocTypeBadgeInTOC(t *testing.T) {
 			{
 				Status: core.StatusPassed,
 				Document: core.Document{
-					Title:      "Overview",
-					RelativeTo: "specs/overview.spec.md",
+					Title:       "Overview",
+					RelativeTo:  "specs/overview.spec.md",
 					Frontmatter: core.Frontmatter{Type: "spec"},
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},

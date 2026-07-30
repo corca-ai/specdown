@@ -226,8 +226,37 @@ The prime operator (`e'`) refers to the value of `e` in the next state. Without 
 
 Use `> setup` / `> teardown` hooks when the same preparation or cleanup
 applies to all cases in a section. Teardown hooks always run, even if a
-case fails — inline cleanup at the start of the next block does not have
-this guarantee.
+case fails or is an expected failure — inline cleanup at the start of the next
+block does not have this guarantee.
+
+```run:shell
+# An expected failure still reaches teardown and records the cleanup event.
+D=.tmp-test/hook-cleanup-test
+rm -rf "$D"
+mkdir -p "$D"
+BT=$(printf '\140\140\140')
+printf '%s\n' \
+  '# Cleanup' \
+  '' \
+  '> teardown' \
+  "$BT"'run:shell' \
+  'printf cleaned > cleanup.marker' \
+  "$BT" \
+  '' \
+  '## Expected failure' \
+  '' \
+  "$BT"'run:shell !fail' \
+  'exit 1' \
+  "$BT" > "$D/spec.md"
+printf '# Entry\n\n- [Cleanup](spec.md)\n' > "$D/index.md"
+cat <<'CFG' > "$D/specdown.json"
+{"entry":"index.md","reporters":[{"builtin":"json","outFile":"report.json"}]}
+CFG
+specdown run -config "$D/specdown.json" -quiet
+test -f "$D/cleanup.marker"
+grep -q '"casesExpectedFail": 1' "$D/report.json"
+grep -q '"lifecyclePassed": 1' "$D/report.json"
+```
 
 Use `> setup:each` / `> teardown:each` when every child section needs
 identical preparation (e.g., resetting a database or clearing temp files).

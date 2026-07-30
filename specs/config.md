@@ -214,17 +214,52 @@ SETUP-OK
 TEARDOWN-RAN
 ```
 
-A failing setup command prevents spec execution and exits with an error.
+A failing setup command prevents spec execution, records planned cases as
+skipped, runs the configured teardown, writes reports, and exits with an error.
 
 ```run:shell
-# Verify failing setup aborts the run
+# Verify failing setup aborts specs but still runs teardown
+rm -rf setup-fail-test
 mkdir -p setup-fail-test
 printf '# T\n\n- [S](s.spec.md)\n' > setup-fail-test/index.md
-printf '# S\n\nProse.\n' > setup-fail-test/s.spec.md
+BT=$(printf '\140\140\140')
+printf '%s\n' '# S' '' "$BT"'run:shell' 'printf CASE-RAN > case-marker.txt' "$BT" > setup-fail-test/s.spec.md
 cat <<'CFG' > setup-fail-test/specdown.json
-{"entry": "index.md", "setup": "exit 1"}
+{"entry":"index.md","setup":"exit 1","teardown":"printf TEARDOWN-RAN > teardown-marker.txt","reporters":[{"builtin":"html","outFile":"report"},{"builtin":"json","outFile":"report.json"}]}
 CFG
-! specdown run -config setup-fail-test/specdown.json 2>/dev/null
+if specdown run -config setup-fail-test/specdown.json -quiet >/dev/null 2>&1; then
+  exit 1
+fi
+test -f setup-fail-test/teardown-marker.txt
+test ! -e setup-fail-test/case-marker.txt
+grep -q '"casesSkipped": 1' setup-fail-test/report.json
+jq -e '.summary.specsSkipped == .summary.specsTotal and all(.results[]; .status == "skipped")' setup-fail-test/report.json >/dev/null
+grep -q '"scope": "global"' setup-fail-test/report.json
+grep -q '"phase": "setup"' setup-fail-test/report.json
+grep -q 'global setup' setup-fail-test/report/index.html
+```
+
+A failed global teardown is recorded as a global lifecycle event. Reports are
+written before the command exits nonzero, so HTML, JSON, CLI status, and the
+process exit code all describe the same failure.
+
+```run:shell
+# Verify a failed global teardown is reported and fails the run
+rm -rf teardown-fail-test
+mkdir -p teardown-fail-test
+printf '# T\n\n- [S](s.md)\n' > teardown-fail-test/index.md
+printf '# S\n\nProse.\n' > teardown-fail-test/s.md
+cat <<'CFG' > teardown-fail-test/specdown.json
+{"entry":"index.md","teardown":"exit 9","reporters":[{"builtin":"html","outFile":"report"},{"builtin":"json","outFile":"report.json"}]}
+CFG
+if specdown run -config teardown-fail-test/specdown.json -quiet >/dev/null 2>&1; then
+  exit 1
+fi
+grep -q '"lifecycleFailed": 1' teardown-fail-test/report.json
+grep -q '"scope": "global"' teardown-fail-test/report.json
+grep -q '"phase": "teardown"' teardown-fail-test/report.json
+grep -q '"status": "failed"' teardown-fail-test/report.json
+grep -q 'global teardown' teardown-fail-test/report/index.html
 ```
 
 ### Adapter Fields

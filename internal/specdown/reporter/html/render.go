@@ -40,13 +40,14 @@ func rewriteMarkdownLinks(html string) string {
 	})
 }
 
-func renderDocument(result core.DocumentResult) (string, error) {
+func renderDocument(result core.DocumentResult, globalEvents []core.LifecycleEvent) (string, error) {
 	caseResults := make(map[string]core.CaseResult, len(result.Cases))
 	for i := range result.Cases {
 		caseResults[result.Cases[i].ID.Key()] = result.Cases[i]
 	}
 
 	var out htmlBuilder
+	out.raw(renderLifecycleFailures(globalEvents, result.LifecycleEvents))
 	var sectionStack []int
 	var accBindings []core.Binding
 	for _, node := range result.Document.Nodes {
@@ -68,6 +69,64 @@ func renderDocument(result core.DocumentResult) (string, error) {
 		out.raw(`</section>`)
 	}
 	return out.String(), nil
+}
+
+func renderLifecycleFailures(eventGroups ...[]core.LifecycleEvent) string {
+	failed := failedLifecycleEvents(eventGroups...)
+	if len(failed) == 0 {
+		return ""
+	}
+
+	var out htmlBuilder
+	out.raw(`<aside class="lifecycle-failures" aria-label="Lifecycle failures">`)
+	out.raw(`<p class="lifecycle-title">Lifecycle failures</p>`)
+	for i := range failed {
+		out.raw(renderLifecycleFailure(failed[i]))
+	}
+	out.raw(`</aside>`)
+	return out.String()
+}
+
+func failedLifecycleEvents(eventGroups ...[]core.LifecycleEvent) []core.LifecycleEvent {
+	var failed []core.LifecycleEvent
+	for _, events := range eventGroups {
+		for i := range events {
+			if events[i].Status == core.StatusFailed {
+				failed = append(failed, events[i])
+			}
+		}
+	}
+	return failed
+}
+
+func renderLifecycleFailure(event core.LifecycleEvent) string {
+	var out htmlBuilder
+	out.open("article", "lifecycle-failure")
+	out.raw(`<p class="lifecycle-label">`)
+	label := string(event.Scope) + " " + string(event.Phase)
+	if event.Each {
+		label += ":each"
+	}
+	out.text(label)
+	out.raw(`</p>`)
+	if event.File != "" || len(event.HeadingPath) > 0 {
+		out.raw(`<p class="lifecycle-location">`)
+		if event.File != "" {
+			out.text(event.File)
+		}
+		if event.File != "" && len(event.HeadingPath) > 0 {
+			out.text(" · ")
+		}
+		out.text(strings.Join(event.HeadingPath, " > "))
+		out.raw(`</p>`)
+	}
+	if event.Message != "" {
+		out.raw(`<pre class="lifecycle-message">`)
+		out.text(event.Message)
+		out.raw(`</pre>`)
+	}
+	out.close("article")
+	return out.String()
 }
 
 func closeSections(out *htmlBuilder, sectionStack []int, node core.Node, documentPath string) []int {
@@ -211,6 +270,11 @@ func renderCodeSource(out *htmlBuilder, result core.CaseResult) {
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
 	}
+	if result.Status == core.StatusSkipped && result.Message != "" {
+		out.raw(`<p class="skip-reason">`)
+		out.text(result.Message)
+		out.raw(`</p>`)
+	}
 }
 
 // renderCodeSourceStripped renders the code block with leading comment lines
@@ -231,6 +295,11 @@ func renderCodeSourceStripped(out *htmlBuilder, result core.CaseResult) {
 	}
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(out, result.Message, result.Expected, result.Actual)
+	}
+	if result.Status == core.StatusSkipped && result.Message != "" {
+		out.raw(`<p class="skip-reason">`)
+		out.text(result.Message)
+		out.raw(`</p>`)
 	}
 }
 
@@ -305,19 +374,32 @@ type renderedRow struct {
 }
 
 func tableStatusClass(rows []renderedRow) string {
-	status := ""
+	hasExpectedFailure := false
+	hasPassed := false
+	hasSkipped := false
 	for i := range rows {
 		item := rows[i]
 		switch {
 		case item.result.Status == core.StatusFailed && !item.result.ExpectFail:
 			return string(core.StatusFailed)
-		case item.result.ExpectFail && status == "":
-			status = "expected-fail"
-		case status == "":
-			status = string(core.StatusPassed)
+		case item.result.ExpectFail:
+			hasExpectedFailure = true
+		case item.result.Status == core.StatusPassed:
+			hasPassed = true
+		case item.result.Status == core.StatusSkipped:
+			hasSkipped = true
 		}
 	}
-	return status
+	switch {
+	case hasExpectedFailure:
+		return "expected-fail"
+	case hasPassed:
+		return string(core.StatusPassed)
+	case hasSkipped:
+		return string(core.StatusSkipped)
+	default:
+		return ""
+	}
 }
 
 func renderTable(node core.TableNode, caseResults map[string]core.CaseResult) (string, error) {
@@ -387,12 +469,26 @@ func renderTableRow(out *htmlBuilder, row core.TableRowNode, result core.CaseRes
 		out.open("div", "cell-template")
 		out.text(cell)
 		out.close("div")
-		if result.Status == core.StatusFailed && index == lastIndex {
-			renderFailureDiff(out, result.Message, result.Expected, result.Actual)
+		if index == lastIndex {
+			switch result.Status {
+			case core.StatusFailed:
+				renderFailureDiff(out, result.Message, result.Expected, result.Actual)
+			case core.StatusSkipped:
+				renderSkipReason(out, result.Message)
+			}
 		}
 		out.raw(`</td>`)
 	}
 	out.raw(`</tr>`)
+}
+
+func renderSkipReason(out *htmlBuilder, message string) {
+	if message == "" {
+		return
+	}
+	out.raw(`<p class="skip-reason">`)
+	out.text(message)
+	out.raw(`</p>`)
 }
 
 func renderFailureDiff(out *htmlBuilder, message, expected, actual string) {
@@ -427,26 +523,37 @@ func renderFailureDiff(out *htmlBuilder, message, expected, actual string) {
 func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.CaseResult) string {
 	// Find checks targeting this model
 	var failedResult *core.CaseResult
-	hasCheck := false
+	var skippedResult *core.CaseResult
+	hasPassed := false
+	hasSkipped := false
 	for k := range caseResults {
 		r := caseResults[k]
 		if r.Kind != core.CaseKindAlloy || r.Alloy == nil || r.Alloy.Model != node.Model {
 			continue
 		}
-		hasCheck = true
-		if r.Status == core.StatusFailed {
+		switch r.Status {
+		case core.StatusFailed:
 			rCopy := r
 			failedResult = &rCopy
-			break
+		case core.StatusSkipped:
+			hasSkipped = true
+			if skippedResult == nil {
+				rCopy := r
+				skippedResult = &rCopy
+			}
+		default:
+			hasPassed = true
 		}
 	}
 
 	statusClass := ""
-	if hasCheck {
+	switch {
+	case failedResult != nil:
+		statusClass = " failed"
+	case hasPassed:
 		statusClass = " passed"
-		if failedResult != nil {
-			statusClass = " failed"
-		}
+	case hasSkipped:
+		statusClass = " skipped"
 	}
 
 	var out htmlBuilder
@@ -462,6 +569,9 @@ func renderAlloyModel(node core.AlloyModelNode, caseResults map[string]core.Case
 			out.text(msg)
 			out.close("div")
 		}
+	}
+	if failedResult == nil && skippedResult != nil {
+		renderSkipReason(&out, skippedResult.Message)
 	}
 	out.close("div")
 	out.raw(`<p class="exec-block-footer">`)
@@ -542,6 +652,9 @@ func renderCheckCall(node core.CheckCallNode, caseResults map[string]core.CaseRe
 	out.raw(`</code>`)
 	if result.Status == core.StatusFailed && (result.Message != "" || result.Expected != "" || result.Actual != "") {
 		renderFailureDiff(&out, result.Message, result.Expected, result.Actual)
+	}
+	if result.Status == core.StatusSkipped {
+		renderSkipReason(&out, result.Message)
 	}
 	out.close("div")
 	out.raw(`<p class="exec-block-footer">check</p>`)
@@ -677,6 +790,10 @@ func renderInlineExpectSpan(cr core.CaseResult) string {
 		out.raw(`">`)
 		out.text(cr.Actual)
 		out.raw(`</span>`)
+	case cr.Status == core.StatusSkipped:
+		out.raw(`<span class="inline-expect skipped" title="`)
+		out.text(cr.Message)
+		out.raw(`">not run</span>`)
 	case cr.ExpectFail:
 		out.raw(`<span class="inline-expect expected-fail" title="`)
 		out.text("expected failure: " + cr.Message)
@@ -702,7 +819,7 @@ func renderInlineCheckSpan(inline core.InlineElement, cr core.CaseResult) string
 	out.raw(`<span class="inline-check `)
 	out.text(string(cr.Status))
 	out.raw(`" title="`)
-	if cr.Status == core.StatusFailed && cr.Message != "" {
+	if (cr.Status == core.StatusFailed || cr.Status == core.StatusSkipped) && cr.Message != "" {
 		out.text(cr.Message)
 	} else {
 		out.text(inline.Raw)

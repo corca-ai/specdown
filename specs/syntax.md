@@ -485,14 +485,12 @@ an interactive diagram via the Mermaid library.
 The info string match is case-sensitive: `mermaid` is recognized,
 but `Mermaid` or `MERMAID` falls through to plain code rendering.
 
-````markdown
-```mermaid
-graph LR
-    A[Parse] --> B[Plan]
-    B --> C[Execute]
-    C --> D[Report]
-```
-````
+    ```mermaid
+    graph LR
+        A[Parse] --> B[Plan]
+        B --> C[Execute]
+        C --> D[Report]
+    ```
 
 ## Setup and Teardown Hooks
 
@@ -507,7 +505,50 @@ A hook directive must be followed by an executable code block.
 | `> teardown:each` | Run after the last case of each immediate child section |
 
 Hooks are not counted as test cases. Their results do not appear in the
-case list, but a hook failure marks the document as failed.
+case list, but each execution is recorded as a lifecycle event. A failed
+setup skips cases in its affected heading scope, marks the document failed,
+and still allows matching teardown hooks to run. A failed teardown also marks
+the document failed. Both failures make the command exit nonzero and appear
+in the JSON and HTML reports.
+
+```run:shell
+# A failed setup is first-class, blocks its scope, and still runs teardown.
+rm -rf hook-lifecycle-test
+mkdir -p hook-lifecycle-test
+BT=$(printf '\140\140\140')
+printf '%s\n' \
+  '# Hook lifecycle' \
+  '' \
+  '> setup' \
+  "$BT"'run:shell' \
+  'exit 7' \
+  "$BT" \
+  '' \
+  '> teardown' \
+  "$BT"'run:shell' \
+  'printf cleanup > cleanup.marker' \
+  "$BT" \
+  '' \
+  '## Blocked case' \
+  '' \
+  "$BT"'run:shell' \
+  'printf case > case.marker' \
+  "$BT" > hook-lifecycle-test/spec.md
+printf '# Entry\n\n- [Hook lifecycle](spec.md)\n' > hook-lifecycle-test/index.md
+cat <<'CFG' > hook-lifecycle-test/specdown.json
+{"entry":"index.md","reporters":[{"builtin":"html","outFile":"report"},{"builtin":"json","outFile":"report.json"}]}
+CFG
+if specdown run -config hook-lifecycle-test/specdown.json -quiet >/dev/null 2>&1; then
+  exit 1
+fi
+test -f hook-lifecycle-test/cleanup.marker
+test ! -e hook-lifecycle-test/case.marker
+grep -q '"lifecycleFailed": 1' hook-lifecycle-test/report.json
+grep -q '"casesSkipped": 1' hook-lifecycle-test/report.json
+grep -q '"phase": "setup"' hook-lifecycle-test/report.json
+grep -q '"status": "failed"' hook-lifecycle-test/report.json
+grep -q 'Lifecycle failures' hook-lifecycle-test/report/spec.html
+```
 
 ### Hook variable visibility
 
