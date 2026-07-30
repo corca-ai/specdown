@@ -2,11 +2,12 @@ package shelladapter
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/subprocess"
 )
 
 // ExecRawResponse is the raw JSON map returned by Exec, suitable for encoding as a line.
@@ -14,7 +15,13 @@ type ExecRawResponse map[string]interface{}
 
 // Exec runs source via sh -c and returns a raw JSON response with "output" or "error" key.
 func Exec(id int, source, workdir string) ExecRawResponse {
-	cmd := exec.Command("sh", "-c", source)
+	return ExecContext(context.Background(), id, source, workdir)
+}
+
+// ExecContext runs source via sh -c and terminates the process tree when ctx
+// is canceled.
+func ExecContext(ctx context.Context, id int, source, workdir string) ExecRawResponse {
+	cmd := subprocess.CommandContext(ctx, "sh", "-c", source)
 	if workdir != "" {
 		cmd.Dir = workdir
 	}
@@ -74,7 +81,12 @@ func StepStatus(actual, expected string) string {
 
 // ExecForDoctest runs a single command and returns stdout/stderr.
 func ExecForDoctest(command string) (stdout, errMsg string, ok bool) {
-	cmd := exec.Command("sh", "-c", command)
+	return ExecForDoctestContext(context.Background(), command)
+}
+
+// ExecForDoctestContext runs one doctest command with caller cancellation.
+func ExecForDoctestContext(ctx context.Context, command string) (stdout, errMsg string, ok bool) {
+	cmd := subprocess.CommandContext(ctx, "sh", "-c", command)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

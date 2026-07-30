@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterhost"
@@ -8,12 +9,14 @@ import (
 )
 
 type sessionManager struct {
+	ctx      context.Context
 	host     adapterhost.Host
 	sessions map[string]*adapterhost.Session
 }
 
-func newSessionManager(host adapterhost.Host) *sessionManager {
+func newSessionManager(ctx context.Context, host adapterhost.Host) *sessionManager {
 	return &sessionManager{
+		ctx:      ctx,
 		host:     host,
 		sessions: make(map[string]*adapterhost.Session),
 	}
@@ -32,7 +35,7 @@ func (m *sessionManager) For(adapter config.AdapterConfig) (*adapterhost.Session
 	case adapter.BuiltinJQ:
 		session, err = m.host.StartBuiltinJQSession(adapter)
 	default:
-		session, err = m.host.StartSession(adapter)
+		session, err = m.host.StartSessionContext(m.ctx, adapter)
 	}
 	if err != nil {
 		return nil, err

@@ -5,196 +5,164 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/config"
 	"github.com/corca-ai/specdown/internal/specdown/jqadapter"
 	"github.com/corca-ai/specdown/internal/specdown/shelladapter"
+	"github.com/corca-ai/specdown/internal/specdown/subprocess"
 )
+
+const adapterExitGrace = 2 * time.Second
 
 type Host struct {
 	BaseDir string
 }
 
 type Session struct {
-	adapter     config.AdapterConfig
-	cmd         *exec.Cmd
-	stdin       io.WriteCloser
-	scanner     *bufio.Scanner
-	encoder     *json.Encoder
-	stderr      *bytes.Buffer
-	closed      bool
-	stdinClosed bool
-	poisoned    bool
-	nextID      int
-	builtin     bool
-	done        chan struct{} // signals builtin goroutine completion
-	waitOnce    sync.Once
-	waitErr     error
+	adapter      config.AdapterConfig
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	stdout       io.ReadCloser
+	scanner      *bufio.Scanner
+	encoder      *json.Encoder
+	stderr       *bytes.Buffer
+	closed       bool
+	stdinClosed  bool
+	poisoned     atomic.Bool
+	nextID       int
+	baseDir      string
+	builtinShell bool
+	builtinJQ    bool
+	done         chan struct{}
+	waitErr      error
 }
 
 func (h Host) StartSession(adapter config.AdapterConfig) (*Session, error) {
+	return h.StartSessionContext(context.Background(), adapter)
+}
+
+func (h Host) StartSessionContext(ctx context.Context, adapter config.AdapterConfig) (*Session, error) {
 	command := resolveCommand(h.BaseDir, adapter.Command)
-	cmd := exec.Command(command[0], command[1:]...)
+	cmd := subprocess.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Dir = h.BaseDir
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("prepare stdout for adapter %q: %w", adapter.Name, err)
-	}
-
-	stdin, err := cmd.StdinPipe()
+	stdinReader, stdinWriter, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf("prepare stdin for adapter %q: %w", adapter.Name, err)
 	}
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
+		_ = stdinReader.Close()
+		_ = stdinWriter.Close()
+		return nil, fmt.Errorf("prepare stdout for adapter %q: %w", adapter.Name, err)
+	}
+	cmd.Stdin = stdinReader
+	cmd.Stdout = stdoutWriter
 
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
 
 	if err := cmd.Start(); err != nil {
+		_ = stdinReader.Close()
+		_ = stdinWriter.Close()
+		_ = stdoutReader.Close()
+		_ = stdoutWriter.Close()
 		return nil, fmt.Errorf("start adapter %q: %w", adapter.Name, err)
 	}
-
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 1024), 1024*1024)
-
-	return &Session{
-		adapter: adapter,
-		cmd:     cmd,
-		stdin:   stdin,
-		scanner: scanner,
-		encoder: json.NewEncoder(stdin),
-		stderr:  stderr,
-	}, nil
-}
-
-func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, error) {
-	stdinReader, stdinWriter := io.Pipe()
-	stdoutReader, stdoutWriter := io.Pipe()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		builtinShellLoop(stdinReader, stdoutWriter, h.BaseDir)
-		_ = stdoutWriter.Close()
-	}()
+	_ = stdinReader.Close()
+	_ = stdoutWriter.Close()
 
 	scanner := bufio.NewScanner(stdoutReader)
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
 
-	return &Session{
+	session := &Session{
 		adapter: adapter,
+		cmd:     cmd,
 		stdin:   stdinWriter,
+		stdout:  stdoutReader,
 		scanner: scanner,
 		encoder: json.NewEncoder(stdinWriter),
-		stderr:  &bytes.Buffer{},
-		builtin: true,
-		done:    done,
+		stderr:  stderr,
+		done:    make(chan struct{}),
+	}
+	go session.collectWait()
+	return session, nil
+}
+
+func (h Host) StartBuiltinShellSession(adapter config.AdapterConfig) (*Session, error) {
+	return &Session{
+		adapter:      adapter,
+		baseDir:      h.BaseDir,
+		stderr:       &bytes.Buffer{},
+		builtinShell: true,
 	}, nil
 }
 
 func (h Host) StartBuiltinJQSession(adapter config.AdapterConfig) (*Session, error) {
-	stdinReader, stdinWriter := io.Pipe()
-	stdoutReader, stdoutWriter := io.Pipe()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		builtinJQLoop(stdinReader, stdoutWriter)
-		_ = stdoutWriter.Close()
-	}()
-
-	scanner := bufio.NewScanner(stdoutReader)
-	scanner.Buffer(make([]byte, 1024), 1024*1024)
-
 	return &Session{
-		adapter: adapter,
-		stdin:   stdinWriter,
-		scanner: scanner,
-		encoder: json.NewEncoder(stdinWriter),
-		stderr:  &bytes.Buffer{},
-		builtin: true,
-		done:    done,
+		adapter:   adapter,
+		stderr:    &bytes.Buffer{},
+		builtinJQ: true,
 	}, nil
 }
 
-func builtinJQLoop(reader io.Reader, writer io.Writer) {
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 1024), 1024*1024)
-	encoder := json.NewEncoder(writer)
-
-	for scanner.Scan() {
-		var req adapterprotocol.AssertRequest
-		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
-			return
-		}
-		if err := encoder.Encode(jqadapter.Assert(req.ID, &req)); err != nil {
-			return
-		}
-	}
-}
-
-func builtinShellLoop(reader io.Reader, writer io.Writer, workdir string) {
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 1024), 1024*1024)
-	encoder := json.NewEncoder(writer)
-
-	for scanner.Scan() {
-		if err := handleBuiltinMessage(scanner.Bytes(), encoder, workdir); err != nil {
-			return
-		}
-	}
-}
-
-func handleBuiltinMessage(raw []byte, encoder *json.Encoder, workdir string) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return err
-	}
-
-	typeRaw, ok := fields["type"]
-	if !ok {
-		return fmt.Errorf("adapter response missing \"type\" field (expected \"exec\")")
-	}
-	var msgType string
-	if err := json.Unmarshal(typeRaw, &msgType); err != nil {
-		return err
-	}
-
-	switch msgType {
-	case "exec":
-		var req adapterprotocol.ExecRequest
-		if err := json.Unmarshal(raw, &req); err != nil {
-			return err
-		}
-		return encoder.Encode(shelladapter.Exec(req.ID, req.Source, workdir))
-	default:
-		return fmt.Errorf("unknown type %q", msgType)
-	}
-}
-
 func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
-	if s.poisoned {
+	return s.ExecContext(context.Background(), source, timeoutMs)
+}
+
+func (s *Session) ExecContext(parent context.Context, source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
+	if s.poisoned.Load() {
 		return adapterprotocol.ExecResponse{}, fmt.Errorf("adapter %q session is unusable after a previous timeout", s.adapter.Name)
+	}
+	if err := parent.Err(); err != nil {
+		return adapterprotocol.ExecResponse{}, err
 	}
 
 	s.nextID++
 	seqID := s.nextID
+	requestCtx, cancel := requestContext(parent, timeoutMs)
+	defer cancel()
 
+	if s.builtinShell {
+		return s.execBuiltinShell(parent, requestCtx, seqID, source, timeoutMs)
+	}
+	return s.execExternal(parent, requestCtx, seqID, source, timeoutMs)
+}
+
+func (s *Session) execBuiltinShell(parent, requestCtx context.Context, seqID int, source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
+	raw, err := json.Marshal(shelladapter.ExecContext(requestCtx, seqID, source, s.baseDir))
+	if requestCtx.Err() != nil {
+		s.poison()
+		if parent.Err() != nil {
+			return adapterprotocol.ExecResponse{}, parent.Err()
+		}
+		return execTimeoutResponse(seqID, source, timeoutMs), nil
+	}
+	if err != nil {
+		return adapterprotocol.ExecResponse{}, fmt.Errorf("encode builtin shell response: %w", err)
+	}
+	resp, err := adapterprotocol.ParseExecResponse(raw)
+	if err != nil {
+		return adapterprotocol.ExecResponse{}, fmt.Errorf("adapter %q: %w", s.adapter.Name, err)
+	}
+	return resp, nil
+}
+
+func (s *Session) execExternal(parent, requestCtx context.Context, seqID int, source string, timeoutMs int) (adapterprotocol.ExecResponse, error) {
 	request := adapterprotocol.ExecRequest{
 		Type:   "exec",
 		ID:     seqID,
 		Source: source,
-	}
-	if err := s.encoder.Encode(request); err != nil {
-		return adapterprotocol.ExecResponse{}, fmt.Errorf("write exec to adapter %q: %w", s.adapter.Name, err)
 	}
 
 	type result struct {
@@ -204,6 +172,10 @@ func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecRespon
 	ch := make(chan result, 1)
 
 	go func() {
+		if err := s.encoder.Encode(request); err != nil {
+			ch <- result{err: fmt.Errorf("write exec to adapter %q: %w", s.adapter.Name, err)}
+			return
+		}
 		raw, err := s.readRawResponse()
 		if err != nil {
 			ch <- result{err: err}
@@ -214,36 +186,41 @@ func (s *Session) Exec(source string, timeoutMs int) (adapterprotocol.ExecRespon
 			ch <- result{err: fmt.Errorf("adapter %q: %w", s.adapter.Name, err)}
 			return
 		}
-		if resp.ID != seqID {
+		if resp.ID != request.ID {
 			ch <- result{err: fmt.Errorf("adapter %q: response referenced unexpected id %d (expected %d)", s.adapter.Name, resp.ID, seqID)}
 			return
 		}
 		ch <- result{resp: resp}
 	}()
 
-	if timeoutMs > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
-		defer cancel()
-		select {
-		case r := <-ch:
-			return r.resp, r.err
-		case <-ctx.Done():
-			s.poison()
-			return adapterprotocol.ExecResponse{ID: seqID, Error: fmt.Sprintf("timeout after %dms (exec: %q)", timeoutMs, truncate(source, 80))}, nil
+	select {
+	case r := <-ch:
+		return r.resp, r.err
+	case <-requestCtx.Done():
+		s.poison()
+		if parent.Err() != nil {
+			return adapterprotocol.ExecResponse{}, parent.Err()
 		}
+		return execTimeoutResponse(seqID, source, timeoutMs), nil
 	}
-
-	r := <-ch
-	return r.resp, r.err
 }
 
 func (s *Session) Assert(check string, params map[string]string, columns, cells []string, timeoutMs int) (adapterprotocol.AssertResponse, error) {
-	if s.poisoned {
+	return s.AssertContext(context.Background(), check, params, columns, cells, timeoutMs)
+}
+
+func (s *Session) AssertContext(parent context.Context, check string, params map[string]string, columns, cells []string, timeoutMs int) (adapterprotocol.AssertResponse, error) {
+	if s.poisoned.Load() {
 		return adapterprotocol.AssertResponse{}, fmt.Errorf("adapter %q session is unusable after a previous timeout", s.adapter.Name)
+	}
+	if err := parent.Err(); err != nil {
+		return adapterprotocol.AssertResponse{}, err
 	}
 
 	s.nextID++
 	seqID := s.nextID
+	requestCtx, cancel := requestContext(parent, timeoutMs)
+	defer cancel()
 
 	request := adapterprotocol.AssertRequest{
 		Type:        "assert",
@@ -253,10 +230,26 @@ func (s *Session) Assert(check string, params map[string]string, columns, cells 
 		Columns:     columns,
 		Cells:       cells,
 	}
-	if err := s.encoder.Encode(request); err != nil {
-		return adapterprotocol.AssertResponse{}, fmt.Errorf("write assert to adapter %q: %w", s.adapter.Name, err)
-	}
 
+	if s.builtinJQ {
+		return s.assertBuiltinJQ(parent, requestCtx, &request, timeoutMs)
+	}
+	return s.assertExternal(parent, requestCtx, request, timeoutMs)
+}
+
+func (s *Session) assertBuiltinJQ(parent, requestCtx context.Context, request *adapterprotocol.AssertRequest, timeoutMs int) (adapterprotocol.AssertResponse, error) {
+	resp := jqadapter.AssertContext(requestCtx, request.ID, request)
+	if requestCtx.Err() != nil {
+		s.poison()
+		if parent.Err() != nil {
+			return adapterprotocol.AssertResponse{}, parent.Err()
+		}
+		return assertTimeoutResponse(request.ID, request.Check, timeoutMs), nil
+	}
+	return resp, nil
+}
+
+func (s *Session) assertExternal(parent, requestCtx context.Context, request adapterprotocol.AssertRequest, timeoutMs int) (adapterprotocol.AssertResponse, error) {
 	type result struct {
 		resp adapterprotocol.AssertResponse
 		err  error
@@ -264,6 +257,10 @@ func (s *Session) Assert(check string, params map[string]string, columns, cells 
 	ch := make(chan result, 1)
 
 	go func() {
+		if err := s.encoder.Encode(request); err != nil {
+			ch <- result{err: fmt.Errorf("write assert to adapter %q: %w", s.adapter.Name, err)}
+			return
+		}
 		raw, err := s.readRawResponse()
 		if err != nil {
 			ch <- result{err: err}
@@ -274,27 +271,45 @@ func (s *Session) Assert(check string, params map[string]string, columns, cells 
 			ch <- result{err: fmt.Errorf("adapter %q: decode assert response: %w", s.adapter.Name, err)}
 			return
 		}
-		if resp.ID != seqID {
-			ch <- result{err: fmt.Errorf("adapter %q: response referenced unexpected id %d (expected %d)", s.adapter.Name, resp.ID, seqID)}
+		if resp.ID != request.ID {
+			ch <- result{err: fmt.Errorf("adapter %q: response referenced unexpected id %d (expected %d)", s.adapter.Name, resp.ID, request.ID)}
 			return
 		}
 		ch <- result{resp: resp}
 	}()
 
-	if timeoutMs > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
-		defer cancel()
-		select {
-		case r := <-ch:
-			return r.resp, r.err
-		case <-ctx.Done():
-			s.poison()
-			return adapterprotocol.AssertResponse{ID: seqID, Type: "failed", Message: fmt.Sprintf("timeout after %dms (assert: check %q)", timeoutMs, truncate(check, 80))}, nil
+	select {
+	case r := <-ch:
+		return r.resp, r.err
+	case <-requestCtx.Done():
+		s.poison()
+		if parent.Err() != nil {
+			return adapterprotocol.AssertResponse{}, parent.Err()
 		}
+		return assertTimeoutResponse(request.ID, request.Check, timeoutMs), nil
 	}
+}
 
-	r := <-ch
-	return r.resp, r.err
+func requestContext(parent context.Context, timeoutMs int) (context.Context, context.CancelFunc) {
+	if timeoutMs > 0 {
+		return context.WithTimeout(parent, time.Duration(timeoutMs)*time.Millisecond)
+	}
+	return context.WithCancel(parent)
+}
+
+func execTimeoutResponse(id int, source string, timeoutMs int) adapterprotocol.ExecResponse {
+	return adapterprotocol.ExecResponse{
+		ID:    id,
+		Error: fmt.Sprintf("timeout after %dms (exec: %q)", timeoutMs, truncate(source, 80)),
+	}
+}
+
+func assertTimeoutResponse(id int, check string, timeoutMs int) adapterprotocol.AssertResponse {
+	return adapterprotocol.AssertResponse{
+		ID:      id,
+		Type:    "failed",
+		Message: fmt.Sprintf("timeout after %dms (assert: check %q)", timeoutMs, truncate(check, 80)),
+	}
 }
 
 func truncate(s string, limit int) string {
@@ -304,14 +319,16 @@ func truncate(s string, limit int) string {
 	return s[:limit] + "..."
 }
 
-// poison closes stdin to unblock any goroutine blocked on the scanner,
-// and marks the session as unusable for further requests.
+// poison marks the session unusable, closes its input, and terminates any
+// external adapter process so a timed-out request cannot keep the run alive.
 func (s *Session) poison() {
-	s.poisoned = true
-	if !s.stdinClosed {
-		s.stdinClosed = true
-		_ = s.stdin.Close()
+	s.poisoned.Store(true)
+	_ = s.closeStdin()
+	if s.cmd != nil {
+		_ = subprocess.Terminate(s.cmd)
+		_, _ = s.waitFor(adapterExitGrace)
 	}
+	_ = s.closeStdout()
 }
 
 func (s *Session) Close() error {
@@ -320,18 +337,48 @@ func (s *Session) Close() error {
 	}
 	s.closed = true
 
-	var stdinErr error
-	if !s.stdinClosed {
-		if err := s.stdin.Close(); err != nil {
-			stdinErr = fmt.Errorf("close stdin for adapter %q: %w", s.adapter.Name, err)
-		}
-		s.stdinClosed = true
+	if s.builtinShell || s.builtinJQ {
+		return nil
 	}
-	waitErr := s.wait()
-	if stdinErr != nil {
-		return stdinErr
+
+	stdinErr := s.closeStdin()
+	completed, waitErr := s.waitFor(adapterExitGrace)
+	if completed {
+		return errors.Join(stdinErr, s.closeStdout(), waitErr)
 	}
-	return waitErr
+
+	s.poisoned.Store(true)
+	terminateErr := subprocess.Terminate(s.cmd)
+	completed, waitErr = s.waitFor(adapterExitGrace)
+	if !completed {
+		waitErr = fmt.Errorf("adapter %q did not exit after termination", s.adapter.Name)
+	} else if waitErr == nil {
+		waitErr = fmt.Errorf("adapter %q did not exit after stdin closed; terminated", s.adapter.Name)
+	}
+	return errors.Join(stdinErr, s.closeStdout(), terminateErr, waitErr)
+}
+
+func (s *Session) closeStdin() error {
+	if s.stdin == nil || s.stdinClosed {
+		return nil
+	}
+	s.stdinClosed = true
+	if err := s.stdin.Close(); err != nil {
+		return fmt.Errorf("close stdin for adapter %q: %w", s.adapter.Name, err)
+	}
+	return nil
+}
+
+func (s *Session) closeStdout() error {
+	if s.stdout == nil {
+		return nil
+	}
+	err := s.stdout.Close()
+	s.stdout = nil
+	if err != nil {
+		return fmt.Errorf("close stdout for adapter %q: %w", s.adapter.Name, err)
+	}
+	return nil
 }
 
 func (s *Session) readRawResponse() ([]byte, error) {
@@ -351,20 +398,42 @@ func (s *Session) readRawResponse() ([]byte, error) {
 }
 
 func (s *Session) wait() error {
-	s.waitOnce.Do(func() {
-		if s.builtin {
-			<-s.done
-			return
-		}
-		if err := s.cmd.Wait(); err != nil {
-			message := strings.TrimSpace(s.stderr.String())
-			if message == "" {
-				message = err.Error()
-			}
-			s.waitErr = fmt.Errorf("adapter %q infrastructure failure: %s", s.adapter.Name, message)
-		}
-	})
+	if s.done == nil {
+		return nil
+	}
+	<-s.done
+	if s.poisoned.Load() {
+		return nil
+	}
 	return s.waitErr
+}
+
+func (s *Session) waitFor(timeout time.Duration) (bool, error) {
+	if s.done == nil {
+		return true, nil
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-s.done:
+		if s.poisoned.Load() {
+			return true, nil
+		}
+		return true, s.waitErr
+	case <-timer.C:
+		return false, nil
+	}
+}
+
+func (s *Session) collectWait() {
+	defer close(s.done)
+	if err := s.cmd.Wait(); err != nil {
+		message := strings.TrimSpace(s.stderr.String())
+		if message == "" {
+			message = err.Error()
+		}
+		s.waitErr = fmt.Errorf("adapter %q infrastructure failure: %s", s.adapter.Name, message)
+	}
 }
 
 func resolveCommand(baseDir string, command []string) []string {

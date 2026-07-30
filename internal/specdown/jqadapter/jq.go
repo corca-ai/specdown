@@ -1,6 +1,7 @@
 package jqadapter
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -21,6 +22,12 @@ import (
 // Comparison: jq raw output for scalars (strings unquoted, others as JSON).
 // Arrays and objects are normalized (sorted keys, compact) before comparison.
 func Assert(id int, req *adapterprotocol.AssertRequest) adapterprotocol.AssertResponse {
+	return AssertContext(context.Background(), id, req)
+}
+
+// AssertContext evaluates a jq assertion and stops non-terminating expressions
+// when ctx is canceled.
+func AssertContext(ctx context.Context, id int, req *adapterprotocol.AssertRequest) adapterprotocol.AssertResponse {
 	if req == nil {
 		return adapterprotocol.AssertResponse{
 			ID:      id,
@@ -49,7 +56,7 @@ func Assert(id int, req *adapterprotocol.AssertRequest) adapterprotocol.AssertRe
 		}
 	}
 
-	actual, err := evalJQ(input, expr)
+	actual, err := evalJQContext(ctx, input, expr)
 	if err != nil {
 		return adapterprotocol.AssertResponse{
 			ID:      id,
@@ -94,7 +101,7 @@ func extractParams(req *adapterprotocol.AssertRequest) map[string]string {
 
 // evalJQ parses the input as JSON, evaluates the jq expression, and returns
 // the result as a string. Multiple results are joined with newlines.
-func evalJQ(input, expr string) (string, error) {
+func evalJQContext(ctx context.Context, input, expr string) (string, error) {
 	query, err := gojq.Parse(expr)
 	if err != nil {
 		return "", fmt.Errorf("jq parse error: %w", err)
@@ -105,7 +112,7 @@ func evalJQ(input, expr string) (string, error) {
 		return "", fmt.Errorf("invalid JSON input: %w", err)
 	}
 
-	iter := query.Run(inputValue)
+	iter := query.RunWithContext(ctx, inputValue)
 	var results []string
 	for {
 		v, ok := iter.Next()

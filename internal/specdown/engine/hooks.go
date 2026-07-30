@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -14,7 +15,7 @@ func (c *caseRunContext) runHooksMatching(kind core.HookKind, shouldRun func(cor
 			continue
 		}
 		visible := c.bindings.VisibleAt(hook.HeadingPath)
-		if err := runHook(hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
+		if err := runHook(c.ctx, hook, c.registry, c.sessions, visible, c.timeoutMs); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: %s hook failed: %v\n", hook.Kind, err)
 		}
 	}
@@ -54,7 +55,7 @@ func shouldRunTeardownHook(hook core.HookSpec, currPath, nextPath core.HeadingPa
 	return currPath[depth] != nextPath[depth]
 }
 
-func runHook(hook core.HookSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) error {
+func runHook(ctx context.Context, hook core.HookSpec, registry adapterRegistry, sm *sessionManager, visible []core.Binding, timeoutMs int) error {
 	synthetic := core.CaseSpec{
 		ID: core.SpecID{
 			File:        "_hook",
@@ -82,7 +83,7 @@ func runHook(hook core.HookSpec, registry adapterRegistry, sm *sessionManager, v
 		return err
 	}
 
-	resp, err := session.Exec(prepared.Code.Template, timeoutMs)
+	resp, err := session.ExecContext(ctx, prepared.Code.Template, timeoutMs)
 	if err != nil {
 		return err
 	}

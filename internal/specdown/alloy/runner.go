@@ -2,6 +2,7 @@ package alloy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/corca-ai/specdown/internal/specdown/core"
+	"github.com/corca-ai/specdown/internal/specdown/subprocess"
 )
 
 const (
@@ -97,7 +99,7 @@ type ExploreOptions struct {
 
 // ExploreDocument runs all Alloy models in a document plan and returns
 // per-model results with sigs and instance data.
-func (r Runner) ExploreDocument(plan core.DocumentPlan, opts ExploreOptions) ([]ExploreModelResult, error) {
+func (r Runner) ExploreDocument(ctx context.Context, plan core.DocumentPlan, opts ExploreOptions) ([]ExploreModelResult, error) {
 	if len(plan.AlloyModels) == 0 {
 		return nil, nil
 	}
@@ -107,14 +109,17 @@ func (r Runner) ExploreDocument(plan core.DocumentPlan, opts ExploreOptions) ([]
 		return nil, fmt.Errorf("java not found in PATH; install a JRE to run Alloy models")
 	}
 
-	jarPath, err := r.ensureAlloyJar()
+	jarPath, err := r.ensureAlloyJarContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	var results []ExploreModelResult
 	for _, model := range plan.AlloyModels {
-		mr, err := r.exploreModel(javaPath, jarPath, plan.Document.RelativeTo, model, opts)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		mr, err := r.exploreModel(ctx, javaPath, jarPath, plan.Document.RelativeTo, model, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +128,7 @@ func (r Runner) ExploreDocument(plan core.DocumentPlan, opts ExploreOptions) ([]
 	return results, nil
 }
 
-func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.AlloyModelSpec, opts ExploreOptions) (ExploreModelResult, error) {
+func (r Runner) exploreModel(ctx context.Context, javaPath, jarPath, documentPath string, model core.AlloyModelSpec, opts ExploreOptions) (ExploreModelResult, error) {
 	bundle, err := r.writeBundle(documentPath, model, nil)
 	if err != nil {
 		return ExploreModelResult{}, err
@@ -147,10 +152,13 @@ func (r Runner) exploreModel(javaPath, jarPath, documentPath string, model core.
 	}
 	args = append(args, bundle.AbsolutePath)
 
-	cmd := exec.Command(javaPath, args...)
+	cmd := subprocess.CommandContext(ctx, javaPath, args...)
 	cmd.Dir = r.BaseDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return ExploreModelResult{}, ctx.Err()
+		}
 		message := strings.TrimSpace(string(output))
 		if message == "" {
 			message = err.Error()
@@ -299,7 +307,6 @@ func prettyJSON(raw json.RawMessage) string {
 	return buf.String()
 }
 
-
 func (r Runner) DumpModels(plan core.DocumentPlan) ([]string, error) {
 	if len(plan.AlloyModels) == 0 {
 		return nil, nil
@@ -315,7 +322,7 @@ func (r Runner) DumpModels(plan core.DocumentPlan) ([]string, error) {
 	return paths, nil
 }
 
-func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
+func (r Runner) RunDocument(ctx context.Context, plan core.DocumentPlan) ([]core.CaseResult, error) {
 	alloyChecks := filterAlloyCases(plan.Cases)
 	if len(plan.AlloyModels) == 0 || len(alloyChecks) == 0 {
 		return nil, nil
@@ -326,12 +333,12 @@ func (r Runner) RunDocument(plan core.DocumentPlan) ([]core.CaseResult, error) {
 		return failedChecksAll(alloyChecks, "java not found in PATH; install a JRE to run Alloy checks"), nil
 	}
 
-	jarPath, err := r.ensureAlloyJar()
+	jarPath, err := r.ensureAlloyJarContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	resultsByKey, err := r.runAllModels(plan, alloyChecks, javaPath, jarPath)
+	resultsByKey, err := r.runAllModels(ctx, plan, alloyChecks, javaPath, jarPath)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +356,7 @@ func filterAlloyCases(cases []core.CaseSpec) []core.CaseSpec {
 	return result
 }
 
-func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath, jarPath string) (map[string]core.CaseResult, error) {
+func (r Runner) runAllModels(ctx context.Context, plan core.DocumentPlan, alloyChecks []core.CaseSpec, javaPath, jarPath string) (map[string]core.CaseResult, error) {
 	checksByModel := make(map[string][]core.CaseSpec)
 	for i := range alloyChecks {
 		checksByModel[alloyChecks[i].Alloy.Model] = append(checksByModel[alloyChecks[i].Alloy.Model], alloyChecks[i])
@@ -357,6 +364,9 @@ func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec
 
 	resultsByKey := make(map[string]core.CaseResult, len(alloyChecks))
 	for _, model := range plan.AlloyModels {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		checks := checksByModel[model.Name]
 		if len(checks) == 0 {
 			continue
@@ -367,7 +377,7 @@ func (r Runner) runAllModels(plan core.DocumentPlan, alloyChecks []core.CaseSpec
 			return nil, err
 		}
 
-		modelResults, err := r.runModel(javaPath, jarPath, bundle, checks)
+		modelResults, err := r.runModel(ctx, javaPath, jarPath, bundle, checks)
 		if err != nil {
 			return nil, err
 		}
@@ -460,18 +470,21 @@ func buildBundleSource(documentPath string, model core.AlloyModelSpec, checks []
 	return
 }
 
-func (r Runner) runModel(javaPath, jarPath string, bundle modelBundle, checks []core.CaseSpec) ([]core.CaseResult, error) {
+func (r Runner) runModel(ctx context.Context, javaPath, jarPath string, bundle modelBundle, checks []core.CaseSpec) ([]core.CaseResult, error) {
 	outputDir := filepath.Join(filepath.Dir(bundle.AbsolutePath), core.Slug(bundle.Model)+"-output")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create alloy output dir: %w", err)
 	}
 
-	cmd := exec.Command(javaPath, "-jar", jarPath, "exec", "-f", "-o", outputDir, bundle.AbsolutePath)
+	cmd := subprocess.CommandContext(ctx, javaPath, "-jar", jarPath, "exec", "-f", "-o", outputDir, bundle.AbsolutePath)
 	cmd.Dir = r.BaseDir
 	start := time.Now()
 	output, err := cmd.CombinedOutput()
 	durationMs := int(time.Since(start).Milliseconds())
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		message := strings.TrimSpace(string(output))
 		if message == "" {
 			message = err.Error()
@@ -694,8 +707,6 @@ func writeCounterexample(baseDir string, check core.CaseSpec, command receiptCom
 	return relativePath, nil
 }
 
-
-
 func alloyCacheDir() (string, error) {
 	cacheDir := os.Getenv("XDG_CACHE_HOME")
 	if cacheDir == "" {
@@ -709,16 +720,20 @@ func alloyCacheDir() (string, error) {
 }
 
 func (r Runner) ensureAlloyJar() (string, error) {
+	return r.ensureAlloyJarContext(context.Background())
+}
+
+func (r Runner) ensureAlloyJarContext(ctx context.Context) (string, error) {
 	if r.JarPath != "" {
 		if _, err := os.Stat(r.JarPath); err != nil {
 			return "", fmt.Errorf("configured Alloy JAR not found: %w", err)
 		}
 		return r.JarPath, nil
 	}
-	return r.downloadAlloyJar()
+	return r.downloadAlloyJar(ctx)
 }
 
-func (r Runner) downloadAlloyJar() (_ string, err error) {
+func (r Runner) downloadAlloyJar(ctx context.Context) (_ string, err error) {
 	cacheDir, err := alloyCacheDir()
 	if err != nil {
 		return "", err
@@ -738,7 +753,11 @@ func (r Runner) downloadAlloyJar() (_ string, err error) {
 		client = http.DefaultClient
 	}
 
-	response, err := client.Get(alloyJarURL)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, alloyJarURL, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("create alloy jar request: %w", err)
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("download alloy jar: %w", err)
 	}
