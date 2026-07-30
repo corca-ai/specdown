@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,52 @@ import (
 )
 
 const installerTestVersion = "v1.2.3"
+
+func TestInstallerInstallsGoReleaserSnapshot(t *testing.T) {
+	snapshotDir := os.Getenv("SPECDOWN_RELEASE_SNAPSHOT_DIR")
+	if snapshotDir == "" {
+		t.Skip("set SPECDOWN_RELEASE_SNAPSHOT_DIR to test a GoReleaser snapshot")
+	}
+
+	metadataBody, err := os.ReadFile(filepath.Join(snapshotDir, "metadata.json"))
+	if err != nil {
+		t.Fatalf("read GoReleaser metadata: %v", err)
+	}
+	var metadata struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(metadataBody, &metadata); err != nil {
+		t.Fatalf("parse GoReleaser metadata: %v", err)
+	}
+	if metadata.Version == "" {
+		t.Fatal("GoReleaser metadata has no version")
+	}
+
+	archiveName := fmt.Sprintf("specdown_%s_%s_%s.tar.gz", metadata.Version, runtime.GOOS, runtime.GOARCH)
+	archive, err := os.ReadFile(filepath.Join(snapshotDir, archiveName))
+	if err != nil {
+		t.Fatalf("read GoReleaser archive %s: %v", archiveName, err)
+	}
+	checksums, err := os.ReadFile(filepath.Join(snapshotDir, "checksums.txt"))
+	if err != nil {
+		t.Fatalf("read GoReleaser checksums: %v", err)
+	}
+	server := installerServer(t, archiveName, archive, string(checksums), "")
+
+	installDir := t.TempDir()
+	output, err := runInstallerVersion(t, installDir, server.URL, "v"+metadata.Version, nil)
+	if err != nil {
+		t.Fatalf("install GoReleaser snapshot: %v\n%s", err, output)
+	}
+
+	versionOutput, err := exec.Command(filepath.Join(installDir, "specdown"), "version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("run installed snapshot: %v\n%s", err, versionOutput)
+	}
+	if !strings.Contains(string(versionOutput), metadata.Version) {
+		t.Fatalf("installed version output = %q, want %q", versionOutput, metadata.Version)
+	}
+}
 
 func TestInstallerVerifiesAndInstallsReleaseArchive(t *testing.T) {
 	archiveName := installerArchiveName(t)
@@ -172,13 +219,18 @@ func installerServer(t *testing.T, archiveName string, archive []byte, checksum,
 
 func runInstaller(t *testing.T, installDir, releaseBaseURL string, extraEnv []string) (string, error) {
 	t.Helper()
+	return runInstallerVersion(t, installDir, releaseBaseURL, installerTestVersion, extraEnv)
+}
+
+func runInstallerVersion(t *testing.T, installDir, releaseBaseURL, version string, extraEnv []string) (string, error) {
+	t.Helper()
 	scriptPath, err := filepath.Abs("install.sh")
 	if err != nil {
 		t.Fatalf("resolve install.sh: %v", err)
 	}
 	command := exec.Command("/bin/sh", scriptPath)
 	command.Env = append(os.Environ(),
-		"VERSION="+installerTestVersion,
+		"VERSION="+version,
 		"INSTALL_DIR="+installDir,
 		"SPECDOWN_RELEASE_BASE_URL="+releaseBaseURL,
 	)

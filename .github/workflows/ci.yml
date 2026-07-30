@@ -21,13 +21,37 @@ jobs:
         with:
           go-version: '1.26.5'
 
-      - run: go mod verify
-      - run: go mod tidy && git diff --exit-code go.mod go.sum
-      - run: CGO_ENABLED=1 go test -race ./...
-      - name: Vulnerability scan
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.6.0 && govulncheck ./...
+      - name: Install verification tools
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
 
-      - uses: golangci/golangci-lint-action@v7
+      - name: Fast verification
+        run: ./scripts/verify.sh fast
+
+      - name: Security verification
+        run: ./scripts/verify.sh security
+
+  release-smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+
+      - name: Install GoReleaser
+        run: go install github.com/goreleaser/goreleaser/v2@v2.17.1
+
+      - name: Release verification
+        run: ./scripts/verify.sh release
 
   dependency-review:
     if: github.event_name == 'pull_request'

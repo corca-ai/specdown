@@ -1,5 +1,7 @@
 version: 2
 
+dist: .artifacts/goreleaser
+
 builds:
   - id: specdown
     main: ./cmd/specdown
@@ -64,16 +66,16 @@ release:
     owner: corca-ai
     name: specdown
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: specdown
+    binaries:
+      - specdown
+    repository:
       owner: corca-ai
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: https://github.com/corca-ai/specdown
     description: Executable specifications in Markdown
-    license: MIT
-    install: |
-      bin.install "specdown"
-    test: |
-      system bin/"specdown", "version"
+    url:
+      verified: github.com/corca-ai/specdown/

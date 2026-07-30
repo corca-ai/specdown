@@ -32,15 +32,8 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build
-        run: |
-          mkdir -p bin
-          go build -o bin/specdown ./cmd/specdown/
-
-      - name: Run self-spec
-        run: |
-          export PATH="$(pwd)/bin:$PATH"
-          bin/specdown run
+      - name: Executable specification verification
+        run: ./scripts/verify.sh spec
 
       - name: Prepare Pages artifact
         if: github.ref == 'refs/heads/main'

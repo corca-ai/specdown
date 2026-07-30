@@ -3,6 +3,7 @@ package html
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -224,6 +225,72 @@ func TestWriteRendersMarkdownIntoHTML(t *testing.T) {
 		assertContains(t, html, `<dt>actual</dt><dd>not found</dd>`, "actual value in failure diff")
 		assertContains(t, html, "id=\"case-specs-pocket-board-spec-md-pocket-board-variable-flow-table-check-4\"", "failure anchor link")
 	})
+}
+
+func TestReportStructuralGoldenAndAccessibilityContract(t *testing.T) {
+	report := core.Report{
+		GeneratedAt: time.Date(2026, 3, 6, 1, 2, 3, 0, time.UTC),
+		Summary:     core.Summary{SpecsTotal: 2, SpecsPassed: 2},
+		Results: []core.DocumentResult{
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Overview",
+					RelativeTo: "specs/overview.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Overview", Raw: "# Overview\n", HeadingPath: []string{"Overview"}},
+						core.ProseNode{Raw: "Representative report.\n"},
+					},
+				},
+			},
+			{
+				Status: core.StatusPassed,
+				Document: core.Document{
+					Title:      "Syntax",
+					RelativeTo: "specs/reference/syntax.md",
+					Nodes: []core.Node{
+						core.HeadingNode{Level: 1, Text: "Syntax", Raw: "# Syntax\n", HeadingPath: []string{"Syntax"}},
+					},
+				},
+			},
+		},
+	}
+	html := writeAndReadReport(t, report)
+	got := structuralSnapshot(html)
+	goldenPath := filepath.Join("testdata", "report_structure.golden")
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read structural golden: %v\nactual:\n%s", err, got)
+	}
+	if got != string(want) {
+		t.Fatalf("report structure changed (-want +got):\nwant:\n%s\ngot:\n%s", want, got)
+	}
+
+	buttons := regexp.MustCompile(`<button\b[^>]*class="toc-group-title[^"]*"[^>]*>`).FindAllString(html, -1)
+	if len(buttons) == 0 {
+		t.Fatal("representative report has no collapsible TOC group")
+	}
+	for _, button := range buttons {
+		if !strings.Contains(button, `aria-expanded="`) {
+			t.Fatalf("TOC group button lacks aria-expanded: %s", button)
+		}
+	}
+	if !strings.Contains(scriptJS, `btn.setAttribute('aria-expanded'`) {
+		t.Fatal("TOC interaction does not update aria-expanded")
+	}
+	if !strings.Contains(styleCSS, "@media (max-width: 960px)") ||
+		!strings.Contains(styleCSS, ".mobile-title") {
+		t.Fatal("responsive mobile report contract is missing")
+	}
+}
+
+func structuralSnapshot(html string) string {
+	structuralTag := regexp.MustCompile(`</?(?:html|head|body|main|aside|div|article|section|footer|button|h1|script)\b[^>]*>`)
+	tags := structuralTag.FindAllString(html, -1)
+	for i := range tags {
+		tags[i] = strings.Join(strings.Fields(tags[i]), " ")
+	}
+	return strings.Join(tags, "\n") + "\n"
 }
 
 func TestWriteRendersLifecycleFailures(t *testing.T) {
