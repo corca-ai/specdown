@@ -54,6 +54,24 @@ verify_spec() (
   )
 )
 
+verify_coverage() (
+  require_command go
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/specdown-verify-coverage.XXXXXX")"
+  trap 'rm -rf "$temp_dir"' EXIT
+  profile="$temp_dir/coverage.out"
+  test_output="$temp_dir/go-test.out"
+
+  echo "Collecting coverage for internal packages..."
+  go test -count=1 -coverprofile="$profile" ./internal/specdown/... | tee "$test_output"
+
+  echo "Checking coverage regression policy..."
+  go run ./scripts/check_coverage.go \
+    -profile "$profile" \
+    -policy scripts/coverage-policy.json \
+    -test-output "$test_output"
+)
+
 verify_release() {
   require_command go
   require_command goreleaser
@@ -83,6 +101,9 @@ case "$task" in
   spec)
     verify_spec
     ;;
+  coverage)
+    verify_coverage
+    ;;
   release)
     verify_release
     ;;
@@ -90,7 +111,7 @@ case "$task" in
     verify_security
     ;;
   *)
-    echo "usage: $0 {fast|spec|release|security}" >&2
+    echo "usage: $0 {fast|spec|coverage|release|security}" >&2
     exit 2
     ;;
 esac

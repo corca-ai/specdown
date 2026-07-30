@@ -1,0 +1,6 @@
+{
+  "minimumTotal": 70,
+  "minimumPackages": {
+    "example.com/specdown/critical": 70
+  }
+}

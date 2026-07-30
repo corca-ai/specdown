@@ -946,15 +946,23 @@ func contextCanceled(err error) bool {
 }
 
 func lifecycleFailureCommand() string {
-	return strconv.Quote(os.Args[0]) + " -test.run=^TestLifecycleFailureProcess$ -- lifecycle-fail"
+	return strconv.Quote(os.Args[0]) + " -test.run=^TestLifecycleCommandProcess$ -- lifecycle-fail"
 }
 
 func lifecycleSuccessCommand() string {
-	return strconv.Quote(os.Args[0]) + " -test.run=^TestLifecycleFailureProcess$ -- lifecycle-pass"
+	return strconv.Quote(os.Args[0]) + " -test.run=^TestLifecycleCommandProcess$ -- lifecycle-pass"
 }
 
-func TestLifecycleFailureProcess(t *testing.T) {
-	if len(os.Args) > 0 && os.Args[len(os.Args)-1] == "lifecycle-fail" {
+func TestLifecycleCommandProcess(_ *testing.T) {
+	if len(os.Args) == 0 {
+		return
+	}
+	switch os.Args[len(os.Args)-1] {
+	case "lifecycle-fail":
 		os.Exit(7)
+	case "lifecycle-pass":
+		// Avoid running the child test binary's coverage teardown, which would
+		// emit a second, empty coverage summary into the parent test's output.
+		os.Exit(0)
 	}
 }

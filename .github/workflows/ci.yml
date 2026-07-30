@@ -29,6 +29,9 @@ jobs:
       - name: Fast verification
         run: ./scripts/verify.sh fast
 
+      - name: Coverage verification
+        run: ./scripts/verify.sh coverage
+
       - name: Security verification
         run: ./scripts/verify.sh security
 
