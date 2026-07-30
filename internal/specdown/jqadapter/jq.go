@@ -31,7 +31,7 @@ func AssertContext(ctx context.Context, id int, req *adapterprotocol.AssertReque
 	if req == nil {
 		return adapterprotocol.AssertResponse{
 			ID:      id,
-			Type:    "failed",
+			Type:    adapterprotocol.AssertResponseFailed,
 			Message: "missing assert request",
 		}
 	}
@@ -44,14 +44,14 @@ func AssertContext(ctx context.Context, id int, req *adapterprotocol.AssertReque
 	if input == "" {
 		return adapterprotocol.AssertResponse{
 			ID:      id,
-			Type:    "failed",
+			Type:    adapterprotocol.AssertResponseFailed,
 			Message: "missing required parameter: input",
 		}
 	}
 	if expr == "" {
 		return adapterprotocol.AssertResponse{
 			ID:      id,
-			Type:    "failed",
+			Type:    adapterprotocol.AssertResponseFailed,
 			Message: "missing required parameter: expr",
 		}
 	}
@@ -60,7 +60,7 @@ func AssertContext(ctx context.Context, id int, req *adapterprotocol.AssertReque
 	if err != nil {
 		return adapterprotocol.AssertResponse{
 			ID:      id,
-			Type:    "failed",
+			Type:    adapterprotocol.AssertResponseFailed,
 			Message: err.Error(),
 		}
 	}
@@ -71,14 +71,14 @@ func AssertContext(ctx context.Context, id int, req *adapterprotocol.AssertReque
 	if normalizedActual == normalizedExpected {
 		return adapterprotocol.AssertResponse{
 			ID:     id,
-			Type:   "passed",
+			Type:   adapterprotocol.AssertResponsePassed,
 			Actual: actual,
 		}
 	}
 
 	return adapterprotocol.AssertResponse{
 		ID:       id,
-		Type:     "failed",
+		Type:     adapterprotocol.AssertResponseFailed,
 		Expected: expected,
 		Actual:   actual,
 	}

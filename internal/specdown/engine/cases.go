@@ -220,7 +220,7 @@ func runTableRowCase(ctx context.Context, specCase, prepared core.CaseSpec, sess
 	}
 
 	switch resp.Type {
-	case "passed":
+	case adapterprotocol.AssertResponsePassed:
 		result.Status = core.StatusPassed
 		if resp.Actual != "" {
 			result.Actual = resp.Actual
@@ -230,7 +230,7 @@ func runTableRowCase(ctx context.Context, specCase, prepared core.CaseSpec, sess
 			ID:    result.ID,
 			Label: result.Label,
 		})
-	case "failed":
+	case adapterprotocol.AssertResponseFailed:
 		result.Status = core.StatusFailed
 		result.Message = resp.Message
 		result.Expected = resp.Expected

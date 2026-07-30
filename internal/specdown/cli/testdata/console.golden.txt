@@ -1,0 +1,32 @@
+=== stdout ===
+  [1/4] PASS  Contract > Success  [run:shell]  (2ms)
+  [2/4] FAIL  Contract > Failure  [run:shell]  (3ms)
+        specs/contract.md:20
+        exit code 7
+        command failed
+        second line
+        stderr: adapter stderr
+        expected: expected value
+        actual:   actual value
+        source:
+          printf actual
+        bindings: $value=42
+  [3/4] XFAIL  Contract > Expected failure  [expect]  (4ms)
+        specs/contract.md:30
+        known mismatch
+        expected: green
+        actual:   red
+  [4/4] SKIP  Contract > Skipped  [alloy:board#ownership]  (0ms)
+spec: specs/contract.md
+  case: Contract > Code [run:shell]
+  case: Contract > Table [equals]
+  case: Contract > Inline [expect]
+  alloy: Contract > Alloy [board#ownership, scope=for 5]
+
+total: 1 spec(s), 4 case(s)
+=== stderr ===
+  FAIL  lifecycle global teardown  (5ms)
+        global cleanup failed
+  FAIL  lifecycle section setup:each  specs/contract.md  Contract > Lifecycle  (6ms)
+        section setup failed
+        retry exhausted

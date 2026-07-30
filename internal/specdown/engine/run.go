@@ -46,8 +46,6 @@ type ProgressFunc func(ProgressEvent)
 // errMaxFailures is a sentinel returned when the failure limit is reached.
 var errMaxFailures = errors.New("maximum failure count reached")
 
-const reportSchemaVersion = 3
-
 type RunOptions struct {
 	Filter       string
 	Jobs         int
@@ -184,7 +182,7 @@ func RunContext(ctx context.Context, baseDir string, cfg config.Config, modelRun
 		err = ctx.Err()
 	}
 	if report.SchemaVersion == 0 {
-		report.SchemaVersion = reportSchemaVersion
+		report.SchemaVersion = core.ReportSchemaVersion
 		report.GeneratedAt = time.Now()
 	}
 	report.LifecycleEvents = append(report.LifecycleEvents, globalEvents...)
@@ -218,7 +216,7 @@ func runGlobalLifecycle(ctx context.Context, baseDir string, phase core.HookKind
 
 func lifecycleOnlyReport(events []core.LifecycleEvent) core.Report {
 	report := core.Report{
-		SchemaVersion:   reportSchemaVersion,
+		SchemaVersion:   core.ReportSchemaVersion,
 		GeneratedAt:     time.Now(),
 		LifecycleEvents: append([]core.LifecycleEvent(nil), events...),
 	}
@@ -252,7 +250,7 @@ func skippedRunReport(title string, docs []core.Document, opts RunOptions, messa
 	}
 
 	return core.Report{
-		SchemaVersion: reportSchemaVersion,
+		SchemaVersion: core.ReportSchemaVersion,
 		Title:         title,
 		GeneratedAt:   time.Now(),
 		Results:       results,
@@ -409,7 +407,7 @@ func runWithDocs(ctx context.Context, title string, docs []core.Document, cfg co
 	results = executed
 
 	report := core.Report{
-		SchemaVersion: reportSchemaVersion,
+		SchemaVersion: core.ReportSchemaVersion,
 		Title:         title,
 		GeneratedAt:   time.Now(),
 		Results:       results,
@@ -568,7 +566,7 @@ func dryRunReport(plan core.Plan) core.Report {
 	}
 
 	return core.Report{
-		SchemaVersion: reportSchemaVersion,
+		SchemaVersion: core.ReportSchemaVersion,
 		GeneratedAt:   time.Now(),
 		Results:       results,
 		Summary:       summary,
