@@ -87,8 +87,13 @@ Enabled linters: errcheck, govet, staticcheck, unused, ineffassign, gocritic, go
 
 GitHub Actions runs on every push to `main` and on pull requests (`.github/workflows/ci.yml`).
 
-1. `go test -race ./...`
-2. `golangci-lint run`
+The workflow pins Go 1.26.5 and `govulncheck` v1.6.0 so security results are
+reproducible.
+
+1. Verify and tidy Go modules.
+2. Run `go test -race ./...`.
+3. Run the blocking vulnerability scan.
+4. Run `golangci-lint`.
 
 ## Release
 

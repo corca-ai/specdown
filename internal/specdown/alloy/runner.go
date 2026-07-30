@@ -3,6 +3,7 @@ package alloy
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,16 +22,35 @@ import (
 )
 
 const (
-	alloyVersion = "6.2.0"
-	alloyJarName = "org.alloytools.alloy.dist.jar"
+	alloyVersion          = "6.2.0"
+	alloyJarName          = "org.alloytools.alloy.dist.jar"
+	alloyDownloadTimeout  = 30 * time.Second
+	alloyMaxDownloadBytes = 64 << 20
 )
 
-var alloyJarURL = "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v" + alloyVersion + "/" + alloyJarName
+type alloyArtifact struct {
+	version  string
+	url      string
+	sha256   string
+	maxBytes int64
+	timeout  time.Duration
+}
+
+var supportedAlloyArtifacts = map[string]alloyArtifact{
+	"6.2.0": {
+		version:  "6.2.0",
+		url:      "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v6.2.0/" + alloyJarName,
+		sha256:   "6b8c1cb5bc93bedfc7c61435c4e1ab6e688a242dc702a394628d9a9801edb78d",
+		maxBytes: alloyMaxDownloadBytes,
+		timeout:  alloyDownloadTimeout,
+	},
+}
 
 type Runner struct {
 	BaseDir    string
 	JarPath    string // user-provided JAR path; empty means auto-download
 	HTTPClient *http.Client
+	artifact   *alloyArtifact
 }
 
 type modelBundle struct {
@@ -738,26 +758,71 @@ func (r Runner) ensureAlloyJarContext(ctx context.Context) (string, error) {
 }
 
 func (r Runner) downloadAlloyJar(ctx context.Context) (_ string, err error) {
+	artifact, err := r.artifactSpec()
+	if err != nil {
+		return "", err
+	}
 	cacheDir, err := alloyCacheDir()
 	if err != nil {
 		return "", err
 	}
+	cacheDir = filepath.Join(cacheDir, "alloy", artifact.version)
 	jarPath := filepath.Join(cacheDir, alloyJarName)
-	if _, err := os.Stat(jarPath); err == nil {
-		return jarPath, nil
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("stat alloy jar: %w", err)
-	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", fmt.Errorf("create cache dir: %w", err)
 	}
+	cached, err := validCachedAlloyJar(jarPath, artifact.sha256)
+	if err != nil {
+		return "", err
+	}
+	if cached {
+		return jarPath, nil
+	}
+	return r.fetchAlloyJar(ctx, cacheDir, jarPath, artifact)
+}
+
+func (r Runner) artifactSpec() (alloyArtifact, error) {
+	if r.artifact != nil {
+		return *r.artifact, nil
+	}
+	artifact, ok := supportedAlloyArtifacts[alloyVersion]
+	if !ok {
+		return alloyArtifact{}, fmt.Errorf("unsupported Alloy version %q", alloyVersion)
+	}
+	return artifact, nil
+}
+
+func validCachedAlloyJar(path, expectedSHA256 string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat alloy jar: %w", err)
+	}
+	if err := verifyFileSHA256(path, expectedSHA256); err == nil {
+		return true, nil
+	}
+	// Leave an invalid cache entry in place until a verified temp download can
+	// atomically replace it. Removing it here could race with another process
+	// that has already repaired the same path.
+	return false, nil
+}
+
+func (r Runner) fetchAlloyJar(
+	ctx context.Context,
+	cacheDir string,
+	jarPath string,
+	artifact alloyArtifact,
+) (string, error) {
+	downloadCtx, cancel := context.WithTimeout(ctx, artifact.timeout)
+	defer cancel()
 
 	client := r.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: artifact.timeout}
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, alloyJarURL, http.NoBody)
+	request, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, artifact.url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("create alloy jar request: %w", err)
 	}
@@ -770,29 +835,86 @@ func (r Runner) downloadAlloyJar(ctx context.Context) (_ string, err error) {
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download alloy jar: unexpected status %s", response.Status)
 	}
+	if response.ContentLength > artifact.maxBytes {
+		return "", fmt.Errorf(
+			"download alloy jar: response size %d exceeds maximum of %d bytes",
+			response.ContentLength,
+			artifact.maxBytes,
+		)
+	}
+	return storeDownloadedAlloyJar(response.Body, cacheDir, jarPath, artifact)
+}
 
+func storeDownloadedAlloyJar(
+	body io.Reader,
+	cacheDir string,
+	jarPath string,
+	artifact alloyArtifact,
+) (string, error) {
 	tmp, err := os.CreateTemp(cacheDir, alloyJarName+".*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("create temp file for alloy jar: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer func() {
-		if err != nil {
-			_ = os.Remove(tmpPath)
-		}
-	}()
+	defer func() { _ = os.Remove(tmpPath) }()
 
-	if _, err = io.Copy(tmp, response.Body); err != nil {
+	hasher := sha256.New()
+	written, copyErr := io.Copy(
+		io.MultiWriter(tmp, hasher),
+		io.LimitReader(body, artifact.maxBytes+1),
+	)
+	if copyErr != nil {
 		_ = tmp.Close()
-		return "", fmt.Errorf("write alloy jar: %w", err)
+		return "", fmt.Errorf("write alloy jar: %w", copyErr)
 	}
-	if err = tmp.Close(); err != nil {
+	if written > artifact.maxBytes {
+		_ = tmp.Close()
+		return "", fmt.Errorf(
+			"download alloy jar: response exceeds maximum of %d bytes",
+			artifact.maxBytes,
+		)
+	}
+	actualSHA256 := fmt.Sprintf("%x", hasher.Sum(nil))
+	if !strings.EqualFold(actualSHA256, artifact.sha256) {
+		_ = tmp.Close()
+		return "", fmt.Errorf(
+			"alloy jar checksum mismatch: got %s, expected %s",
+			actualSHA256,
+			artifact.sha256,
+		)
+	}
+	if err = tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return "", fmt.Errorf("sync alloy jar: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
 		return "", fmt.Errorf("close alloy jar: %w", err)
 	}
-	if err = os.Rename(tmpPath, jarPath); err != nil {
+	if err := os.Rename(tmpPath, jarPath); err != nil {
+		if verifyErr := verifyFileSHA256(jarPath, artifact.sha256); verifyErr == nil {
+			return jarPath, nil
+		}
 		return "", fmt.Errorf("rename alloy jar: %w", err)
 	}
 	return jarPath, nil
+}
+
+func verifyFileSHA256(path, expected string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open file for checksum: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return fmt.Errorf("read file for checksum: %w", err)
+	}
+	actual := fmt.Sprintf("%x", hasher.Sum(nil))
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("checksum mismatch: got %s, expected %s", actual, expected)
+	}
+	return nil
 }
 
 func bundleFileName(documentPath, modelName string) string {

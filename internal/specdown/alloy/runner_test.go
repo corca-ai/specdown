@@ -2,6 +2,7 @@ package alloy
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,6 +43,16 @@ func nonAlloyCase() core.CaseSpec {
 		ID:   core.SpecID{File: "specs/test.spec.md", HeadingPath: []string{"Test"}, Ordinal: 1},
 		Kind: core.CaseKindCode,
 		Code: &core.CodeCaseSpec{Template: "echo hello"},
+	}
+}
+
+func testAlloyArtifact(url string, content []byte) *alloyArtifact {
+	return &alloyArtifact{
+		version:  alloyVersion,
+		url:      url,
+		sha256:   fmt.Sprintf("%x", sha256.Sum256(content)),
+		maxBytes: alloyMaxDownloadBytes,
+		timeout:  time.Second,
 	}
 }
 
@@ -574,19 +585,112 @@ func TestWriteCounterexample(t *testing.T) {
 
 func TestEnsureAlloyJarCacheHit(t *testing.T) {
 	cacheDir := t.TempDir()
-	jarPath := filepath.Join(cacheDir, alloyJarName)
-	testutil.NilErr(t, os.WriteFile(jarPath, []byte("fake-jar"), 0o644))
-
+	content := []byte("fake-jar")
 	t.Setenv("XDG_CACHE_HOME", cacheDir)
-	// No parent "specdown" dir here — recreate the expected structure.
-	expected := filepath.Join(cacheDir, "specdown", alloyJarName)
+	expected := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName)
 	testutil.NilErr(t, os.MkdirAll(filepath.Dir(expected), 0o755))
-	testutil.NilErr(t, os.WriteFile(expected, []byte("fake-jar"), 0o644))
+	testutil.NilErr(t, os.WriteFile(expected, content, 0o644))
 
-	runner := Runner{}
+	runner := Runner{artifact: testAlloyArtifact("", content)}
 	path, err := runner.ensureAlloyJar()
 	testutil.NilErr(t, err)
 	testutil.Equal(t, path, expected)
+}
+
+func TestEnsureAlloyJarDoesNotReuseUnversionedCache(t *testing.T) {
+	cacheDir := t.TempDir()
+	unversionedPath := filepath.Join(cacheDir, "specdown", alloyJarName)
+	testutil.NilErr(t, os.MkdirAll(filepath.Dir(unversionedPath), 0o755))
+	testutil.NilErr(t, os.WriteFile(unversionedPath, []byte("stale-jar"), 0o644))
+
+	jarContent := "PK-fresh-alloy-jar-content"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, jarContent)
+	}))
+	defer server.Close()
+
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, []byte(jarContent))
+
+	path, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	testutil.NilErr(t, err)
+	testutil.Equal(t, path, filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName))
+
+	body, err := os.ReadFile(path)
+	testutil.NilErr(t, err)
+	testutil.Equal(t, string(body), jarContent)
+}
+
+func TestEnsureAlloyJarVersionChangeUsesDistinctCacheEntry(t *testing.T) {
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+
+	for _, release := range []struct {
+		version string
+		content []byte
+	}{
+		{version: "6.1.0", content: []byte("alloy-6.1.0")},
+		{version: "6.2.0", content: []byte("alloy-6.2.0")},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write(release.content)
+		}))
+		artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, release.content)
+		artifact.version = release.version
+
+		path, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+		server.Close()
+		testutil.NilErr(t, err)
+		testutil.Equal(
+			t,
+			path,
+			filepath.Join(cacheDir, "specdown", "alloy", release.version, alloyJarName),
+		)
+	}
+}
+
+func TestEnsureAlloyJarReplacesCorruptedVersionedCache(t *testing.T) {
+	content := []byte("PK-valid-alloy-jar")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	jarPath := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName)
+	testutil.NilErr(t, os.MkdirAll(filepath.Dir(jarPath), 0o755))
+	testutil.NilErr(t, os.WriteFile(jarPath, []byte("corrupted"), 0o644))
+
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, content)
+	path, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	testutil.NilErr(t, err)
+	testutil.Equal(t, path, jarPath)
+
+	body, err := os.ReadFile(path)
+	testutil.NilErr(t, err)
+	testutil.Equal(t, string(body), string(content))
+}
+
+func TestEnsureAlloyJarFailedRepairDoesNotRemoveCachePath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	jarPath := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName)
+	testutil.NilErr(t, os.MkdirAll(filepath.Dir(jarPath), 0o755))
+	testutil.NilErr(t, os.WriteFile(jarPath, []byte("corrupted"), 0o644))
+
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, []byte("valid"))
+	_, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	testutil.WantErr(t, err)
+
+	body, readErr := os.ReadFile(jarPath)
+	testutil.NilErr(t, readErr)
+	testutil.Equal(t, string(body), "corrupted")
 }
 
 func TestEnsureAlloyJarDownloads(t *testing.T) {
@@ -598,18 +702,85 @@ func TestEnsureAlloyJarDownloads(t *testing.T) {
 
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
-	// Override the URL for the test
-	origURL := alloyJarURL
-	alloyJarURL = server.URL + "/" + alloyJarName
-	defer func() { alloyJarURL = origURL }()
-
-	runner := Runner{HTTPClient: server.Client()}
+	runner := Runner{
+		HTTPClient: server.Client(),
+		artifact:   testAlloyArtifact(server.URL+"/"+alloyJarName, []byte(jarContent)),
+	}
 	path, err := runner.ensureAlloyJar()
 	testutil.NilErr(t, err)
 
 	body, err := os.ReadFile(path)
 	testutil.NilErr(t, err)
 	testutil.Equal(t, string(body), jarContent)
+}
+
+func TestEnsureAlloyJarRejectsChecksumMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, "tampered-jar")
+	}))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, []byte("expected-jar"))
+
+	_, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	testutil.WantErr(t, err)
+	testutil.Contains(t, err.Error(), "checksum mismatch")
+
+	jarPath := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName)
+	if _, statErr := os.Stat(jarPath); !os.IsNotExist(statErr) {
+		t.Fatalf("cached jar exists after checksum mismatch: %v", statErr)
+	}
+	entries, readErr := os.ReadDir(filepath.Dir(jarPath))
+	testutil.NilErr(t, readErr)
+	testutil.Len(t, entries, 0)
+}
+
+func TestEnsureAlloyJarRejectsOversizedDownload(t *testing.T) {
+	const maxDownloadBytes = 4
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(maxDownloadBytes+1))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, []byte("1234"))
+	artifact.maxBytes = maxDownloadBytes
+
+	_, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	testutil.WantErr(t, err)
+	testutil.Contains(t, err.Error(), "exceeds maximum")
+
+	jarPath := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName)
+	if _, statErr := os.Stat(jarPath); !os.IsNotExist(statErr) {
+		t.Fatalf("cached jar exists after oversized download: %v", statErr)
+	}
+}
+
+func TestEnsureAlloyJarRejectsOversizedStreamWithoutContentLength(t *testing.T) {
+	content := []byte("12345")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "-1")
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, content[:4])
+	artifact.maxBytes = 4
+
+	_, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	testutil.WantErr(t, err)
+	testutil.Contains(t, err.Error(), "exceeds maximum")
+
+	versionDir := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion)
+	entries, readErr := os.ReadDir(versionDir)
+	testutil.NilErr(t, readErr)
+	testutil.Len(t, entries, 0)
 }
 
 func TestEnsureAlloyJarDownloadFailsHTTPError(t *testing.T) {
@@ -619,11 +790,11 @@ func TestEnsureAlloyJarDownloadFailsHTTPError(t *testing.T) {
 	defer server.Close()
 
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	origURL := alloyJarURL
-	alloyJarURL = server.URL + "/" + alloyJarName
-	defer func() { alloyJarURL = origURL }()
 
-	runner := Runner{HTTPClient: server.Client()}
+	runner := Runner{
+		HTTPClient: server.Client(),
+		artifact:   testAlloyArtifact(server.URL+"/"+alloyJarName, nil),
+	}
 	_, err := runner.ensureAlloyJar()
 	testutil.WantErr(t, err)
 	testutil.Contains(t, err.Error(), "unexpected status")
@@ -638,15 +809,81 @@ func TestEnsureAlloyJarHonorsContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	origURL := alloyJarURL
-	alloyJarURL = server.URL + "/" + alloyJarName
-	defer func() { alloyJarURL = origURL }()
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_, err := (Runner{HTTPClient: server.Client()}).ensureAlloyJarContext(ctx)
+	_, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJarContext(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ensureAlloyJarContext error = %v, want context deadline exceeded", err)
+	}
+	select {
+	case <-requestStarted:
+	default:
+		t.Fatal("download request did not start")
+	}
+}
+
+func TestEnsureAlloyJarConcurrentDownloadsPublishOneVerifiedFile(t *testing.T) {
+	content := []byte("PK-concurrent-alloy-jar")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(10 * time.Millisecond)
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	runner := Runner{
+		HTTPClient: server.Client(),
+		artifact:   testAlloyArtifact(server.URL+"/"+alloyJarName, content),
+	}
+
+	const callers = 8
+	results := make(chan string, callers)
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			path, err := runner.ensureAlloyJar()
+			results <- path
+			errs <- err
+		}()
+	}
+	for range callers {
+		testutil.NilErr(t, <-errs)
+		testutil.Equal(
+			t,
+			<-results,
+			filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName),
+		)
+	}
+
+	jarPath := filepath.Join(cacheDir, "specdown", "alloy", alloyVersion, alloyJarName)
+	testutil.NilErr(t, verifyFileSHA256(jarPath, fmt.Sprintf("%x", sha256.Sum256(content))))
+	entries, err := os.ReadDir(filepath.Dir(jarPath))
+	testutil.NilErr(t, err)
+	testutil.Len(t, entries, 1)
+}
+
+func TestEnsureAlloyJarAppliesDownloadTimeout(t *testing.T) {
+	requestStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(requestStarted)
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	artifact := testAlloyArtifact(server.URL+"/"+alloyJarName, nil)
+	artifact.timeout = 50 * time.Millisecond
+
+	startedAt := time.Now()
+	_, err := (Runner{HTTPClient: server.Client(), artifact: artifact}).ensureAlloyJar()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ensureAlloyJar error = %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > time.Second {
+		t.Fatalf("download timeout took %v, want less than 1s", elapsed)
 	}
 	select {
 	case <-requestStarted:
