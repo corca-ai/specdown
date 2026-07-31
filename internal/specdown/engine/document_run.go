@@ -50,7 +50,8 @@ func newDocumentRun(
 ) (*documentRun, error) {
 	host := executor.host
 	if workdir := plan.Document.Frontmatter.Workdir; workdir != "" {
-		resolved := filepath.Join(executor.host.BaseDir, workdir)
+		documentDir := filepath.Dir(filepath.FromSlash(plan.Document.RelativeTo))
+		resolved := filepath.Join(executor.host.BaseDir, documentDir, filepath.FromSlash(workdir))
 		if err := os.MkdirAll(resolved, 0o755); err != nil {
 			return nil, fmt.Errorf("create workdir %q: %w", workdir, err)
 		}

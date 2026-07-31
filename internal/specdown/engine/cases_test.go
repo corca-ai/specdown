@@ -3,6 +3,7 @@ package engine
 import (
 	"testing"
 
+	"github.com/corca-ai/specdown/internal/specdown/adapterprotocol"
 	"github.com/corca-ai/specdown/internal/specdown/core"
 )
 
@@ -58,6 +59,16 @@ func TestPeekNextPathEmpty(t *testing.T) {
 	got := peekNextPath(nil, 0)
 	if got != nil {
 		t.Fatalf("expected nil for empty cases, got %v", got)
+	}
+}
+
+func TestEvalDoctestStepNeverTreatsAdapterErrorAsExpectedOutput(t *testing.T) {
+	actual, status := evalDoctestStep(adapterprotocol.ExecResponse{
+		Error: "expected text",
+	}, "expected text")
+
+	if status != core.StatusFailed {
+		t.Fatalf("status = %q, want failed; actual = %q", status, actual)
 	}
 }
 

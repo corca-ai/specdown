@@ -40,6 +40,23 @@ func TestAssertNumberField(t *testing.T) {
 	}
 }
 
+func TestAssertPreservesLargeJSONInteger(t *testing.T) {
+	resp := Assert(1, makeReq(
+		map[string]string{"input": `{"id":9007199254740993}`},
+		[]string{"expr", "expected"},
+		[]string{".id", "9007199254740993"},
+	))
+	if resp.Type != "passed" {
+		t.Fatalf(
+			"large integer changed during jq evaluation: type=%s actual=%q expected=%q message=%q",
+			resp.Type,
+			resp.Actual,
+			resp.Expected,
+			resp.Message,
+		)
+	}
+}
+
 func TestAssertBooleanField(t *testing.T) {
 	resp := Assert(1, makeReq(
 		map[string]string{"input": `{"active":true}`},
@@ -156,6 +173,28 @@ func TestAssertInvalidJSON(t *testing.T) {
 	}
 	if resp.Message == "" {
 		t.Fatal("expected error message")
+	}
+}
+
+func TestAssertRejectsMultipleJSONValues(t *testing.T) {
+	resp := Assert(1, makeReq(
+		map[string]string{"input": `{"name":"Alice"} {"name":"Bob"}`},
+		[]string{"expr", "expected"},
+		[]string{".name", "Alice"},
+	))
+	if resp.Type != "failed" || !strings.Contains(resp.Message, "multiple JSON values") {
+		t.Fatalf("response = %+v, want multiple-value JSON failure", resp)
+	}
+}
+
+func TestAssertRejectsTrailingInvalidJSON(t *testing.T) {
+	resp := Assert(1, makeReq(
+		map[string]string{"input": `{"name":"Alice"} trailing`},
+		[]string{"expr", "expected"},
+		[]string{".name", "Alice"},
+	))
+	if resp.Type != "failed" || !strings.Contains(resp.Message, "invalid JSON input") {
+		t.Fatalf("response = %+v, want trailing-token JSON failure", resp)
 	}
 }
 

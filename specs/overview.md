@@ -1,6 +1,6 @@
 ---
 type: guide
-workdir: .tmp-test
+workdir: ../.tmp-test
 ---
 
 # Overview

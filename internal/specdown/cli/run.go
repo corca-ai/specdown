@@ -87,7 +87,9 @@ func (c command) run(ctx context.Context, args []string) error {
 	}
 
 	if *dryRun {
-		if !*quiet {
+		if *quiet {
+			c.printDryRunSummary(report)
+		} else {
 			c.printDryRun(report)
 		}
 		if reportFailed(report) {
@@ -115,27 +117,23 @@ func (c command) run(ctx context.Context, args []string) error {
 	}
 
 	if reportFailed(report) {
-		if !*quiet {
-			writeFormat(c.stderr, "\n%s\n", failureSummary(report, elapsed))
-			if reportPath != "" {
-				writeFormat(c.stderr, "report: %s\n", reportPath)
-			}
+		writeFormat(c.stderr, "\n%s\n", failureSummary(report, elapsed))
+		if !*quiet && reportPath != "" {
+			writeFormat(c.stderr, "report: %s\n", reportPath)
 		}
 		return fmt.Errorf("spec run failed")
 	}
 
-	if !*quiet {
-		xfailSuffix := ""
-		if report.Summary.CasesExpectedFail > 0 {
-			xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
-		}
-		if _, err := fmt.Fprintf(c.stdout, "PASS %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, elapsed.Milliseconds()); err != nil {
+	xfailSuffix := ""
+	if report.Summary.CasesExpectedFail > 0 {
+		xfailSuffix = fmt.Sprintf(", %d expected fail", report.Summary.CasesExpectedFail)
+	}
+	if _, err := fmt.Fprintf(c.stdout, "PASS %d spec(s), %d case(s)%s in %dms\n", report.Summary.SpecsTotal, report.Summary.CasesTotal, xfailSuffix, elapsed.Milliseconds()); err != nil {
+		return err
+	}
+	if !*quiet && reportPath != "" {
+		if _, err := fmt.Fprintf(c.stdout, "report: %s\n", reportPath); err != nil {
 			return err
-		}
-		if reportPath != "" {
-			if _, err := fmt.Fprintf(c.stdout, "report: %s\n", reportPath); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

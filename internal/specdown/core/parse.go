@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -709,27 +710,25 @@ func insideCodeSpan(raw string, start, end int) bool {
 }
 
 func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []string, startLine int) []InlineElement {
-	var elements []InlineElement
+	type positionedElement struct {
+		start   int
+		element InlineElement
+	}
+	var positioned []positionedElement
 
 	for _, loc := range inlineExpectPattern.FindAllStringSubmatchIndex(raw, -1) {
 		if insideCodeSpan(raw, loc[0], loc[1]) {
 			continue
 		}
-		*ordinal++
 		expectFail := loc[6] >= 0 && loc[7] > loc[6]
-		// Count newlines before match to find the line within the prose block.
-		line := startLine + strings.Count(raw[:loc[0]], "\n")
-		elements = append(elements, InlineElement{
-			Kind:        InlineExpect,
-			Raw:         raw[loc[0]:loc[1]],
-			ExpectExpr:  strings.TrimSpace(raw[loc[2]:loc[3]]),
-			ExpectValue: strings.TrimSpace(raw[loc[4]:loc[5]]),
-			ExpectFail:  expectFail,
-			ID: &SpecID{
-				File:        relativePath,
-				HeadingPath: copyPath(headingPath),
-				Ordinal:     *ordinal,
-				Line:        line,
+		positioned = append(positioned, positionedElement{
+			start: loc[0],
+			element: InlineElement{
+				Kind:        InlineExpect,
+				Raw:         raw[loc[0]:loc[1]],
+				ExpectExpr:  strings.TrimSpace(raw[loc[2]:loc[3]]),
+				ExpectValue: strings.TrimSpace(raw[loc[4]:loc[5]]),
+				ExpectFail:  expectFail,
 			},
 		})
 	}
@@ -738,22 +737,33 @@ func parseInlineElements(raw, relativePath string, ordinal *int, headingPath []s
 		if insideCodeSpan(raw, loc[0], loc[1]) {
 			continue
 		}
-		*ordinal++
-		line := startLine + strings.Count(raw[:loc[0]], "\n")
-		elements = append(elements, InlineElement{
-			Kind:        InlineCheck,
-			Raw:         raw[loc[0]:loc[1]],
-			Check:       raw[loc[2]:loc[3]],
-			CheckParams: parseCheckParams(raw[loc[4]:loc[5]]),
-			ID: &SpecID{
-				File:        relativePath,
-				HeadingPath: copyPath(headingPath),
-				Ordinal:     *ordinal,
-				Line:        line,
+		positioned = append(positioned, positionedElement{
+			start: loc[0],
+			element: InlineElement{
+				Kind:        InlineCheck,
+				Raw:         raw[loc[0]:loc[1]],
+				Check:       raw[loc[2]:loc[3]],
+				CheckParams: parseCheckParams(raw[loc[4]:loc[5]]),
 			},
 		})
 	}
 
+	sort.SliceStable(positioned, func(i, j int) bool {
+		return positioned[i].start < positioned[j].start
+	})
+
+	elements := make([]InlineElement, 0, len(positioned))
+	for i := range positioned {
+		*ordinal++
+		element := positioned[i].element
+		element.ID = &SpecID{
+			File:        relativePath,
+			HeadingPath: copyPath(headingPath),
+			Ordinal:     *ordinal,
+			Line:        startLine + strings.Count(raw[:positioned[i].start], "\n"),
+		}
+		elements = append(elements, element)
+	}
 	return elements
 }
 

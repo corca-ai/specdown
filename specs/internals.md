@@ -1,6 +1,6 @@
 ---
 type: spec
-workdir: .tmp-test
+workdir: ../.tmp-test
 ---
 
 # Internals
@@ -66,7 +66,7 @@ A dry run demonstrates the boundary: the core parses and validates
 without launching any adapter.
 
 ```run:shell
-$ specdown run -dry-run 2>&1 | grep 'spec(s)'
+$ specdown run -config ../specdown.json -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
 
@@ -220,7 +220,7 @@ not CPU.
 Sequential execution is the default:
 
 ```run:shell
-$ specdown run -dry-run 2>&1 | grep 'spec(s)'
+$ specdown run -config ../specdown.json -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
 

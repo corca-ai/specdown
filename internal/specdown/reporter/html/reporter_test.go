@@ -966,7 +966,7 @@ func TestWriteRewritesMarkdownLinksToHTML(t *testing.T) {
 					RelativeTo: "specs/index.spec.md",
 					Nodes: []core.Node{
 						core.HeadingNode{Level: 1, Text: "Index", Raw: "# Index\n", HeadingPath: []string{"Index"}},
-						core.ProseNode{Raw: "[Board](board.spec.md) and [Guide](guide.md#intro)\n"},
+						core.ProseNode{Raw: "[Board](board.spec.md), [Guide](guide.md#intro), and [Raw](https://example.com/guide.md)\n"},
 					},
 				},
 			},
@@ -985,8 +985,16 @@ func TestWriteRewritesMarkdownLinksToHTML(t *testing.T) {
 	html := string(body)
 	assertContains(t, html, `href="board.html"`, "rewritten .spec.md link")
 	assertContains(t, html, `href="guide.html#intro"`, "rewritten .md link with fragment")
+	assertContains(t, html, `href="https://example.com/guide.md"`, "external Markdown URL preserved")
 	assertNotContains(t, html, `.spec.md`, "no .spec.md links in output")
-	assertNotContains(t, html, `guide.md`, "no .md links in output")
+}
+
+func TestRewriteTraceLinksSupportsHyphenatedEdgeNames(t *testing.T) {
+	input := `<a href="feature.html">covers-requirement::Feature</a>`
+	got := rewriteTraceLinks(input)
+
+	assertContains(t, got, `class="trace-link"`, "hyphenated trace edge annotation")
+	assertContains(t, got, `<span class="annotation">covers-requirement</span>`, "edge name")
 }
 
 func TestWriteOverwritesStaleFile(t *testing.T) {

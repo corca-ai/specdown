@@ -1,6 +1,6 @@
 ---
 type: spec
-workdir: .tmp-test
+workdir: ../.tmp-test
 ---
 
 # Traceability

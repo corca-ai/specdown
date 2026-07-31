@@ -380,3 +380,28 @@ func TestCompileDocumentRejectsUnresolvedVariableInProse(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
+
+func TestCompileDocumentPreservesMixedInlineElementOrder(t *testing.T) {
+	doc, err := ParseDocument(
+		"inline-order.md",
+		"# Inline order\n\nFirst `check:jq(input=1, expr=., expected=1)`, then `expect: 2 == 2`.\n",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	plan, err := CompileDocument(doc)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if len(plan.Cases) != 2 {
+		t.Fatalf("cases = %d, want 2", len(plan.Cases))
+	}
+	if plan.Cases[0].Kind != CaseKindTableRow || plan.Cases[0].TableRow.Check != "jq" {
+		t.Fatalf("first case = %+v, want inline jq check", plan.Cases[0])
+	}
+	if plan.Cases[1].Kind != CaseKindInlineExpect {
+		t.Fatalf("second case = %+v, want inline expect", plan.Cases[1])
+	}
+}
