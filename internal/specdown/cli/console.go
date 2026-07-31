@@ -229,6 +229,10 @@ func (c command) printDryRun(report core.Report) {
 			writeFormat(c.stdout, "  case: %s [%s]\n", strings.Join(result.ID.HeadingPath, " > "), kind)
 		}
 	}
+	c.printDryRunSummary(report)
+}
+
+func (c command) printDryRunSummary(report core.Report) {
 	writeFormat(c.stdout, "\ntotal: %d spec(s), %d case(s)\n",
 		report.Summary.SpecsTotal, report.Summary.CasesTotal)
 }

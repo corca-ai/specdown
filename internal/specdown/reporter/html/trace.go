@@ -13,7 +13,7 @@ import (
 // rewriteTraceLinks transforms trace links (edge::Display text) into ruby-annotated spans.
 // Input:  <a href="...">edgeName::Display Text</a>
 // Output: <a href="..." class="trace-link">Display Text<span class="annotation">edgeName</span></a>
-var traceLinkPattern = regexp.MustCompile(`(<a\s+href="[^"]*")>(([a-z][a-z0-9_]*)::([^<]+))</a>`)
+var traceLinkPattern = regexp.MustCompile(`(<a\s+href="[^"]*")>(([a-z][a-z0-9_-]*)::([^<]+))</a>`)
 
 func rewriteTraceLinks(html string) string {
 	return traceLinkPattern.ReplaceAllStringFunc(html, func(match string) string {

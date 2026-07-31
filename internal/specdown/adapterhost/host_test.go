@@ -47,6 +47,16 @@ func TestResolveCommandResolvesFirstArgWithDotPrefix(t *testing.T) {
 	}
 }
 
+func TestResolveCommandPreservesDotPrefixedNonPathArguments(t *testing.T) {
+	baseDir := "/workspace/project"
+	command := []string{"sh", "-c", ". ./env && exec ./adapter"}
+
+	resolved := resolveCommand(baseDir, command)
+	if !reflect.DeepEqual(resolved, command) {
+		t.Fatalf("resolved command = %#v, want argv preserved as %#v", resolved, command)
+	}
+}
+
 func TestResolveCommandDoesNotMutateOriginal(t *testing.T) {
 	baseDir := "/workspace/project"
 	original := []string{"python3", "./tools/adapter.py"}
@@ -254,6 +264,28 @@ func TestExternalAdapterFinalResponseIsReadBeforeProcessExit(t *testing.T) {
 	}
 }
 
+func TestExternalAdapterAcceptsResponseAtOneMegabyteLimit(t *testing.T) {
+	host := Host{BaseDir: t.TempDir()}
+	session, err := host.StartSession(config.AdapterConfig{
+		Name:    "one-megabyte-response",
+		Command: []string{os.Args[0], "-test.run=^TestResponseSizeLimitAdapterProcess$", "--", "adapter-size-limit-helper"},
+	})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	resp, err := session.Exec("hello", 1000)
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if !resp.HasOutput {
+		t.Fatalf("response = %+v, want output at documented size limit", resp)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}
+
 func TestExternalAdapterAssertRejectsInvalidProtocolResponse(t *testing.T) {
 	host := Host{BaseDir: t.TempDir()}
 	session, err := host.StartSession(config.AdapterConfig{
@@ -325,6 +357,23 @@ func TestInvalidAssertAdapterProcess(t *testing.T) {
 	}
 	_, _ = fmt.Fprintln(os.Stdout, `{"id":1,"type":"unknown"}`)
 	os.Exit(0)
+}
+
+func TestResponseSizeLimitAdapterProcess(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "adapter-size-limit-helper" {
+		return
+	}
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		os.Exit(1)
+	}
+
+	const lineSize = 1024 * 1024
+	const prefix = `{"id":1,"output":"`
+	const suffix = `"}`
+	payloadSize := lineSize - len(prefix) - len(suffix)
+	if _, err := os.Stdout.WriteString(prefix + strings.Repeat("x", payloadSize) + suffix + "\n"); err != nil {
+		os.Exit(1)
+	}
 }
 
 func TestBuiltinShellSessionExecNoTimeout(t *testing.T) {

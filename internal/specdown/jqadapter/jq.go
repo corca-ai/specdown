@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -107,8 +108,8 @@ func evalJQContext(ctx context.Context, input, expr string) (string, error) {
 		return "", fmt.Errorf("jq parse error: %w", err)
 	}
 
-	var inputValue interface{}
-	if err := json.Unmarshal([]byte(input), &inputValue); err != nil {
+	inputValue, err := decodeJSONValue(input)
+	if err != nil {
 		return "", fmt.Errorf("invalid JSON input: %w", err)
 	}
 
@@ -152,8 +153,8 @@ func normalizeJSON(s string) string {
 		return s
 	}
 
-	var v interface{}
-	if err := json.Unmarshal([]byte(s), &v); err != nil {
+	v, err := decodeJSONValue(s)
+	if err != nil {
 		return s
 	}
 
@@ -167,6 +168,24 @@ func normalizeJSON(s string) string {
 	default:
 		return s
 	}
+}
+
+func decodeJSONValue(input string) (any, error) {
+	decoder := json.NewDecoder(strings.NewReader(input))
+	decoder.UseNumber()
+
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("multiple JSON values")
+		}
+		return nil, err
+	}
+	return value, nil
 }
 
 // marshalSorted produces JSON with map keys sorted alphabetically.

@@ -22,7 +22,10 @@ import (
 	"github.com/corca-ai/specdown/internal/specdown/subprocess"
 )
 
-const adapterExitGrace = 2 * time.Second
+const (
+	adapterExitGrace         = 2 * time.Second
+	adapterResponseLineLimit = 1024 * 1024
+)
 
 type Host struct {
 	BaseDir string
@@ -88,7 +91,10 @@ func (h Host) StartSessionContext(ctx context.Context, adapter config.AdapterCon
 	_ = stdoutWriter.Close()
 
 	scanner := bufio.NewScanner(stdoutReader)
-	scanner.Buffer(make([]byte, 1024), 1024*1024)
+	// Scanner counts the trailing newline while enforcing its token buffer.
+	// Keep one extra byte so a response whose JSON payload is exactly at the
+	// documented line limit remains valid.
+	scanner.Buffer(make([]byte, 1024), adapterResponseLineLimit+1)
 
 	session := &Session{
 		adapter: adapter,
@@ -444,18 +450,27 @@ func (s *Session) collectWait() {
 func resolveCommand(baseDir string, command []string) []string {
 	resolved := append([]string(nil), command...)
 	for i, part := range resolved {
-		if filepath.IsAbs(part) {
+		pathPart := filepath.FromSlash(part)
+		if filepath.IsAbs(pathPart) {
 			continue
 		}
 		if i == 0 {
-			if strings.HasPrefix(part, ".") || strings.Contains(part, string(filepath.Separator)) {
-				resolved[i] = filepath.Clean(filepath.Join(baseDir, part))
+			if isExplicitRelativePath(pathPart) || strings.ContainsRune(pathPart, filepath.Separator) {
+				resolved[i] = filepath.Clean(filepath.Join(baseDir, pathPart))
 			}
 			continue
 		}
-		if strings.HasPrefix(part, ".") {
-			resolved[i] = filepath.Clean(filepath.Join(baseDir, part))
+		if isExplicitRelativePath(pathPart) {
+			resolved[i] = filepath.Clean(filepath.Join(baseDir, pathPart))
 		}
 	}
 	return resolved
+}
+
+func isExplicitRelativePath(value string) bool {
+	separator := string(filepath.Separator)
+	return value == "." ||
+		value == ".." ||
+		strings.HasPrefix(value, "."+separator) ||
+		strings.HasPrefix(value, ".."+separator)
 }

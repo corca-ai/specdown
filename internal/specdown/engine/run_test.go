@@ -193,6 +193,31 @@ func TestRunFailsWhenRuntimeBindingWasNotProducedForCheckRow(t *testing.T) {
 	}
 }
 
+func TestRunDoctestStopsAfterFirstOutputMismatch(t *testing.T) {
+	source := strings.Join([]string{
+		"# Doctest",
+		"",
+		"```run:shell",
+		"$ printf actual",
+		"expected",
+		"$ touch should-not-run",
+		"```",
+		"",
+	}, "\n")
+	root := writeSpecFile(t, "doctest.spec.md", source)
+
+	report, err := Run(root, config.Config{Entry: "specs/index.spec.md"}, noopModelRunner{}, RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesFailed != 1 {
+		t.Fatalf("unexpected summary %+v", report.Summary)
+	}
+	if _, err := os.Stat(filepath.Join(root, "should-not-run")); !os.IsNotExist(err) {
+		t.Fatalf("command after first mismatch ran; stat error = %v", err)
+	}
+}
+
 func TestRunFailsWhenNoAdapterSupportsCheck(t *testing.T) {
 	source := strings.Join([]string{
 		"# Pocket Board",
@@ -628,6 +653,44 @@ func TestRunWithFrontmatterTimeout(t *testing.T) {
 	}
 	if report.Summary.CasesPassed != 1 {
 		t.Fatalf("expected 1 passed case, got %+v", report.Summary)
+	}
+}
+
+func TestRunResolvesWorkdirRelativeToSpecFile(t *testing.T) {
+	root := t.TempDir()
+	specDir := filepath.Join(root, "specs", "features")
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatalf("mkdir spec directory: %v", err)
+	}
+
+	wantWorkdir := filepath.Join(specDir, "sandbox")
+	source := strings.Join([]string{
+		"---",
+		"workdir: sandbox",
+		"---",
+		"",
+		"# Nested Workdir",
+		"",
+		"```run:shell",
+		"test \"$PWD\" = " + strconv.Quote(wantWorkdir),
+		"```",
+		"",
+	}, "\n")
+	specPath := filepath.Join(specDir, "workdir.md")
+	if err := os.WriteFile(specPath, []byte(source), 0o644); err != nil {
+		t.Fatalf("write nested spec: %v", err)
+	}
+	entryPath := filepath.Join(root, "specs", "index.md")
+	if err := os.WriteFile(entryPath, []byte("# Index\n\n[Workdir](features/workdir.md)\n"), 0o644); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	report, err := Run(root, config.Config{Entry: "specs/index.md"}, noopModelRunner{}, RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if report.Summary.CasesPassed != 1 || report.Summary.CasesFailed != 0 {
+		t.Fatalf("workdir = %q, want %q; summary: %+v", filepath.Join(root, "sandbox"), wantWorkdir, report.Summary)
 	}
 }
 

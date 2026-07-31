@@ -151,6 +151,7 @@ func runDoctestCase(ctx context.Context, _, prepared core.CaseSpec, session *ada
 			if resp.Stderr != "" {
 				result.Code.Stderr = resp.Stderr
 			}
+			break
 		}
 	}
 
@@ -174,10 +175,7 @@ func runDoctestCase(ctx context.Context, _, prepared core.CaseSpec, session *ada
 func evalDoctestStep(resp adapterprotocol.ExecResponse, expected string) (string, core.Status) {
 	switch {
 	case resp.Error != "":
-		if expected == "" || !core.MatchWithWildcard(resp.Error, expected) {
-			return resp.Error, core.StatusFailed
-		}
-		return resp.Error, core.StatusPassed
+		return resp.Error, core.StatusFailed
 	case resp.HasOutput:
 		actual := core.ExecResponseToString(resp.Output)
 		if expected != "" && !core.MatchWithWildcard(actual, expected) {

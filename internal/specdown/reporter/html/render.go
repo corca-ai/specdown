@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -26,6 +27,10 @@ func rewriteMarkdownLinks(html string) string {
 			return match
 		}
 		linkPath := parts[1]
+		parsed, err := url.Parse(linkPath)
+		if err == nil && (parsed.IsAbs() || parsed.Host != "") {
+			return match
+		}
 		fragment := ""
 		if len(parts) > 2 {
 			fragment = parts[2]

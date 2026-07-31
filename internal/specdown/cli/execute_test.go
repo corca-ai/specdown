@@ -190,6 +190,19 @@ func TestExecuteRunSuccessAndUserError(t *testing.T) {
 		}
 	})
 
+	t.Run("quiet keeps final summary", func(t *testing.T) {
+		root := t.TempDir()
+		writeMinimalCLIProject(t, root)
+
+		result := executeForTest(t, root, "run", "--config", "specdown.json", "--quiet", "--no-report")
+		if result.status != 0 {
+			t.Fatalf("status = %d, want 0; stdout=%q stderr=%q", result.status, result.stdout, result.stderr)
+		}
+		if !strings.Contains(result.stdout, "PASS 1 spec(s), 0 case(s)") {
+			t.Errorf("stdout = %q, want final summary", result.stdout)
+		}
+	})
+
 	t.Run("user error", func(t *testing.T) {
 		root := t.TempDir()
 		result := executeForTest(t, root, "run", "--config", "missing.json")

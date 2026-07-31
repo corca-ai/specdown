@@ -1,6 +1,6 @@
 ---
 type: spec
-workdir: .tmp-test
+workdir: ../.tmp-test
 ---
 
 # CLI
@@ -24,7 +24,7 @@ Dry-run mode parses and validates spec files without executing adapters.
 This is useful for checking syntax before a full run.
 
 ```run:shell
-$ specdown run -dry-run 2>&1 | grep 'spec(s)'
+$ specdown run -config ../specdown.json -dry-run 2>&1 | grep 'spec(s)'
 ...
 ```
 
